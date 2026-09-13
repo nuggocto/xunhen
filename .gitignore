@@ -1,0 +1,19 @@
+# Rust build output and formatter backups; keep Cargo.lock versioned.
+/target/
+**/*.rs.bk
+
+# Local environment files
+/.env
+/.env.*
+!/.env.example
+!/.env.*.example
+
+# Editor temporary files
+*.swp
+*.swo
+*~
+
+# Operating system metadata
+.DS_Store
+Thumbs.db
+Desktop.ini
