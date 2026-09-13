@@ -2,7 +2,6 @@
 tags: [rust, project, tui, git, diff, code-browser, lsp, search, ratatui, security]
 created: 2026-08-12
 updated: 2026-09-13
-status: planning
 license: Apache-2.0
 ---
 
@@ -17,7 +16,6 @@ current-worktree bytes most recently synchronized to the language server.
 
 ## Start here
 
-Xunhen is in planning; no implementation is claimed here. Begin with Phase 0.
 The product sections describe the v1 target. The roadmap defines what to build
 and qualify in each earlier release.
 
@@ -28,20 +26,8 @@ Phase 1 delivers this journey for ordinary tracked text modifications. It
 refuses unsupported cases explicitly. Phase 2 expands Git coverage and diff
 presentation before repository search or language intelligence begins.
 
-The next three tasks are:
-
-1. Create one Rust package with the pinned toolchain, Apache-2.0 license, and
-   committed lockfile.
-2. Add the Phase 0 mise tasks and Linux CI, then implement help, version, and
-   doctor without repository scanning.
-3. After Phase 0 passes, start the Phase 1 disposable-repository journey through
-   Git acquisition, safe rendering, movement, cancellation, and terminal cleanup.
-
 Add dependencies and modules only when their phase uses them. Search begins in
 Phase 3; the LSP client begins in Phase 4. Release packaging begins in Phase 6.
-
-The repository README later keeps the current phase, exact commands, blockers,
-and next three tasks.
 
 ## End goal
 
@@ -869,8 +855,8 @@ proportional to hostile line length.
 
 ## Threat model
 
-This is a design model for unimplemented software, not a declaration that the
-future program is secure.
+This is the design model for the full v1 scope, not a declaration that the
+program is secure.
 
 ### Important assets
 
@@ -1236,16 +1222,16 @@ Xunhen uses both files, with one responsibility each:
 
 - `rust-toolchain.toml` pins the Rust channel, profile, and required components
   such as `rustfmt` and Clippy;
-- `mise.toml` pins the remaining development and release tools and defines the
-  complete command surface used by people and CI.
+- `mise.toml` reads that Rust pin, pins the remaining development tools, and
+  defines the tasks used locally and in CI.
 
 Documentation, local development, and handwritten CI invoke named `mise run`
 tasks. They do not grow a second collection of direct Cargo, cargo-dist, shell,
-or platform-specific commands. Tasks such as `fmt`, `lint`, `check`, `test`,
+or platform-specific commands. Tasks such as `fmt`, `lint`, `test`,
 `build`, `audit`, `deny`, `check-all`, `dist-init`, `dist-plan`, and
 `dist-build` remain small wrappers around pinned tools and explicit arguments.
-The Rust version recorded in `mise.toml`, if the established setup mirrors it
-there, must equal `rust-toolchain.toml`; an automated check fails on drift.
+Keep the Rust version only in `rust-toolchain.toml`; mise reads it through its
+built-in support for that file.
 
 `dist` configuration lives in the canonical location produced by the pinned
 version. Initialization, planning, building, and validation run through `mise`
@@ -1272,10 +1258,6 @@ behavior. The integration must pass those checks on each supported platform.
   public performance claims.
 - Linux, macOS, and Windows are all required for v1. Support is earned natively,
   one platform at a time.
-- Every decision record names the decision, evidence, rejected
-  alternative, limits, residual risk, owner, and `go` or `hold` verdict.
-- Keep the current phase, exact commands, blockers, and next three tasks in the
-  repository README once implementation starts.
 
 The first useful slice is the Phase 1 exact-binary diff journey described in
 "Start here." Search and language intelligence do not begin until that slice
@@ -1283,7 +1265,7 @@ is usable and terminal-safe.
 
 ### Progress board
 
-- [ ] **Phase 0** - GitHub repository, one package, limits, CLI shell, and Linux CI
+- [x] **Phase 0** - GitHub repository, one package, limits, CLI shell, and Linux CI
 - [ ] **Phase 1** - First usable Linux diff, `0.1.0`
 - [ ] **Phase 2** - Git coverage and diff presentation, `0.2.0`
 - [ ] **Phase 3** - Whole-repository search and source browser, `0.3.0`
@@ -1303,49 +1285,45 @@ behavior or its release gates.
 
 #### Build now
 
-- [ ] Create the project repository on GitHub under Nuggocto's account and add
+- [x] Create the project repository on GitHub under Nuggocto's account and add
   Linux GitHub Actions CI using the same mise tasks as local development.
   Release workflows enter in Phase 6.
-- [ ] Create one edition 2024 binary package with `src/lib.rs`, `src/main.rs`,
+- [x] Create one edition 2024 binary package with `src/lib.rs`, `src/main.rs`,
   and no workspace.
-- [ ] Add Apache-2.0 licensing, `Cargo.lock`, explicit dependency features, a
+- [x] Add Apache-2.0 licensing, `Cargo.lock`, explicit dependency features, a
   small lint policy, and `deny(unsafe_code)` for the main package.
-- [ ] Add `rust-toolchain.toml` with Rust 1.98.1, minimal profile, and required
+- [x] Add `rust-toolchain.toml` with Rust 1.98.1, minimal profile, and required
   components.
-- [ ] Add `mise.toml` with pinned supporting tools and concise fmt, lint, check,
+- [x] Add `mise.toml` with pinned supporting tools and concise fmt, lint,
   test, build, audit, deny, and check-all tasks. Make these tasks the local and
-  CI command contract and verify any mirrored Rust version cannot drift from
-  `rust-toolchain.toml`.
-- [ ] Add typed limits for the implemented CLI and configuration, with checks
+  CI command contract and read the Rust pin from `rust-toolchain.toml`.
+- [x] Add typed limits for the implemented CLI and configuration, with checks
   for defaults, lower values, maxima, and rejected higher values. Record the
   shared-memory design; implement reservations when Phase 1 allocates work.
-- [ ] Select the minimum Git version for the first Linux target. Record the
+- [x] Select the minimum Git version for the first Linux target. Record the
   resolved executable path, absolute override behavior, and the fact that Git is
   trusted outside Xunhen's containment boundary.
-- [ ] Record the reference Linux machine and benchmark format, then measure CLI
-  startup, steady RSS, and Release binary size before setting public budgets.
-- [ ] Implement `xunhen --help`, `xunhen version`, `xunhen doctor`,
+- [x] Implement `xunhen --help`, `xunhen version`, `xunhen doctor`,
   `xunhen completions <shell>`, and concise structured version output. Doctor
   reports the resolved Git path, version, and whether an absolute override is
   active without scanning a repository.
-- [ ] Add user-config discovery, strict parsing, and useful corrupt-config
+- [x] Add user-config discovery, strict parsing, and useful corrupt-config
   diagnostics without scanning a repository. Create cache or temporary storage
   only when an implemented operation needs it.
-- [ ] Add bounded redacted logs outside the repository. Prove that source text,
+- [x] Add bounded redacted logs outside the repository. Prove that source text,
   hover text, environment values, and raw child messages are absent by default.
-- [ ] Add the threat model and Phase 0 decisions to the repository in their
-  smallest useful form.
+- [x] Keep the threat model and Phase 0 tracking in this file.
 
 #### Done when
 
-- [ ] A clean checkout builds and tests with one documented mise task.
-- [ ] The active Rust compiler matches `rust-toolchain.toml`, and the mise task
+- [x] A clean checkout builds and tests with one documented mise task.
+- [x] The active Rust compiler matches `rust-toolchain.toml`, and the mise task
   graph contains no conflicting toolchain pin or duplicate implementation.
-- [ ] Help and version work without a repository, file catalogue, language server,
+- [x] Help and version work without a repository, file catalogue, language server,
   or network access.
-- [ ] Invalid limits and configuration fail before terminal raw mode begins.
-- [ ] The dependency graph contains only code used by this phase.
-- [ ] The Release binary starts, reports its version, and exits cleanly on the
+- [x] Invalid limits and configuration fail before terminal raw mode begins.
+- [x] The dependency graph contains only code used by this phase.
+- [x] The Release binary starts, reports its version, and exits cleanly on the
   first supported Linux target.
 
 ### Phase 1: first usable Linux diff, `0.1.0`
@@ -2008,8 +1986,8 @@ does not qualify the target. A passing internal test does not qualify a package.
 
 ## Benchmark policy
 
-Performance is part of the product, so measurement starts in Phase 0 and
-continues at each boundary that can change interaction latency. Public claims
+Performance measurements start with repository browsing in Phase 1 and
+continue at boundaries that can change interaction latency. Public claims
 wait until exact release artifacts exist.
 
 The versioned workloads cover:
@@ -2084,12 +2062,11 @@ Do not create an empty mature `docs/` tree during Phase 0.
 
 Start with:
 
-- `README.md` for what exists now, the current phase, exact tool setup, one
-  build command, one test command, the first runnable behavior, support status,
-  current blockers, and the next three tasks;
-- this plan as `ROADMAP.md`; do not copy its phase checklists into the README;
+- `README.md` for what exists now, exact tool setup, one build command, one
+  test command, runnable behavior, and support status;
+- `PROJECT.md` for the plan and progress checkboxes; phase numbers appear only
+  in this file;
 - `SECURITY.md` when the repository becomes public;
-- the concise threat model and accepted Phase 0 decisions;
 - `LICENSE` with Apache-2.0 text and third-party notice policy.
 
 Add documents when their subject exists:

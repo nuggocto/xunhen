@@ -14,6 +14,9 @@
 
 ## Project rules
 
+- Never mention phase numbers anywhere outside `PROJECT.md`, including source
+  code, comments, tests, command output, filenames, and other documentation.
+  Track progress only by marking completed checkboxes in `PROJECT.md`.
 - Treat `shrek` as the permanent default branch. Do not rename or replace it.
 - Write each commit with a simple, well-written subject line and an explanatory
   body. The body must explain why the change was needed instead of restating the

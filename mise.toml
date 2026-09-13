@@ -1,0 +1,26 @@
+min_version = "2026.9.4"
+
+[settings]
+idiomatic_version_file_enable_tools = ["rust"]
+
+[tools]
+"cargo:cargo-audit" = "0.22.1"
+"cargo:cargo-deny" = "0.19.4"
+
+[tasks]
+fmt = "cargo fmt --all"
+lint = "cargo clippy --locked --all-targets -- -D warnings"
+test = "cargo test --locked"
+build = "cargo build --locked --release"
+audit = "cargo audit"
+deny = "cargo deny --locked check"
+
+[tasks.check-all]
+run = [
+  "cargo fmt --all -- --check",
+  "mise run lint",
+  "mise run test",
+  "mise run audit",
+  "mise run deny",
+  "mise run build",
+]

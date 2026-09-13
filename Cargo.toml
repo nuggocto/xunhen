@@ -2,5 +2,34 @@
 name = "xunhen"
 version = "0.1.0"
 edition = "2024"
+resolver = "3"
+description = "A read-only terminal code browser, starting with the diff"
+license = "Apache-2.0"
+repository = "https://github.com/nuggocto/xunhen"
+publish = false
 
 [dependencies]
+clap = { version = "4.6.6", default-features = false, features = ["std", "help", "usage", "error-context"] }
+clap_complete = { version = "4.6.0", default-features = false }
+serde = { version = "1.0.229", default-features = false, features = ["std", "derive"] }
+serde_json = { version = "1.0.151", default-features = false, features = ["std"] }
+thiserror = { version = "2.0.20", default-features = false, features = ["std"] }
+toml = { version = "1.1.5", default-features = false, features = ["std", "parse", "serde"] }
+tokio = { version = "1.53.0", default-features = false, features = ["rt", "process", "io-util", "time", "signal", "macros"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+rustix = { version = "1.1.4", default-features = false, features = ["std", "fs", "process"] }
+
+[dev-dependencies]
+tempfile = { version = "3.27.0", default-features = false }
+
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+dbg_macro = "deny"
+todo = "deny"
+
+[profile.release]
+overflow-checks = true
+panic = "unwind"
