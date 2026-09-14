@@ -1,5 +1,8 @@
 # Rust build output and formatter backups; keep Cargo.lock versioned.
 /target/
+/fuzz/target/
+/fuzz/artifacts/
+/fuzz/corpus/
 **/*.rs.bk
 
 # Local environment files

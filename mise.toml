@@ -23,4 +23,5 @@ run = [
   "mise run audit",
   "mise run deny",
   "mise run build",
+  'XUNHEN_BINARY="$PWD/target/release/xunhen" cargo test --locked --test tui',
 ]

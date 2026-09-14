@@ -1337,37 +1337,37 @@ behavior in Phase 2. The README and help state the implemented scope.
 
 #### Build now
 
-- [ ] Implement bounded repository discovery, Git executable and capability
+- [x] Implement bounded repository discovery, Git executable and capability
   checks, environment sanitization, and ownership checks.
-- [ ] Capture an immutable ordinary index in bounded, owner-only temporary
+- [x] Capture an immutable ordinary index in bounded, owner-only temporary
   storage outside the repository. Bind status, patch, and old-blob reads to its
   identity; qualify cleanup and stale-snapshot recovery.
-- [ ] Establish the no-follow root capability and bounded regular-file reader
+- [x] Establish the no-follow root capability and bounded regular-file reader
   used by later source and search work. Preserve lossless paths internally.
-- [ ] Preflight effective attributes and suppress pager, optional locks, lazy
+- [x] Preflight effective attributes and suppress pager, optional locks, lazy
   fetching, external diff, textconv, clean, smudge, process filters, and
   fsmonitor before worktree operations. Refuse safely if suppression or
   coherent configuration cannot be established.
-- [ ] Parse NUL-delimited classifications and use literal exact-path arguments.
+- [x] Parse NUL-delimited classifications and use literal exact-path arguments.
   Display unsupported entries explicitly. Filter paths are indeterminate and
   prevent a complete or no-changes summary.
-- [ ] Acquire bounded per-file patches and parse context, addition, deletion,
+- [x] Acquire bounded per-file patches and parse context, addition, deletion,
   and metadata rows with exact old and new coordinates. Admit raw-source
   navigation only for proven byte-identical text; refuse transformed cases.
-- [ ] Introduce shared memory reservations for buffers, parsed diffs, queues,
+- [x] Introduce shared memory reservations for buffers, parsed diffs, queues,
   workers, and retained generations before those allocations can grow.
-- [ ] Add Ratatui and Crossterm, one UI-state owner, and one terminal guard.
+- [x] Add Ratatui and Crossterm, one UI-state owner, and one terminal guard.
   Render a plain-text unified diff, file list, line numbers, selected hunk,
   progress, errors, and unavailable states.
-- [ ] Add file, hunk, page, and horizontal movement plus a discoverable exit
+- [x] Add file, hunk, page, and horizontal movement plus a discoverable exit
   action. Handle narrow terminals and resize with bounded layout arithmetic.
-- [ ] Run Git and file work outside rendering. Cancel abandoned requests and
+- [x] Run Git and file work outside rendering. Cancel abandoned requests and
   reject results from older operation generations.
-- [ ] Add terminal-safe projections for source, paths, errors, and metadata.
-- [ ] Exercise real disposable repositories for ordinary changes, no changes,
+- [x] Add terminal-safe projections for source, paths, errors, and metadata.
+- [x] Exercise real disposable repositories for ordinary changes, no changes,
   literal unusual paths, hostile filters, missing objects, unsupported states,
   concurrent changes, limits, and malformed or truncated output.
-- [ ] Add focused coordinate and projection tests, small parser fuzz targets,
+- [x] Add focused coordinate and projection tests, small parser fuzz targets,
   and PTY journeys for startup, movement, resize, cancellation, failure, panic
   restoration, and exit. Record repository state and network attempts.
 - [ ] Run the exact Release binary with a user reviewing a small real change.
@@ -1377,13 +1377,13 @@ behavior in Phase 2. The README and help state the implemented scope.
 
 - [ ] A user opens the supported unstaged diff, moves between files and hunks,
   reads exact old and new coordinates, cancels loading, and exits cleanly.
-- [ ] Unsupported cases cannot become ordinary diffs or a false no-changes
+- [x] Unsupported cases cannot become ordinary diffs or a false no-changes
   result. The first release makes no broader Git or platform support claim.
-- [ ] Unsafe text never reaches the terminal; literal paths remain literal.
-- [ ] The tested operations cause no repository write, filter execution, or
+- [x] Unsafe text never reaches the terminal; literal paths remain literal.
+- [x] The tested operations cause no repository write, filter execution, or
   network attempt. Concurrent changes and budget exhaustion produce typed
   outcomes without panic.
-- [ ] Terminal restoration and child cleanup pass the Linux PTY suite.
+- [x] Terminal restoration and child cleanup pass the Linux PTY suite.
 - [ ] The exact `0.1.0` artifact completes the first usable diff journey,
   with recorded latency, peak RSS, limitations, and user feedback.
 

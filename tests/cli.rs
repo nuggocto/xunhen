@@ -102,8 +102,8 @@ fn informational_commands_ignore_broken_configuration_and_missing_git() {
     let fixture = Fixture::new();
     fixture.config("this is not TOML: secret-canary");
     for args in [
-        vec![],
         vec!["--help"],
+        vec!["help"],
         vec!["--version"],
         vec!["version"],
         vec!["version", "--json"],
@@ -500,13 +500,26 @@ fn git_release_candidates_do_not_satisfy_the_stable_minimum() {
 }
 
 #[test]
-fn git_output_limit_counts_stdout_and_stderr_together() {
+fn git_probe_bounds_stdout_and_stderr_separately() {
     let fixture = Fixture::new();
-    fixture.git("printf 'git version 2.55.0\\n'; printf '%050d' 0 >&2");
-    fixture.config("logging = false\n[limits]\ngit_output_bytes = 64\n");
-    let output = fixture.run(&["doctor"]);
-    assert_eq!(output.code, 1);
-    assert!(output.stderr.contains("output limit"));
+    for (diagnostic_bytes, exit, code, expected) in [
+        (50, 0, 0, ""),
+        (50, 1, 1, "Git version probe failed"),
+        (65, 0, 1, "output limit"),
+    ] {
+        fixture.git(&format!(
+            "printf 'git version 2.55.0\\n'; printf '%0{diagnostic_bytes}d' 0 >&2; exit {exit}"
+        ));
+        fixture.config("logging = false\n[limits]\ngit_output_bytes = 64\n");
+        let output = fixture.run(&["doctor"]);
+        assert_eq!(output.code, code, "{}", output.stderr);
+        if code == 0 {
+            assert!(output.stdout.contains("(met)"));
+            assert!(output.stderr.is_empty());
+        } else {
+            assert!(output.stderr.contains(expected), "{}", output.stderr);
+        }
+    }
 }
 
 struct ChildGuard(std::process::Child);

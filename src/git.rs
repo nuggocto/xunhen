@@ -15,6 +15,223 @@ use crate::{
     signals::Signals,
 };
 
+use crate::budget::{Budget, Bytes, OUTPUT_BYTES};
+use std::ffi::OsString;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
+use tokio::io::AsyncWriteExt;
+
+const DIAGNOSTIC_BYTES: usize = 64 * 1024;
+
+#[derive(Clone, Default)]
+pub(crate) struct Cancellation(Arc<AtomicBool>);
+
+impl Cancellation {
+    pub fn cancel(&self) {
+        self.0.store(true, Ordering::Release);
+    }
+    pub fn check(&self) -> Result<(), Error> {
+        if self.0.load(Ordering::Acquire) {
+            Err(Error::Cancelled)
+        } else {
+            Ok(())
+        }
+    }
+}
+
+pub(crate) struct Runner {
+    pub path: PathBuf,
+    pub directory: PathBuf,
+    pub git_dir: Option<PathBuf>,
+    pub worktree: Option<PathBuf>,
+    pub objects: Option<PathBuf>,
+    pub user_config: bool,
+    pub budget: Budget,
+    pub cancel: Cancellation,
+}
+
+impl Runner {
+    pub fn new(path: PathBuf, directory: PathBuf, budget: Budget, cancel: Cancellation) -> Self {
+        Self {
+            path,
+            directory,
+            git_dir: None,
+            worktree: None,
+            objects: None,
+            user_config: true,
+            budget,
+            cancel,
+        }
+    }
+
+    pub async fn run(
+        &self,
+        args: &[OsString],
+        input: Option<&[u8]>,
+        limit: usize,
+    ) -> Result<Bytes, Error> {
+        self.cancel.check()?;
+        if limit > OUTPUT_BYTES {
+            return Err(Error::Budget("Git output"));
+        }
+        let mut output = Bytes::new(&self.budget, limit)?;
+        let mut command = Command::new(&self.path);
+        command
+            .args([
+                "--no-pager",
+                "--no-optional-locks",
+                "--no-lazy-fetch",
+                "--literal-pathspecs",
+                "-c",
+                "core.fsmonitor=false",
+                "-c",
+                "core.untrackedCache=false",
+            ])
+            .env_clear()
+            .env("LC_ALL", "C")
+            .env("GIT_OPTIONAL_LOCKS", "0")
+            .env("GIT_NO_LAZY_FETCH", "1")
+            .env("GIT_TERMINAL_PROMPT", "0")
+            .env("GIT_CONFIG_COUNT", "0")
+            .env("GIT_PAGER", "")
+            .current_dir(&self.directory)
+            .stdin(if input.is_some() {
+                Stdio::piped()
+            } else {
+                Stdio::null()
+            })
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .process_group(0)
+            .kill_on_drop(true);
+        if self.user_config {
+            for name in ["HOME", "XDG_CONFIG_HOME"] {
+                if let Some(value) = std::env::var_os(name) {
+                    command.env(name, value);
+                }
+            }
+        } else {
+            command
+                .env("GIT_ATTR_NOSYSTEM", "1")
+                .env("GIT_CONFIG_NOSYSTEM", "1")
+                .env("GIT_CONFIG_GLOBAL", "/dev/null");
+        }
+        if let Some(path) = &self.git_dir {
+            command.arg("--git-dir").arg(path);
+        }
+        if let Some(path) = &self.worktree {
+            command.arg("--work-tree").arg(path);
+        }
+        if let Some(path) = &self.objects {
+            command.env("GIT_OBJECT_DIRECTORY", path);
+        }
+        command.args(args);
+        let mut child = command
+            .spawn()
+            .map_err(|e| Error::io("launch repository Git", e))?;
+        let group = child
+            .id()
+            .and_then(|id| i32::try_from(id).ok())
+            .and_then(Pid::from_raw)
+            .ok_or(Error::Git("Git process identity unavailable"))?;
+        let mut stdout = child
+            .stdout
+            .take()
+            .ok_or(Error::Git("Git stdout unavailable"))?;
+        let mut stderr = child
+            .stderr
+            .take()
+            .ok_or(Error::Git("Git stderr unavailable"))?;
+        let stdin = child.stdin.take();
+        let write = async move {
+            if let Some(mut stdin) = stdin {
+                stdin
+                    .write_all(input.unwrap_or_default())
+                    .await
+                    .map_err(|e| Error::io("write Git input", e))?;
+                stdin
+                    .shutdown()
+                    .await
+                    .map_err(|e| Error::io("close Git input", e))?;
+            }
+            Ok::<(), Error>(())
+        };
+        tokio::pin!(write);
+        let mut written = false;
+        let mut out_done = false;
+        let mut err_done = false;
+        let mut diagnostic_bytes = 0usize;
+        let mut out = [0u8; 8192];
+        let mut err = [0u8; 4096];
+        let deadline = tokio::time::sleep(Duration::from_secs(30));
+        tokio::pin!(deadline);
+        let mut tick = tokio::time::interval(Duration::from_millis(20));
+        let result = loop {
+            tokio::select! {
+                biased;
+                _ = tick.tick() => if let Err(error) = self.cancel.check() { break Err(error); },
+                _ = &mut deadline => break Err(Error::Unavailable("Git exceeded its 30 second deadline")),
+                result = &mut write, if !written => { if let Err(error) = result { break Err(error); } written = true; },
+                result = stdout.read(&mut out), if !out_done => match result {
+                    Ok(0) => out_done = true,
+                    Ok(count) => {
+                        if count > limit.saturating_sub(output.data.len()) { break Err(Error::Budget("Git output")); }
+                        output.data.extend_from_slice(&out[..count]);
+                    },
+                    Err(error) => break Err(Error::io("read Git output", error)),
+                },
+                result = stderr.read(&mut err), if !err_done => match result {
+                    Ok(0) => err_done = true,
+                    Ok(count) => {
+                        if count > DIAGNOSTIC_BYTES - diagnostic_bytes { break Err(Error::Budget("Git diagnostic")); }
+                        diagnostic_bytes += count;
+                    },
+                    Err(error) => break Err(Error::io("read Git diagnostic", error)),
+                },
+                result = child.wait(), if out_done && err_done && written => break result.map_err(|e| Error::io("wait for Git", e)),
+            }
+        };
+        if result.is_err() {
+            match kill_process_group(group, Signal::KILL) {
+                Ok(()) | Err(rustix::io::Errno::SRCH) => {}
+                Err(error) => return Err(Error::io("terminate Git", error)),
+            }
+            tokio::time::timeout(Duration::from_secs(2), child.wait())
+                .await
+                .map_err(|_| Error::Unavailable("Git cleanup exceeded two seconds"))?
+                .map_err(|e| Error::io("reap Git", e))?;
+        }
+        if !result?.success() {
+            let operation = [
+                "rev-parse",
+                "config",
+                "var",
+                "ls-files",
+                "check-attr",
+                "status",
+                "diff",
+                "cat-file",
+            ]
+            .into_iter()
+            .find(|name| args.first().is_some_and(|arg| arg == name))
+            .unwrap_or("operation");
+            return Err(Error::GitCommand(operation));
+        }
+        Ok(output)
+    }
+
+    pub async fn query(&self, args: &[&str], limit: usize) -> Result<Bytes, Error> {
+        self.run(
+            &args.iter().map(OsString::from).collect::<Vec<_>>(),
+            None,
+            limit,
+        )
+        .await
+    }
+}
+
 pub(crate) const MINIMUM: Version = Version(2, 55, 0);
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -140,7 +357,7 @@ pub(crate) async fn probe(
     let mut out_buffer = [0u8; 4096];
     let mut err_buffer = [0u8; 4096];
     let mut output = Vec::with_capacity(config.limits.git_output_bytes);
-    let mut total = 0;
+    let mut diagnostic_bytes = 0;
     let mut out_done = false;
     let mut err_done = false;
     let deadline = tokio::time::sleep(Duration::from_millis(config.limits.git_timeout_ms));
@@ -154,8 +371,7 @@ pub(crate) async fn probe(
                 match read {
                     Ok(0) => out_done = true,
                     Ok(count) => {
-                        if count > config.limits.git_output_bytes - total { break Err(Error::OutputLimit); }
-                        total += count;
+                        if count > config.limits.git_output_bytes - output.len() { break Err(Error::OutputLimit); }
                         output.extend_from_slice(&out_buffer[..count]);
                     }
                     Err(error) => break Err(Error::io("read Git stdout", error)),
@@ -165,8 +381,8 @@ pub(crate) async fn probe(
                 match read {
                     Ok(0) => err_done = true,
                     Ok(count) => {
-                        if count > config.limits.git_output_bytes - total { break Err(Error::OutputLimit); }
-                        total += count;
+                        if count > config.limits.git_output_bytes - diagnostic_bytes { break Err(Error::OutputLimit); }
+                        diagnostic_bytes += count;
                     }
                     Err(error) => break Err(Error::io("read Git stderr", error)),
                 }

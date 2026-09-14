@@ -7,7 +7,13 @@ fn command() -> Command {
     Command::new("xunhen")
         .version(env!("CARGO_PKG_VERSION"))
         .about("A read-only terminal code browser")
-        .after_help("Currently provides CLI diagnostics. These commands do not scan repositories.")
+        .after_help("Without a command, opens the unstaged tracked-text diff viewer. Help, version, and completions do not scan repositories.")
+        .arg(Arg::new("repo").long("repo").global(true).value_name("PATH").help("Repository or directory within it").value_parser(clap::value_parser!(std::path::PathBuf)))
+        .subcommand(
+            Command::new("changes")
+                .about("Review unstaged tracked text modifications")
+                .arg(Arg::new("scope").long("scope").required(true).value_parser(["unstaged"])),
+        )
         .subcommand(
             Command::new("version")
                 .about("Print version information")
@@ -80,6 +86,17 @@ pub(crate) fn run() -> Result<u8, Error> {
         }
         Some(("version", _)) => format!("xunhen {}\n", env!("CARGO_PKG_VERSION")).into_bytes(),
         Some(("doctor", _)) => return doctor(),
+        Some(("changes", _)) | None => {
+            let config = config::load()?;
+            let git = git::resolve(&config)?;
+            let directory = matches
+                .get_one::<std::path::PathBuf>("repo")
+                .cloned()
+                .map(Ok)
+                .unwrap_or_else(std::env::current_dir)
+                .map_err(|e| Error::io("locate repository directory", e))?;
+            return crate::app::run(git, directory, config);
+        }
         Some(("completions", matches)) => {
             let shell = matches
                 .get_one::<clap_complete::Shell>("shell")
