@@ -45,6 +45,24 @@ impl Root {
         }
         Ok(())
     }
+    pub fn same_directory(&self, path: &Path) -> Result<bool, Error> {
+        let other = rfs::openat2(
+            rfs::CWD,
+            path,
+            OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC,
+            Mode::empty(),
+            ResolveFlags::NO_MAGICLINKS,
+        )
+        .map_err(|e| Error::io("open home directory identity", e))?;
+        let current = self
+            .file
+            .metadata()
+            .map_err(|e| Error::io("inspect repository identity", e))?;
+        let other = File::from(other)
+            .metadata()
+            .map_err(|e| Error::io("inspect home directory identity", e))?;
+        Ok(current.dev() == other.dev() && current.ino() == other.ino())
+    }
     pub fn descriptor_path(&self) -> PathBuf {
         PathBuf::from(format!(
             "/proc/{}/fd/{}",
@@ -208,7 +226,7 @@ pub(super) fn configuration_owner(path: &Path) -> Result<(), Error> {
     Ok(())
 }
 
-pub(super) struct Snapshot {
+pub(super) struct PrivateSnapshot {
     directory: tempfile::TempDir,
     _lease: File,
     _parent: File,
@@ -216,7 +234,7 @@ pub(super) struct Snapshot {
     written: std::cell::Cell<usize>,
 }
 
-impl Snapshot {
+impl PrivateSnapshot {
     pub fn new() -> Result<Self, Error> {
         let path = crate::storage::user_directory("XDG_STATE_HOME", ".local/state")
             .map_err(|e| Error::io("locate private snapshots", e))?

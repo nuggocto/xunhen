@@ -276,7 +276,7 @@ fn repository_attribute_override_is_refused_without_opening_its_target() {
 }
 
 #[test]
-fn user_attribute_file_still_classifies_filtered_paths() {
+fn user_attribute_file_works_with_git_config_metacharacters_in_the_state_path() {
     let fixture = Fixture::new();
     let attributes = fixture.temp.path().join("user-attributes");
     fs::write(&attributes, b"first.txt filter=example\n").unwrap();
@@ -289,7 +289,14 @@ fn user_attribute_file_still_classifies_filtered_paths() {
     )
     .unwrap();
     fixture.write("second.txt", b"USER ATTRIBUTE CHANGE\n");
-    let mut terminal = Pty::spawn(fixture.command(env!("CARGO_BIN_EXE_xunhen")));
+    let mut command = fixture.command(env!("CARGO_BIN_EXE_xunhen"));
+    command.env(
+        "XDG_STATE_HOME",
+        fixture.temp.path().join(std::ffi::OsString::from_vec(
+            b"state#with-semicolon;and-space-\xff".to_vec(),
+        )),
+    );
+    let mut terminal = Pty::spawn(command);
     terminal.wait_for("external filter: status indeterminate");
     terminal.send(b"j");
     terminal.wait_for("USER ATTRIBUTE CHANGE");
@@ -820,6 +827,19 @@ fn explicit_repository_and_nested_starting_directories_resolve_to_the_same_root(
         .arg(&nested);
     let mut terminal = Pty::spawn(command);
     terminal.wait_for("NESTED START");
+    terminal.send(b"q");
+    assert!(terminal.finish().success());
+}
+
+#[test]
+fn a_home_directory_alias_cannot_be_opened_as_a_repository() {
+    let fixture = Fixture::new();
+    let home = fixture.temp.path().join("home-alias");
+    symlink(&fixture.repo, &home).unwrap();
+    let mut command = fixture.command(env!("CARGO_BIN_EXE_xunhen"));
+    command.env("HOME", home);
+    let mut terminal = Pty::spawn(command);
+    terminal.wait_for("filesystem and home roots are not review repositories");
     terminal.send(b"q");
     assert!(terminal.finish().success());
 }

@@ -24,4 +24,8 @@ jobs:
         with:
           version: 2026.9.4
           cache: false
+      - name: Install syscall tracer
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends strace=6.8-0ubuntu2
       - run: mise run check-all

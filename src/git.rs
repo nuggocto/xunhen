@@ -47,6 +47,7 @@ pub(crate) struct Runner {
     pub git_dir: Option<PathBuf>,
     pub worktree: Option<PathBuf>,
     pub objects: Option<PathBuf>,
+    pub attributes_file: Option<PathBuf>,
     pub user_config: bool,
     pub budget: Budget,
     pub cancel: Cancellation,
@@ -67,6 +68,7 @@ impl Runner {
             git_dir: None,
             worktree: None,
             objects: None,
+            attributes_file: None,
             user_config: true,
             budget,
             cancel,
@@ -136,6 +138,11 @@ impl Runner {
         }
         if let Some(path) = &self.objects {
             command.env("GIT_OBJECT_DIRECTORY", path);
+        }
+        if let Some(path) = &self.attributes_file {
+            let mut setting = OsString::from("core.attributesFile=");
+            setting.push(path);
+            command.arg("-c").arg(setting);
         }
         command.args(args);
         let mut child = command

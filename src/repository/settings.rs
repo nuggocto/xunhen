@@ -1,6 +1,6 @@
 use super::{
     Entry,
-    files::{Observation, Root, Snapshot, configuration_owner, resolve_configuration},
+    files::{Observation, PrivateSnapshot, Root, configuration_owner, resolve_configuration},
     line_path, records, split_once,
 };
 use crate::{
@@ -34,7 +34,7 @@ pub(super) struct Settings {
 
 pub(super) async fn capture(
     runner: &Runner,
-    snapshot: &Snapshot,
+    snapshot: &PrivateSnapshot,
     controls: &mut Vec<Observation>,
 ) -> Result<Settings, Error> {
     let listing = runner.query(CONFIG_ARGS, MIB).await?;
@@ -115,11 +115,8 @@ pub(super) async fn capture(
     }
     // Only fixed, non-executing configuration reaches worktree-comparing commands.
     // Paths with conversion attributes are refused before these commands run.
-    let config = format!(
-        "[core]\n\tbare = false\n\tfilemode = true\n\tfsmonitor = false\n\tuntrackedCache = false\n\tautocrlf = false\n\tattributesFile = {}\n[diff]\n\trenames = false\n",
-        snapshot.path().join("global-attributes").display()
-    );
-    snapshot.write(Path::new("git/config"), config.as_bytes(), 0o600)?;
+    let config = b"[core]\n\tbare = false\n\tfilemode = true\n\tfsmonitor = false\n\tuntrackedCache = false\n\tautocrlf = false\n[diff]\n\trenames = false\n";
+    snapshot.write(Path::new("git/config"), config, 0o600)?;
     Ok(Settings {
         conversion,
         global_attributes,
@@ -137,7 +134,7 @@ fn false_value(value: &[u8]) -> bool {
 fn capture_file(
     path: &Path,
     user_selected: bool,
-    snapshot: &Snapshot,
+    snapshot: &PrivateSnapshot,
     destination: Option<&Path>,
     controls: &mut Vec<Observation>,
     budget: &Budget,
@@ -192,7 +189,7 @@ fn capture_file(
 
 pub(super) fn attributes(
     root: &Root,
-    snapshot: &Snapshot,
+    snapshot: &PrivateSnapshot,
     entries: &[Entry],
     controls: &mut Vec<Observation>,
     budget: &Budget,

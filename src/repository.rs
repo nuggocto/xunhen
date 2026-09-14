@@ -8,7 +8,7 @@ use crate::{
     git::{Cancellation, Runner},
     limits::GitLimits,
 };
-use files::{Observation, Root, Snapshot};
+use files::{Observation, PrivateSnapshot, Root};
 use sha2::{Digest, Sha256};
 use std::{
     ffi::{OsStr, OsString},
@@ -31,7 +31,7 @@ pub(crate) struct Repository {
     pub runner: Runner,
     root: Root,
     controls: Vec<Observation>,
-    _snapshot: Snapshot,
+    _snapshot: PrivateSnapshot,
     _reservation: Reservation,
     _controls_reservation: Reservation,
     config_digest: [u8; 32],
@@ -159,14 +159,16 @@ impl Repository {
                 .await?
                 .data,
         )?;
-        if path == Path::new("/")
-            || std::env::var_os("HOME").is_some_and(|home| path == Path::new(&home))
-        {
+        let root = Root::open(&path)?;
+        let home_root = match std::env::var_os("HOME") {
+            Some(home) => root.same_directory(Path::new(&home))?,
+            None => false,
+        };
+        if path == Path::new("/") || home_root {
             return Err(Error::Unavailable(
                 "filesystem and home roots are not review repositories",
             ));
         }
-        let root = Root::open(&path)?;
         root.owned()?;
         runner.directory = path.clone();
         let git_dir = line_path(
@@ -201,7 +203,7 @@ impl Repository {
         if head.data.len() != 41 || !head.data[..40].iter().all(u8::is_ascii_hexdigit) {
             return Err(Error::Unavailable("a resolved HEAD is required"));
         }
-        let snapshot = Snapshot::new()?;
+        let snapshot = PrivateSnapshot::new()?;
         let controls_reservation = budget.reserve(32 * budget::MIB)?;
         let mut controls = Vec::with_capacity(4096);
         let index = root.read(
@@ -225,6 +227,7 @@ impl Repository {
         runner.objects = Some(objects.descriptor_path());
         runner.git_dir = Some(snapshot.path().join("git"));
         runner.worktree = Some(snapshot.path().join("worktree"));
+        runner.attributes_file = Some(snapshot.path().join("global-attributes"));
         runner.directory = snapshot.path().to_path_buf();
         runner.user_config = false;
         let listing = runner

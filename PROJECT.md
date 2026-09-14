@@ -1266,7 +1266,7 @@ is usable and terminal-safe.
 ### Progress board
 
 - [x] **Phase 0** - GitHub repository, one package, limits, CLI shell, and Linux CI
-- [ ] **Phase 1** - First usable Linux diff, `0.1.0`
+- [x] **Phase 1** - First usable Linux diff, `0.1.0`
 - [ ] **Phase 2** - Git coverage and diff presentation, `0.2.0`
 - [ ] **Phase 3** - Whole-repository search and source browser, `0.3.0`
 - [ ] **Phase 4** - Worktree-exact language intelligence, `0.4.0`
@@ -1370,12 +1370,12 @@ behavior in Phase 2. The README and help state the implemented scope.
 - [x] Add focused coordinate and projection tests, small parser fuzz targets,
   and PTY journeys for startup, movement, resize, cancellation, failure, panic
   restoration, and exit. Record repository state and network attempts.
-- [ ] Run the exact Release binary with a user reviewing a small real change.
+- [x] Run the exact Release binary with a user reviewing a small real change.
   Record confusing actions and fix the review journey before Phase 2.
 
 #### Done when
 
-- [ ] A user opens the supported unstaged diff, moves between files and hunks,
+- [x] A user opens the supported unstaged diff, moves between files and hunks,
   reads exact old and new coordinates, cancels loading, and exits cleanly.
 - [x] Unsupported cases cannot become ordinary diffs or a false no-changes
   result. The first release makes no broader Git or platform support claim.
@@ -1384,7 +1384,7 @@ behavior in Phase 2. The README and help state the implemented scope.
   network attempt. Concurrent changes and budget exhaustion produce typed
   outcomes without panic.
 - [x] Terminal restoration and child cleanup pass the Linux PTY suite.
-- [ ] The exact `0.1.0` artifact completes the first usable diff journey,
+- [x] The exact `0.1.0` artifact completes the first usable diff journey,
   with recorded latency, peak RSS, limitations, and user feedback.
 
 ### Phase 2: Git coverage and diff presentation, `0.2.0`

@@ -1,6 +1,6 @@
 //! Linux access to user configuration and state.
 use std::fs::File;
-use std::io;
+use std::io::{self, Read};
 use std::os::unix::fs::MetadataExt;
 use std::path::{Component, Path, PathBuf};
 
@@ -44,13 +44,64 @@ fn exists(directory: &File, name: &str) -> io::Result<bool> {
     }
 }
 
+fn open_directory(directory: &File, name: &str) -> io::Result<Option<File>> {
+    match fs::openat(
+        directory,
+        name,
+        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+        Mode::empty(),
+    ) {
+        Ok(file) => Ok(Some(File::from(file))),
+        Err(rustix::io::Errno::NOENT | rustix::io::Errno::NOTDIR | rustix::io::Errno::LOOP) => {
+            Ok(None)
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn repository_layout(directory: &File) -> io::Result<bool> {
+    Ok(exists(directory, "HEAD")?
+        && exists(directory, "objects")?
+        && (exists(directory, "refs")? || exists(directory, "reftable")?))
+}
+
+fn git_file(directory: &File) -> io::Result<bool> {
+    let descriptor = match fs::openat(
+        directory,
+        ".git",
+        OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::NONBLOCK | OFlags::CLOEXEC,
+        Mode::empty(),
+    ) {
+        Ok(file) => file,
+        Err(
+            rustix::io::Errno::NOENT
+            | rustix::io::Errno::ISDIR
+            | rustix::io::Errno::LOOP
+            | rustix::io::Errno::NOTDIR,
+        ) => return Ok(false),
+        Err(error) => return Err(error.into()),
+    };
+    let mut file = File::from(descriptor);
+    let metadata = file.metadata()?;
+    if !metadata.is_file() || metadata.len() > (PATH_BYTES + 10) as u64 {
+        return Ok(false);
+    }
+    let mut contents = Vec::with_capacity(metadata.len() as usize);
+    file.read_to_end(&mut contents)?;
+    let contents = contents.strip_suffix(b"\n").unwrap_or(&contents);
+    let contents = contents.strip_suffix(b"\r").unwrap_or(contents);
+    Ok(contents
+        .strip_prefix(b"gitdir: ")
+        .is_some_and(|path| !path.is_empty() && !path.contains(&0)))
+}
+
 fn outside_repository(directory: &File) -> io::Result<()> {
-    // Bounded ancestor metadata checks; no Git launch or repository traversal.
-    if exists(directory, ".git")?
-        || (exists(directory, "HEAD")?
-            && exists(directory, "objects")?
-            && exists(directory, "refs")?)
-    {
+    // Recognize Git's directory and gitfile layouts without launching Git.
+    let worktree = match open_directory(directory, ".git")? {
+        Some(git) => repository_layout(&git)?,
+        None => git_file(directory)?,
+    };
+    if worktree || repository_layout(directory)? {
         return Err(io::Error::new(
             io::ErrorKind::PermissionDenied,
             "user storage is inside a repository",

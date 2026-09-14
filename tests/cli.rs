@@ -1,7 +1,7 @@
 use std::fs::{self, File};
 use std::io::Read;
 use std::os::unix::fs::{PermissionsExt, symlink};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 use tempfile::TempDir;
@@ -29,6 +29,28 @@ impl Fixture {
     }
     fn config(&self, text: &str) {
         fs::write(self.path("config/xunhen/config.toml"), text).unwrap();
+    }
+    fn initialize_repository(&self, path: &Path) {
+        let output = Command::new("git")
+            .args([
+                "-c",
+                "init.defaultObjectFormat=sha1",
+                "init",
+                "--quiet",
+                "--initial-branch=main",
+            ])
+            .arg(path)
+            .env_clear()
+            .env("PATH", std::env::var_os("PATH").unwrap())
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "Git setup failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
     fn git(&self, script: &str) -> PathBuf {
         let path = self.path("git");
@@ -192,8 +214,32 @@ fn config_symlinks_special_files_and_repository_locations_are_refused() {
     assert_eq!(fixture.run(&["doctor"]).code, 2);
     fs::remove_file(fixture.path("config/xunhen/config.toml")).unwrap();
     fixture.config("logging = false");
-    fs::create_dir(fixture.path("config/.git")).unwrap();
+    fixture.initialize_repository(&fixture.path("config"));
     assert_eq!(fixture.run(&["doctor"]).code, 2);
+}
+
+#[test]
+fn empty_git_directories_do_not_block_user_storage() {
+    let fixture = Fixture::new();
+    fixture.git("printf 'git version 2.55.0\\n'");
+    fs::create_dir(fixture.path(".git")).unwrap();
+    let output = fixture.run(&["doctor"]);
+    assert_eq!(output.code, 0, "{}", output.stderr);
+}
+
+#[test]
+fn repository_gitfiles_block_user_storage() {
+    let fixture = Fixture::new();
+    let metadata = fixture.path("repository-metadata");
+    fixture.initialize_repository(&metadata);
+    fs::write(
+        fixture.path(".git"),
+        format!("gitdir: {}\n", metadata.join(".git").display()),
+    )
+    .unwrap();
+    let output = fixture.run(&["doctor"]);
+    assert_eq!(output.code, 2);
+    assert!(output.stderr.contains("repository"), "{}", output.stderr);
 }
 
 #[test]
@@ -316,7 +362,7 @@ fn unsafe_logging_destination_preserves_the_primary_result() {
         "[git]\nexecutable = {}\n",
         serde_json::to_string(&path).unwrap()
     ));
-    fs::create_dir_all(fixture.path("state/.git")).unwrap();
+    fixture.initialize_repository(&fixture.path("state"));
     let output = fixture.run(&["doctor"]);
     assert_eq!(output.code, 0);
     assert!(output.stderr.contains("logging unavailable"));
@@ -426,7 +472,7 @@ fn storage_refusals_identify_the_directory_and_reason() {
 
     fs::remove_file(fixture.path("config")).unwrap();
     fs::rename(fixture.path("actual-config"), fixture.path("config")).unwrap();
-    fs::create_dir(fixture.path(".git")).unwrap();
+    fixture.initialize_repository(fixture.root.path());
     let output = fixture.run(&["doctor"]);
     assert_eq!(output.code, 2);
     assert!(output.stderr.contains("repository"), "{}", output.stderr);

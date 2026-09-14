@@ -16,6 +16,17 @@ build = "cargo build --locked --release"
 audit = "cargo audit"
 deny = "cargo deny --locked check"
 
+[tasks.isolation]
+depends = ["build"]
+run = '''
+tracer="${XUNHEN_STRACE:-$(command -v strace || true)}"
+if [ -z "$tracer" ]; then
+  echo "strace unavailable; syscall isolation check skipped"
+  exit 0
+fi
+XUNHEN_STRACE="$tracer" XUNHEN_BINARY="$PWD/target/release/xunhen" cargo test --locked --test tui repository_journey_attempts_no_network_or_repository_write -- --ignored --exact
+'''
+
 [tasks.check-all]
 run = [
   "cargo fmt --all -- --check",
@@ -26,4 +37,5 @@ run = [
   "mise run deny",
   "mise run build",
   'XUNHEN_BINARY="$PWD/target/release/xunhen" cargo test --locked --test tui',
+  "mise run isolation",
 ]
