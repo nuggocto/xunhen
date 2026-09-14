@@ -400,19 +400,20 @@ fn unusual_paths_remain_literal_and_hostile_text_cannot_control_the_terminal() {
         .env("GIT_GLOB_PATHSPECS", "1")
         .env("GIT_ICASE_PATHSPECS", "1");
     let mut terminal = Pty::spawn(command);
-    terminal.wait_for("new é");
-    let screen = terminal.parser.screen().contents();
-    assert!(screen.contains(r"\xff.txt"));
-    assert!(screen.contains(r"\u{202e}"));
-    assert!(screen.contains(r"\u{1b}]52;CANARY\u{7}"));
+    terminal.wait_until("escaped source and literal path", |screen| {
+        let text = screen.contents();
+        ["new é", r"\xff.txt", r"\u{202e}", r"\u{1b}]52;CANARY\u{7}"]
+            .iter()
+            .all(|expected| text.contains(expected))
+    });
+    terminal.send(b"q");
+    assert!(terminal.finish().success());
     assert!(
         !terminal
             .bytes
             .windows(5)
             .any(|window| window == b"\x1b]52;")
     );
-    terminal.send(b"q");
-    assert!(terminal.finish().success());
 }
 
 #[test]
@@ -733,8 +734,10 @@ fn filter_driver_names_cannot_masquerade_as_absent_attributes() {
         b"first.txt filter=unspecified\nsecond.txt filter=unset\n",
     );
     let mut terminal = Pty::spawn(fixture.command(env!("CARGO_BIN_EXE_xunhen")));
-    terminal.wait_for("external filter: status indeterminate");
-    assert!(terminal.parser.screen().contents().contains("! second.txt"));
+    terminal.wait_until("both filter paths are indeterminate", |screen| {
+        let text = screen.contents();
+        text.contains("external filter: status indeterminate") && text.contains("! second.txt")
+    });
     assert!(!terminal.parser.screen().contents().contains("No unstaged"));
     terminal.send(b"q");
     assert!(terminal.finish().success());
