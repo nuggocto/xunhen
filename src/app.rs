@@ -506,7 +506,11 @@ async fn event_loop(
             return Err(Error::Unavailable("repository worker stopped"));
         }
         for _ in 0..32 {
-            if !event::poll(Duration::ZERO).map_err(|e| Error::io("poll terminal input", e))? {
+            // The level-triggered backend needs a nonzero poll timeout. A quiet
+            // queue waits at most one millisecond before rendering continues.
+            if !event::poll(Duration::from_millis(1))
+                .map_err(|e| Error::io("poll terminal input", e))?
+            {
                 break;
             }
             match event::read().map_err(|e| Error::io("read terminal input", e))? {

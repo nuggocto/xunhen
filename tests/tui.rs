@@ -462,6 +462,31 @@ fn a_mode_change_invalidates_a_loaded_file() {
 }
 
 #[test]
+fn resize_signals_do_not_stall_keyboard_input() {
+    let fixture = Fixture::new();
+    fixture.write("first.txt", b"FIRST RESIZE CHANGE\n");
+    fixture.write("second.txt", b"SECOND RESIZE CHANGE\n");
+    let mut terminal = Pty::spawn(fixture.command(env!("CARGO_BIN_EXE_xunhen")));
+    terminal.wait_for("FIRST RESIZE CHANGE");
+    for _ in 0..32 {
+        for (key, expected) in [
+            (b"j", "SECOND RESIZE CHANGE"),
+            (b"k", "FIRST RESIZE CHANGE"),
+        ] {
+            kill_process(
+                Pid::from_raw(terminal.child.id() as i32).unwrap(),
+                Signal::WINCH,
+            )
+            .unwrap();
+            terminal.send(key);
+            terminal.wait_for(expected);
+        }
+    }
+    terminal.send(b"q");
+    assert!(terminal.finish().success());
+}
+
+#[test]
 fn resize_hunk_page_and_horizontal_movement_keep_the_view_usable() {
     let fixture = Fixture::new();
     let old = (1..=100).map(|n| format!("line {n}\n")).collect::<String>();
@@ -870,10 +895,14 @@ fn repository_journey_attempts_no_network_or_repository_write() {
             .unwrap();
         }
         for line in trace.lines() {
+            // Signal-hook probes its anonymous wakeup socket with an empty send.
+            let wakeup_probe = line.contains("sendto(")
+                && line.contains("<UNIX-STREAM:[")
+                && line.contains(">, \"\", 0, MSG_DONTWAIT, NULL, 0) = 0");
             assert!(
                 !line.contains("connect(")
                     && !line.contains("AF_INET")
-                    && !line.contains("sendto("),
+                    && (!line.contains("sendto(") || wakeup_probe),
                 "network attempt: {line}"
             );
             let opened = line.rsplit_once(" = ").map_or("", |(_, result)| result);
