@@ -244,6 +244,150 @@ fn filters_and_external_helpers_never_run_and_uncertainty_stays_visible() {
 }
 
 #[test]
+fn repository_attribute_override_is_refused_without_opening_its_target() {
+    use rustix::fs::inotify;
+    let fixture = Fixture::new();
+    let outside = fixture.temp.path().join("outside-attributes");
+    fs::write(&outside, b"# synthetic private canary\n").unwrap();
+    fixture.git(&["config", "core.attributesFile", outside.to_str().unwrap()]);
+    fixture.write("first.txt", b"OUTSIDE ATTRIBUTE CHANGE\n");
+    let watch =
+        inotify::init(inotify::CreateFlags::CLOEXEC | inotify::CreateFlags::NONBLOCK).unwrap();
+    inotify::add_watch(&watch, &outside, inotify::WatchFlags::OPEN).unwrap();
+
+    let mut terminal = Pty::spawn(fixture.command(env!("CARGO_BIN_EXE_xunhen")));
+    terminal.wait_until("attribute refusal or loaded comparison", |screen| {
+        let text = screen.contents();
+        text.contains("repository-local core.attributesFile")
+            || text.contains("OUTSIDE ATTRIBUTE CHANGE")
+    });
+    let screen = terminal.parser.screen().contents();
+    terminal.send(b"q");
+    assert!(terminal.finish().success());
+    assert_eq!(
+        rustix::io::read(&watch, &mut [0u8; 512]),
+        Err(rustix::io::Errno::AGAIN),
+        "repository configuration caused an outside file to be opened"
+    );
+    assert!(
+        screen.contains("repository-local core.attributesFile"),
+        "{screen}"
+    );
+}
+
+#[test]
+fn user_attribute_file_still_classifies_filtered_paths() {
+    let fixture = Fixture::new();
+    let attributes = fixture.temp.path().join("user-attributes");
+    fs::write(&attributes, b"first.txt filter=example\n").unwrap();
+    fs::write(
+        fixture.temp.path().join(".gitconfig"),
+        format!(
+            "[core]\n attributesFile = {}\n",
+            serde_json::to_string(&attributes).unwrap()
+        ),
+    )
+    .unwrap();
+    fixture.write("second.txt", b"USER ATTRIBUTE CHANGE\n");
+    let mut terminal = Pty::spawn(fixture.command(env!("CARGO_BIN_EXE_xunhen")));
+    terminal.wait_for("external filter: status indeterminate");
+    terminal.send(b"j");
+    terminal.wait_for("USER ATTRIBUTE CHANGE");
+    terminal.wait_for("incomplete");
+    terminal.send(b"q");
+    assert!(terminal.finish().success());
+}
+
+#[test]
+fn attribute_lookup_ignores_a_transient_repository_override() {
+    use rustix::fs::inotify;
+    let fixture = Fixture::new();
+    let outside = fixture.temp.path().join("outside-attributes");
+    fs::write(&outside, b"# synthetic private canary\n").unwrap();
+    fixture.git_wrapper(
+        "case \" $* \" in *' var GIT_ATTR_GLOBAL '*)
+ \"$git_executable\" -C \"$fixture_dir/repo\" config core.attributesFile \"$fixture_dir/outside-attributes\"
+ \"$git_executable\" \"$@\"
+ result=$?
+ \"$git_executable\" -C \"$fixture_dir/repo\" config --unset core.attributesFile
+ exit \"$result\"
+ ;; esac",
+    );
+    fixture.write("first.txt", b"COHERENT ATTRIBUTE CHANGE\n");
+    let watch =
+        inotify::init(inotify::CreateFlags::CLOEXEC | inotify::CreateFlags::NONBLOCK).unwrap();
+    inotify::add_watch(&watch, &outside, inotify::WatchFlags::OPEN).unwrap();
+    let mut terminal = Pty::spawn(fixture.command(env!("CARGO_BIN_EXE_xunhen")));
+    terminal.wait_for("COHERENT ATTRIBUTE CHANGE");
+    terminal.send(b"q");
+    assert!(terminal.finish().success());
+    assert_eq!(
+        rustix::io::read(&watch, &mut [0u8; 512]),
+        Err(rustix::io::Errno::AGAIN),
+        "a transient repository override redirected the auxiliary read"
+    );
+}
+
+#[test]
+fn configured_git_timeout_stops_repository_commands() {
+    let fixture = Fixture::new();
+    // Deliberately delay the child; PTY readiness still follows observable state.
+    fixture.git_wrapper(
+        "case \" $* \" in *' status '*) echo $$ > \"$fixture_dir/git-pid\"; /bin/sleep 3 ;; esac",
+    );
+    let config_path = fixture.temp.path().join("config/xunhen/config.toml");
+    let config = fs::read_to_string(&config_path).unwrap();
+    fs::write(
+        config_path,
+        format!("{config}[limits]\ngit_timeout_ms = 1000\n"),
+    )
+    .unwrap();
+
+    let mut terminal = Pty::spawn(fixture.command(env!("CARGO_BIN_EXE_xunhen")));
+    terminal.wait_until("timeout or completed status", |screen| {
+        let text = screen.contents();
+        text.contains("timed out") || text.contains("No unstaged tracked changes")
+    });
+    let screen = terminal.parser.screen().contents();
+    terminal.send(b"q");
+    assert!(terminal.finish().success());
+    let pid = fs::read_to_string(fixture.temp.path().join("git-pid")).unwrap();
+    assert!(!std::path::Path::new(&format!("/proc/{}", pid.trim())).exists());
+    assert!(screen.contains("timed out"), "{screen}");
+}
+
+#[test]
+fn configured_git_output_limit_bounds_repository_stdout_and_stderr() {
+    for (redirect, expected) in [
+        ("", "Git output limit reached"),
+        (">&2", "Git diagnostic limit reached"),
+    ] {
+        let fixture = Fixture::new();
+        fixture.git_wrapper(&format!(
+            "case \" $* \" in *' status '*) printf '%04097d' 0 {redirect} ;; esac"
+        ));
+        let config_path = fixture.temp.path().join("config/xunhen/config.toml");
+        let config = fs::read_to_string(&config_path).unwrap();
+        fs::write(
+            config_path,
+            format!("{config}[limits]\ngit_output_bytes = 4096\n"),
+        )
+        .unwrap();
+        let mut terminal = Pty::spawn(fixture.command(env!("CARGO_BIN_EXE_xunhen")));
+        terminal.wait_until("output refusal or completed status", |screen| {
+            let text = screen.contents();
+            text.contains(expected)
+                || text.contains("invalid or truncated")
+                || text.contains("No unstaged tracked changes")
+        });
+        let screen = terminal.parser.screen().contents();
+        terminal.send(b"q");
+        assert!(terminal.finish().success());
+        assert!(screen.contains(expected), "{screen}");
+    }
+}
+
+#[test]
 fn unusual_paths_remain_literal_and_hostile_text_cannot_control_the_terminal() {
     let fixture = Fixture::new();
     let name = std::ffi::OsString::from_vec(b":(glob)*[x]\n\xff.txt".to_vec());

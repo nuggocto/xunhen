@@ -50,7 +50,7 @@ pub(crate) enum Error {
     },
     #[error("{0}")]
     Git(&'static str),
-    #[error("Git probe timed out")]
+    #[error("Git command timed out")]
     Timeout,
     #[error("Git probe exceeded its output limit")]
     OutputLimit,

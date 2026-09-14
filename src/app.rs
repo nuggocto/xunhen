@@ -3,6 +3,7 @@ use crate::{
     budget::{Budget, Reservation},
     diff::{Diff, Kind},
     git::{self, Cancellation},
+    limits::GitLimits,
     output,
     repository::Repository,
     signals::Signals,
@@ -50,7 +51,7 @@ struct Worker {
 }
 
 impl Worker {
-    fn new(git: PathBuf, directory: PathBuf) -> Result<Self, Error> {
+    fn new(git: PathBuf, directory: PathBuf, limits: GitLimits) -> Result<Self, Error> {
         let (send, requests) = mpsc::sync_channel::<Work>(1);
         let (replies, receive) = mpsc::sync_channel::<Reply>(1);
         let handle = thread::Builder::new()
@@ -77,6 +78,7 @@ impl Worker {
                                         directory.clone(),
                                         budget.clone(),
                                         work.cancel.clone(),
+                                        limits,
                                     )
                                     .await?;
                                     let reservation = budget.reserve(8 * 1024 * 1024)?;
@@ -552,7 +554,7 @@ async fn review(
         result = reporting => result.map_err(|_| Error::Unavailable("Git report failed"))?.map_err(|e| Error::io("report selected Git", e))?,
     }
     let mut terminal = TerminalGuard::new()?;
-    let mut worker = Worker::new(git, directory)?;
+    let mut worker = Worker::new(git, directory, config.limits.git())?;
     let mut app = App {
         files: Vec::new(),
         _labels: None,

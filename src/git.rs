@@ -11,7 +11,7 @@ use tokio::process::Command;
 use crate::{
     Error,
     config::Config,
-    limits::{ARGUMENT_BYTES, PATH_BYTES},
+    limits::{ARGUMENT_BYTES, GitLimits, PATH_BYTES},
     signals::Signals,
 };
 
@@ -50,10 +50,17 @@ pub(crate) struct Runner {
     pub user_config: bool,
     pub budget: Budget,
     pub cancel: Cancellation,
+    pub limits: GitLimits,
 }
 
 impl Runner {
-    pub fn new(path: PathBuf, directory: PathBuf, budget: Budget, cancel: Cancellation) -> Self {
+    pub fn new(
+        path: PathBuf,
+        directory: PathBuf,
+        budget: Budget,
+        cancel: Cancellation,
+        limits: GitLimits,
+    ) -> Self {
         Self {
             path,
             directory,
@@ -63,6 +70,7 @@ impl Runner {
             user_config: true,
             budget,
             cancel,
+            limits,
         }
     }
 
@@ -76,6 +84,8 @@ impl Runner {
         if limit > OUTPUT_BYTES {
             return Err(Error::Budget("Git output"));
         }
+        let limit = limit.min(self.limits.output_bytes);
+        let diagnostic_limit = DIAGNOSTIC_BYTES.min(self.limits.output_bytes);
         let mut output = Bytes::new(&self.budget, limit)?;
         let mut command = Command::new(&self.path);
         command
@@ -165,14 +175,14 @@ impl Runner {
         let mut diagnostic_bytes = 0usize;
         let mut out = [0u8; 8192];
         let mut err = [0u8; 4096];
-        let deadline = tokio::time::sleep(Duration::from_secs(30));
+        let deadline = tokio::time::sleep(Duration::from_millis(self.limits.timeout_ms));
         tokio::pin!(deadline);
         let mut tick = tokio::time::interval(Duration::from_millis(20));
         let result = loop {
             tokio::select! {
                 biased;
                 _ = tick.tick() => if let Err(error) = self.cancel.check() { break Err(error); },
-                _ = &mut deadline => break Err(Error::Unavailable("Git exceeded its 30 second deadline")),
+                _ = &mut deadline => break Err(Error::Timeout),
                 result = &mut write, if !written => { if let Err(error) = result { break Err(error); } written = true; },
                 result = stdout.read(&mut out), if !out_done => match result {
                     Ok(0) => out_done = true,
@@ -185,7 +195,7 @@ impl Runner {
                 result = stderr.read(&mut err), if !err_done => match result {
                     Ok(0) => err_done = true,
                     Ok(count) => {
-                        if count > DIAGNOSTIC_BYTES - diagnostic_bytes { break Err(Error::Budget("Git diagnostic")); }
+                        if count > diagnostic_limit - diagnostic_bytes { break Err(Error::Budget("Git diagnostic")); }
                         diagnostic_bytes += count;
                     },
                     Err(error) => break Err(Error::io("read Git diagnostic", error)),
@@ -321,6 +331,7 @@ pub(crate) async fn probe(
     config: &Config,
     signals: &mut Signals,
 ) -> Result<Report, Error> {
+    let limits = config.limits.git_probe();
     let mut command = Command::new(&path);
     command
         // Version discovery must also work on Git older than the supported floor.
@@ -356,11 +367,11 @@ pub(crate) async fn probe(
         .ok_or(Error::Git("Git stderr unavailable"))?;
     let mut out_buffer = [0u8; 4096];
     let mut err_buffer = [0u8; 4096];
-    let mut output = Vec::with_capacity(config.limits.git_output_bytes);
+    let mut output = Vec::with_capacity(limits.output_bytes);
     let mut diagnostic_bytes = 0;
     let mut out_done = false;
     let mut err_done = false;
-    let deadline = tokio::time::sleep(Duration::from_millis(config.limits.git_timeout_ms));
+    let deadline = tokio::time::sleep(Duration::from_millis(limits.timeout_ms));
     tokio::pin!(deadline);
     let result = loop {
         tokio::select! {
@@ -371,7 +382,7 @@ pub(crate) async fn probe(
                 match read {
                     Ok(0) => out_done = true,
                     Ok(count) => {
-                        if count > config.limits.git_output_bytes - output.len() { break Err(Error::OutputLimit); }
+                        if count > limits.output_bytes - output.len() { break Err(Error::OutputLimit); }
                         output.extend_from_slice(&out_buffer[..count]);
                     }
                     Err(error) => break Err(Error::io("read Git stdout", error)),
@@ -381,7 +392,7 @@ pub(crate) async fn probe(
                 match read {
                     Ok(0) => err_done = true,
                     Ok(count) => {
-                        if count > config.limits.git_output_bytes - diagnostic_bytes { break Err(Error::OutputLimit); }
+                        if count > limits.output_bytes - diagnostic_bytes { break Err(Error::OutputLimit); }
                         diagnostic_bytes += count;
                     }
                     Err(error) => break Err(Error::io("read Git stderr", error)),

@@ -21,6 +21,7 @@ pub(super) const CONFIG_ARGS: &[&str] = &[
     "--null",
     "--list",
     "--show-origin",
+    "--show-scope",
     "--no-includes",
 ];
 
@@ -36,25 +37,20 @@ pub(super) async fn capture(
     snapshot: &Snapshot,
     controls: &mut Vec<Observation>,
 ) -> Result<Settings, Error> {
-    let listing = runner
-        .query(
-            &[
-                "config",
-                "--null",
-                "--list",
-                "--show-origin",
-                "--no-includes",
-            ],
-            MIB,
-        )
-        .await?;
+    let listing = runner.query(CONFIG_ARGS, MIB).await?;
     let mut fields = records(&listing.data)?;
     let mut sources = BTreeSet::new();
     let mut conversion = false;
-    while let Some(origin) = fields.next() {
+    while let Some(scope) = fields.next() {
+        let origin = fields
+            .next()
+            .ok_or(Error::Protocol("configuration scope"))?;
         let setting = fields.next().ok_or(Error::Protocol("configuration"))?;
-        if origin == b"command line:" {
+        if scope == b"command" && origin == b"command line:" {
             continue;
+        }
+        if !matches!(scope, b"system" | b"global" | b"local") {
+            return Err(Error::Unavailable("unsupported Git configuration scope"));
         }
         let source = origin
             .strip_prefix(b"file:")
@@ -69,6 +65,11 @@ pub(super) async fn capture(
             return Err(Error::Budget("Git configuration files"));
         }
         let (key, value) = split_once(setting, b'\n').unwrap_or((setting, b"true"));
+        if scope == b"local" && key == b"core.attributesfile" {
+            return Err(Error::Unavailable(
+                "repository-local core.attributesFile is not supported; use user Git configuration",
+            ));
+        }
         if key == b"include.path" || key.starts_with(b"includeif.") {
             return Err(Error::Unavailable(
                 "Git configuration includes are not supported",
@@ -85,10 +86,18 @@ pub(super) async fn capture(
             conversion = !false_value(value);
         }
     }
-    let global_attributes =
-        line_path(&runner.query(&["var", "GIT_ATTR_GLOBAL"], 16384).await?.data)?;
-    let system_attributes =
-        line_path(&runner.query(&["var", "GIT_ATTR_SYSTEM"], 16384).await?.data)?;
+    // Auxiliary paths come from user/system configuration, even if repository
+    // configuration changes after the scope check. Git var needs no repository.
+    let mut user = Runner::new(
+        runner.path.clone(),
+        PathBuf::from("/"),
+        runner.budget.clone(),
+        runner.cancel.clone(),
+        runner.limits,
+    );
+    user.git_dir = Some(PathBuf::from("/dev/null"));
+    let global_attributes = line_path(&user.query(&["var", "GIT_ATTR_GLOBAL"], 16384).await?.data)?;
+    let system_attributes = line_path(&user.query(&["var", "GIT_ATTR_SYSTEM"], 16384).await?.data)?;
     for path in sources {
         capture_file(
             &path,
@@ -100,18 +109,7 @@ pub(super) async fn capture(
             &runner.cancel,
         )?;
     }
-    let after = runner
-        .query(
-            &[
-                "config",
-                "--null",
-                "--list",
-                "--show-origin",
-                "--no-includes",
-            ],
-            MIB,
-        )
-        .await?;
+    let after = runner.query(CONFIG_ARGS, MIB).await?;
     if listing.data != after.data {
         return Err(Error::Stale);
     }

@@ -6,6 +6,7 @@ use crate::{
     budget::{self, Budget, Bytes, Reservation},
     diff::Diff,
     git::{Cancellation, Runner},
+    limits::GitLimits,
 };
 use files::{Observation, Root, Snapshot};
 use sha2::{Digest, Sha256};
@@ -128,16 +129,18 @@ impl Repository {
         directory: PathBuf,
         budget: Budget,
         cancel: Cancellation,
+        limits: GitLimits,
     ) -> Result<Self, Error> {
         let first = Self::capture(
             git.clone(),
             directory.clone(),
             budget.clone(),
             cancel.clone(),
+            limits,
         )
         .await;
         match first {
-            Err(Error::Stale) => Self::capture(git, directory, budget, cancel).await,
+            Err(Error::Stale) => Self::capture(git, directory, budget, cancel, limits).await,
             result => result,
         }
     }
@@ -147,8 +150,9 @@ impl Repository {
         directory: PathBuf,
         budget: Budget,
         cancel: Cancellation,
+        limits: GitLimits,
     ) -> Result<Self, Error> {
-        let mut runner = Runner::new(git, directory, budget.clone(), cancel.clone());
+        let mut runner = Runner::new(git, directory, budget.clone(), cancel.clone(), limits);
         let path = line_path(
             &runner
                 .query(&["rev-parse", "--show-toplevel"], 16384)
@@ -451,6 +455,7 @@ impl Repository {
             self.path.clone(),
             self.runner.budget.clone(),
             self.runner.cancel.clone(),
+            self.runner.limits,
         );
         let settings = original.query(settings::CONFIG_ARGS, budget::MIB).await?;
         if Sha256::digest(&settings.data).as_slice() != self.config_digest {
