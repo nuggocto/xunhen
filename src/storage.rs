@@ -10,6 +10,8 @@ use crate::{
 };
 use rustix::fs::{self, AtFlags, Mode, OFlags};
 
+const GIT_FILE_BYTES: usize = PATH_BYTES + 10;
+
 pub(crate) fn user_directory(variable: &str, fallback: &str) -> io::Result<PathBuf> {
     let path = match std::env::var_os(variable).filter(|value| !value.is_empty()) {
         Some(value) => PathBuf::from(value),
@@ -73,26 +75,48 @@ fn git_file(directory: &File) -> io::Result<bool> {
         Mode::empty(),
     ) {
         Ok(file) => file,
-        Err(
-            rustix::io::Errno::NOENT
-            | rustix::io::Errno::ISDIR
-            | rustix::io::Errno::LOOP
-            | rustix::io::Errno::NOTDIR,
-        ) => return Ok(false),
-        Err(error) => return Err(error.into()),
+        Err(rustix::io::Errno::NOENT) => return Ok(false),
+        Err(error) => {
+            return Err(io::Error::new(
+                io::Error::from(error).kind(),
+                format!("cannot inspect repository marker .git: {error}"),
+            ));
+        }
     };
     let mut file = File::from(descriptor);
     let metadata = file.metadata()?;
-    if !metadata.is_file() || metadata.len() > (PATH_BYTES + 10) as u64 {
-        return Ok(false);
+    if !metadata.is_file() {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "repository marker .git is not a regular file",
+        ));
     }
-    let mut contents = Vec::with_capacity(metadata.len() as usize);
-    file.read_to_end(&mut contents)?;
+    if metadata.len() > GIT_FILE_BYTES as u64 {
+        return Err(io::Error::new(
+            io::ErrorKind::FileTooLarge,
+            "repository marker .git exceeds its read limit",
+        ));
+    }
+    let contents = read_git_file(&mut file)?;
     let contents = contents.strip_suffix(b"\n").unwrap_or(&contents);
     let contents = contents.strip_suffix(b"\r").unwrap_or(contents);
     Ok(contents
         .strip_prefix(b"gitdir: ")
         .is_some_and(|path| !path.is_empty() && !path.contains(&0)))
+}
+
+fn read_git_file(file: &mut File) -> io::Result<Vec<u8>> {
+    // The file can grow after its metadata check; bound the read independently.
+    let mut contents = Vec::with_capacity(GIT_FILE_BYTES + 1);
+    file.take((GIT_FILE_BYTES + 1) as u64)
+        .read_to_end(&mut contents)?;
+    if contents.len() > GIT_FILE_BYTES {
+        return Err(io::Error::new(
+            io::ErrorKind::FileTooLarge,
+            "repository marker .git grew past its read limit",
+        ));
+    }
+    Ok(contents)
 }
 
 fn outside_repository(directory: &File) -> io::Result<()> {
@@ -202,4 +226,33 @@ pub(crate) fn file(directory: &File, name: &str, write: bool) -> io::Result<File
         private(&file)?;
     }
     Ok(file)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{Seek, Write};
+
+    #[test]
+    fn gitfile_at_the_read_limit_is_not_truncated() {
+        let mut file = tempfile::tempfile().unwrap();
+        let contents = vec![b'x'; GIT_FILE_BYTES];
+        file.write_all(&contents).unwrap();
+        file.rewind().unwrap();
+        assert_eq!(read_git_file(&mut file).unwrap(), contents);
+    }
+
+    #[test]
+    fn gitfile_growth_cannot_exceed_the_read_budget() {
+        let mut file = tempfile::NamedTempFile::new().unwrap();
+        let mut reader = File::open(file.path()).unwrap();
+        assert!(reader.metadata().unwrap().len() <= GIT_FILE_BYTES as u64);
+        // Grow the same inode after the caller's admission check, without a race.
+        file.write_all(&vec![b'x'; GIT_FILE_BYTES * 2]).unwrap();
+        assert_eq!(
+            read_git_file(&mut reader).unwrap_err().kind(),
+            io::ErrorKind::FileTooLarge
+        );
+        assert!(reader.stream_position().unwrap() <= (GIT_FILE_BYTES + 1) as u64);
+    }
 }

@@ -52,6 +52,35 @@ impl Fixture {
             String::from_utf8_lossy(&output.stderr)
         );
     }
+    fn assert_repository_storage_refused(&self, repository: &Path) {
+        self.git(&format!(
+            ": > '{}'\nprintf 'git version 2.55.0\\n'",
+            self.path("launched").display()
+        ));
+        self.config("logging = true\n");
+        let config = repository.join("config");
+        fs::create_dir_all(config.join("xunhen")).unwrap();
+        fs::write(config.join("xunhen/config.toml"), "logging = false\n").unwrap();
+        let mut command = self.command(&["doctor"]);
+        command.env("XDG_CONFIG_HOME", config);
+        let output = self.run_command(command);
+        assert_eq!(output.code, 2, "{}", output.stderr);
+        assert!(output.stderr.contains("repository"), "{}", output.stderr);
+        assert!(!self.path("launched").exists());
+
+        let state = repository.join("state");
+        let mut command = self.command(&["doctor"]);
+        command.env("XDG_STATE_HOME", &state);
+        let output = self.run_command(command);
+        assert_eq!(output.code, 0, "{}", output.stderr);
+        assert!(
+            output.stderr.contains("logging unavailable"),
+            "{}",
+            output.stderr
+        );
+        assert!(self.path("launched").exists());
+        assert!(!state.exists());
+    }
     fn git(&self, script: &str) -> PathBuf {
         let path = self.path("git");
         fs::write(&path, format!("#!/bin/sh\n{script}\n")).unwrap();
@@ -222,9 +251,11 @@ fn config_symlinks_special_files_and_repository_locations_are_refused() {
 fn empty_git_directories_do_not_block_user_storage() {
     let fixture = Fixture::new();
     fixture.git("printf 'git version 2.55.0\\n'");
+    fixture.config("logging = true\n");
     fs::create_dir(fixture.path(".git")).unwrap();
     let output = fixture.run(&["doctor"]);
     assert_eq!(output.code, 0, "{}", output.stderr);
+    assert!(fixture.path("state/xunhen/xunhen.log").exists());
 }
 
 #[test]
@@ -240,6 +271,46 @@ fn repository_gitfiles_block_user_storage() {
     let output = fixture.run(&["doctor"]);
     assert_eq!(output.code, 2);
     assert!(output.stderr.contains("repository"), "{}", output.stderr);
+}
+
+#[test]
+fn symlinked_repository_markers_block_configuration_and_state() {
+    let fixture = Fixture::new();
+    let repository = fixture.path("repository");
+    fixture.initialize_repository(&repository);
+    let metadata = fixture.path("metadata");
+    fs::rename(repository.join(".git"), &metadata).unwrap();
+    symlink(metadata, repository.join(".git")).unwrap();
+    fixture.assert_repository_storage_refused(&repository);
+}
+
+#[test]
+fn oversized_repository_markers_block_configuration_and_state() {
+    let fixture = Fixture::new();
+    let repository = fixture.path("repository");
+    fixture.initialize_repository(&repository);
+    let metadata = fixture.path("metadata");
+    fs::rename(repository.join(".git"), &metadata).unwrap();
+    // Git accepts trailing newlines even when the gitfile exceeds our read limit.
+    let marker = format!("gitdir: {}{}", metadata.display(), "\n".repeat(16384));
+    fs::write(repository.join(".git"), marker).unwrap();
+    fixture.assert_repository_storage_refused(&repository);
+}
+
+#[test]
+fn special_repository_markers_block_configuration_and_state_without_waiting() {
+    let fixture = Fixture::new();
+    let repository = fixture.path("repository");
+    fs::create_dir(&repository).unwrap();
+    rustix::fs::mknodat(
+        rustix::fs::CWD,
+        repository.join(".git"),
+        rustix::fs::FileType::Fifo,
+        rustix::fs::Mode::RUSR,
+        0,
+    )
+    .unwrap();
+    fixture.assert_repository_storage_refused(&repository);
 }
 
 #[test]
