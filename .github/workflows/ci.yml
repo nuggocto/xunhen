@@ -18,6 +18,18 @@ jobs:
   check:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    env:
+      GOENV: "off"
+      GOWORK: "off"
+      GOTOOLCHAIN: local
+      GOOS: linux
+      GOARCH: amd64
+      GOAMD64: v1
+      CGO_ENABLED: "0"
+      GOFLAGS: -mod=readonly
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -28,10 +40,25 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
-      - name: Verify and build
-        run: bash scripts/check.sh
+      - name: Check formatting
+        run: |
+          unformatted=$(git ls-files -z --cached --others --exclude-standard -- '*.go' ':(exclude)**/testdata/**' |
+            xargs -0 -r gofmt -l --)
+          if [[ -n "$unformatted" ]]; then
+            printf 'Format these files with gofmt:\n%s\n' "$unformatted" >&2
+            exit 1
+          fi
+      - name: Verify module metadata and dependencies
+        run: |
+          go mod tidy -diff
+          go mod verify
+      - name: Test
+        run: go test -count=1 -timeout=3m ./...
+      - name: Vet
+        run: go vet ./...
+      - name: Build
+        run: go build -trimpath -o bin/xunhen ./cmd/xunhen
       - name: Check for generated changes
-        shell: bash
         run: |
           git diff --exit-code
           test -z "$(git ls-files --others --exclude-standard)"
