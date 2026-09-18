@@ -1,0 +1,31 @@
+# Build and release output.
+/xunhen
+/bin/
+/build/
+/dist/
+
+# Local test reports and profiles. Keep testdata files trackable.
+/coverage/
+/coverage.out
+/coverage.html
+/*.test
+/*.prof
+/*.pprof
+
+# Local Go workspace overrides.
+/go.work
+/go.work.sum
+
+# Nix build links and local shell state.
+/result
+/result-*
+/.direnv/
+
+# Scratch space for temporary files and private undo/source copies.
+/.local/
+/tmp/
+
+# Editor swap and backup files in the repository root.
+/*.swp
+/*.swo
+/*~
