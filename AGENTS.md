@@ -1,6 +1,6 @@
 ## Skills
 
-- Use the `rust` skill and then the `tiger-style` skill for project work.
+- Use the `go` skill and then the `tiger-style` skill for project work.
 - Use the `unslop` skill for all writing, including comments and user-facing
   text.
 - Use the `test-quality` skill when writing or reviewing tests.
