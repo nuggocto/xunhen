@@ -2,8 +2,6 @@
 
 *Seek traces.*
 
-> 落笔生新枝，回首寻旧痕。
->
 > New branches grow beneath the brush; look back, and seek old traces.
 
 You write a passage of code, undo it, and follow another path.
@@ -29,14 +27,5 @@ Recovery has limits. Only history that Neovim actually persisted and retained
 can survive between sessions. Complete reconstruction may require matching
 source text or a preserved copy; an undo file is not a record of every
 keystroke forever.
-
-## Still taking root
-
-The project is in planning. The implementation will use Go, with Bubble Tea
-for the terminal interface. The v1 release will target Linux, with a downloadable
-binary, a Nix/NixOS package, and an AUR package.
-
-The architecture, format questions, and build-to-release checklists live in
-[PROJECT.md](PROJECT.md).
 
 Licensed under [Apache-2.0](LICENSE).

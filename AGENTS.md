@@ -22,6 +22,7 @@
   body. The body must explain why the change was needed instead of restating the
   diff.
 - Preserve user work and avoid unrelated edits.
+- Write Go tests in table-driven form, with named cases run through `t.Run`.
 - Only add a test if its failure would tell you something is actually broken.
   Assertions on styling values, colors, or internal structure fail on harmless
   changes and pass on real bugs, so leave them out.

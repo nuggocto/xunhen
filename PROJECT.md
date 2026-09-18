@@ -85,8 +85,9 @@ Decisions made for the starting design:
 
 The installed version strings identify a starting environment, not a verified
 compatibility matrix. Record the actual Neovim build provenance when generating
-fixtures. Select and pin dependency versions and the supported Go toolchain
-when implementation begins, using a supported Go line and its current patch.
+fixtures. The current executable uses only the standard library; the selected
+Go minimum and CI toolchain are 1.27.1, recorded in `go.mod`. Select the Bubble
+Tea dependency when its interface work begins.
 
 Bubble Tea is justified by terminal lifecycle handling, input processing, and
 its model/update/view structure. Its transitive dependencies still count toward
@@ -618,28 +619,28 @@ Outcome: a buildable Linux command and a repeatable development loop.
 
 #### 0.1 Freeze the initial contract
 
-- [ ] Review the v1 feature contract, Linux/amd64 target, required archive/NixOS/AUR distribution channels, and post-v1 exclusions together.
-- [ ] Identify the AUR package maintainer and check the official Arch repositories and AUR for an existing package before planning a new submission.
-- [ ] Record the source provenance of the installed Neovim build; select the exact initial producer revision to study and test.
-- [ ] Select a supported Go minimum and current patch toolchain; use the same selected toolchain in local instructions and CI.
-- [ ] Define the supported text cases and initial resource limits, marking format-dependent limits for resolution during source study.
+- [x] Review the v1 feature contract, Linux/amd64 target, required archive/NixOS/AUR distribution channels, and post-v1 exclusions together.
+- [x] Identify the AUR package maintainer and check the official Arch repositories and AUR for an existing package before planning a new submission.
+- [x] Record the source provenance of the installed Neovim build; select the exact initial producer revision to study and test.
+- [x] Select a supported Go minimum and current patch toolchain; use the same selected toolchain in local instructions and CI.
+- [x] Define the supported text cases and initial resource limits, marking format-dependent limits for resolution during source study.
 
 #### 0.2 Bootstrap the executable
 
-- [ ] Initialize module `github.com/nuggocto/xunhen` and `cmd/xunhen`, preserving `shrek` as the default branch and the existing Apache-2.0 license.
-- [ ] Add a minimal command dispatcher, top-level help, version reporting, and the documented exit-status mapping.
-- [ ] Add package directories only as their first behavior is implemented; keep file I/O at explicit boundaries.
-- [ ] Ignore local binaries, test artifacts, temporary fixtures, and private undo/source copies without ignoring the checked-in synthetic corpus.
-- [ ] Document one local sequence for formatting, building, testing, and vetting from a clean checkout.
+- [x] Initialize module `github.com/nuggocto/xunhen` and `cmd/xunhen`, preserving `shrek` as the default branch and the existing Apache-2.0 license.
+- [x] Add a minimal command dispatcher, top-level help, version reporting, and the documented exit-status mapping.
+- [x] Add package directories only as their first behavior is implemented; keep file I/O at explicit boundaries.
+- [x] Ignore local binaries, test artifacts, temporary fixtures, and private undo/source copies without ignoring the checked-in synthetic corpus.
+- [x] Document one local sequence for formatting, building, testing, and vetting from a clean checkout.
 
 #### 0.3 Establish CI
 
-- [ ] Add Linux CI for pull requests and changes to `shrek`: formatting checks, `go test ./...`, `go vet ./...`, and a command build.
-- [ ] Commit module checksums when dependencies appear; verify dependency integrity and fail on unexpected generated changes.
-- [ ] Pin workflow actions to reviewed immutable revisions, use read-only permissions for ordinary checks, and keep publishing credentials out of pull-request jobs.
-- [ ] Verify the module can build from a clean checkout without private files, a personal Go workspace, or Neovim installed.
+- [x] Add Linux CI for pull requests and changes to `shrek`: formatting checks, `go test ./...`, `go vet ./...`, and a command build.
+- [x] Commit module checksums when dependencies appear; verify dependency integrity and fail on unexpected generated changes.
+- [x] Pin workflow actions to reviewed immutable revisions, use read-only permissions for ordinary checks, and keep publishing credentials out of pull-request jobs.
+- [x] Verify the module can build from a clean checkout without private files, a personal Go workspace, or Neovim installed.
 
-- [ ] **Phase 0 complete:** the empty application builds, help/version work, and baseline CI passes on a clean checkout.
+- [x] **Phase 0 complete:** the empty application builds, help/version work, and baseline CI commands pass on an isolated checkout.
 
 ### Phase 1 — Format research and reference fixtures
 
