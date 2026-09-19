@@ -1,0 +1,33 @@
+[tools]
+go = "1.27.1"
+
+[env]
+GOENV = "off"
+GOWORK = "off"
+GOTOOLCHAIN = "local"
+
+[tasks.fmt]
+description = "Format Go code"
+run = "go fmt ./..."
+
+[tasks.test]
+description = "Run tests"
+run = "go test -count=1 -timeout=3m ./..."
+
+[tasks.race]
+description = "Run tests with the race detector"
+env = { CGO_ENABLED = "1" }
+run = "go test -race -count=1 -timeout=3m ./..."
+
+[tasks.vet]
+description = "Run go vet"
+run = "go vet ./..."
+
+[tasks.build]
+description = "Build bin/xunhen"
+env = { CGO_ENABLED = "0" }
+run = "go build -trimpath -o bin/xunhen ./cmd/xunhen"
+
+[tasks.check]
+description = "Run tests, vet, and build"
+depends = ["test", "vet", "build"]

@@ -42,7 +42,7 @@ jobs:
           cache: false
       - name: Check formatting
         run: |
-          unformatted=$(git ls-files -z --cached --others --exclude-standard -- '*.go' ':(exclude)**/testdata/**' |
+          unformatted=$(git ls-files -z --cached --others --exclude-standard -- '*.go' ':(glob,exclude)**/testdata/**' |
             xargs -0 -r gofmt -l --)
           if [[ -n "$unformatted" ]]; then
             printf 'Format these files with gofmt:\n%s\n' "$unformatted" >&2

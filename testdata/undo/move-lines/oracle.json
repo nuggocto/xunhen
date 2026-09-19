@@ -1,0 +1,149 @@
+{
+  "name": "move-lines",
+  "purpose": "A line move produces native extmark move metadata as well as text entries.",
+  "classification": "buffer-lines-with-explicit-export-policy",
+  "recipe": {
+    "mode": "create",
+    "encoding": "utf-8",
+    "fileformat": "unix",
+    "undo_levels": 100,
+    "steps": [
+      {
+        "op": "move"
+      }
+    ],
+    "visit": [
+      0,
+      1,
+      0
+    ],
+    "pruned": [],
+    "persistence": "automatic"
+  },
+  "created": {
+    "anchor": {
+      "seq": 1,
+      "lines_hex": [
+        "7365636f6e64",
+        "7468697264",
+        "6669727374"
+      ],
+      "endofline": true,
+      "fileformat": "unix",
+      "fileencoding": "utf-8"
+    },
+    "tree": {
+      "seq_last": 1,
+      "seq_cur": 1,
+      "time_cur": 1789769089,
+      "save_last": 1,
+      "save_cur": 1,
+      "synced": 1,
+      "entries": [
+        {
+          "seq": 1,
+          "time": 1789769088,
+          "save": 1,
+          "newhead": 1
+        }
+      ]
+    },
+    "observations": [
+      {
+        "op": "initial",
+        "state": {
+          "seq": 0,
+          "lines_hex": [
+            "6669727374",
+            "7365636f6e64",
+            "7468697264"
+          ],
+          "endofline": true,
+          "fileformat": "unix",
+          "fileencoding": "utf-8"
+        }
+      },
+      {
+        "op": "move",
+        "state": {
+          "seq": 1,
+          "lines_hex": [
+            "7365636f6e64",
+            "7468697264",
+            "6669727374"
+          ],
+          "endofline": true,
+          "fileformat": "unix",
+          "fileencoding": "utf-8"
+        }
+      }
+    ],
+    "saved_hex": "7365636f6e640a74686972640a66697273740a"
+  },
+  "loaded": {
+    "anchor": {
+      "seq": 1,
+      "lines_hex": [
+        "7365636f6e64",
+        "7468697264",
+        "6669727374"
+      ],
+      "endofline": true,
+      "fileformat": "unix",
+      "fileencoding": "utf-8"
+    },
+    "tree": {
+      "seq_last": 1,
+      "seq_cur": 1,
+      "time_cur": 1789769089,
+      "save_last": 1,
+      "save_cur": 1,
+      "synced": 1,
+      "entries": [
+        {
+          "seq": 1,
+          "time": 1789769088,
+          "save": 1,
+          "newhead": 1
+        }
+      ]
+    },
+    "states": [
+      {
+        "seq": 0,
+        "lines_hex": [
+          "6669727374",
+          "7365636f6e64",
+          "7468697264"
+        ],
+        "endofline": true,
+        "fileformat": "unix",
+        "fileencoding": "utf-8"
+      },
+      {
+        "seq": 1,
+        "lines_hex": [
+          "7365636f6e64",
+          "7468697264",
+          "6669727374"
+        ],
+        "endofline": true,
+        "fileformat": "unix",
+        "fileencoding": "utf-8"
+      },
+      {
+        "seq": 0,
+        "lines_hex": [
+          "6669727374",
+          "7365636f6e64",
+          "7468697264"
+        ],
+        "endofline": true,
+        "fileformat": "unix",
+        "fileencoding": "utf-8"
+      }
+    ],
+    "mismatch_rejected": true,
+    "mismatch_message": "Reading undo file: history.undo"
+  }
+}

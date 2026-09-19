@@ -1,0 +1,185 @@
+{
+  "schema": 1,
+  "producer": {
+    "version": "v0.12.5",
+    "version_output": "NVIM v0.12.5\nBuild type: RelWithDebInfo\nLuaJIT 2.1.1788460057\nRun \"nvim -V1 -v\" for more info\n",
+    "binary_sha256": "5c2cd28eb9b608fff5ca07cd5ee0c31011a15b137b0e63513e253c2c3529bd7f",
+    "source_revision": "5885a30e1e1225349079e7a1c4a3848aa8e43e42",
+    "packaging_revision": "583b707757678d79349f2f6d7497a288aec5e61e",
+    "package": "Arch neovim 0.12.5-1",
+    "profile": "neovim-v3-linux-amd64-le-lp64"
+  },
+  "fixtures": [
+    {
+      "name": "linear",
+      "sha256": {
+        "base.bin": "df2010e77ba160c9b295e3feb572f708b354c4422daf79815cac5b3b286ca53b",
+        "history.undo": "74906f8e6141a32853c375a218a434832dfb9e0a373249f6d84a7c0b3ca7f4c7",
+        "initial.bin": "e58b9856a92823e335df231c06f903165e4bb49878dea4d9b7a83d9482066b3e",
+        "oracle.json": "f4ca843d33491b1a3daef307afb41e34ae31648533e2ecb57bdd022beb535041"
+      }
+    },
+    {
+      "name": "abandoned-branch",
+      "sha256": {
+        "base.bin": "f834e521577e4e20cbc7b0db2198d01d52dda077862a75c4b6b89151ebe9acbd",
+        "history.undo": "2e93b91cb59b298f330c70c8f5ebc2f6db52aec3301800663b9591cd63b99b2e",
+        "initial.bin": "33285bc70a9d1acd55b34bb42215b4b548d7650dafa3613debaa38222631bb27",
+        "oracle.json": "3b7157d977fe4556016e6351b42f6287121d8855568c133b0962d34b672cfc31"
+      }
+    },
+    {
+      "name": "root-branches",
+      "sha256": {
+        "base.bin": "55c97802b397ef4da0d8e2ecf4a8fa33c1f4755da0eacec54c62cacbbcfd9713",
+        "history.undo": "484e1641c2137916154b9f6f8b35dc970643c469e6c0b5902fa912ed510471e9",
+        "initial.bin": "4a6689419b00b11700c9b6246bcfa8936c8f5e1e824db3a7e57030e2d1c1a684",
+        "oracle.json": "8aafaf9b7bdc8fb3441675b5fa8e45caf4ce8396e6c37cc6175aadcd287aa5df"
+      }
+    },
+    {
+      "name": "pruned",
+      "sha256": {
+        "base.bin": "ac169f9fb7cb48d431466d7b3bf2dc3e1d2e7ad6630f6b767a1ac1801c496b35",
+        "history.undo": "b871985c3d162eeac436a0ba936fb1663fea84cde16fd0f9d9b0291342e93af5",
+        "initial.bin": "4a6689419b00b11700c9b6246bcfa8936c8f5e1e824db3a7e57030e2d1c1a684",
+        "oracle.json": "ec0ab42b53f2f91e4b30f572af4f9b1224a3a7d70e5ef27dbd7560d13449ff6f"
+      }
+    },
+    {
+      "name": "empty",
+      "sha256": {
+        "base.bin": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "history.undo": "9ac7752fd9bf785a6f35e8da900506b55f56ae827349149239332a9ee593ac40",
+        "initial.bin": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "oracle.json": "6e9925d76aac5519f10680b6e6fbaf3c41d0504725aa99ea7742679d5b635dc0"
+      }
+    },
+    {
+      "name": "empty-wundo",
+      "sha256": {
+        "base.bin": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "history.undo": "6da443613de1f86b73571cfc804e6b52e1a97d089141617aa808ec9a807597de",
+        "initial.bin": "b640e840b19d378660b32fb51ae18d67dccb4a8596a29e7bd72c1b2ae5928f41",
+        "oracle.json": "ff1b9a66a4fc773ecb5e79ea35d7ec474d9d33ba0189144aac7926530facf764"
+      }
+    },
+    {
+      "name": "repeated-lines",
+      "sha256": {
+        "base.bin": "31ad9a9db878c2f1cac7cc0be72164f70dc24f703be52f93fd10773f457f6925",
+        "history.undo": "9a4a145447152e97cf30e5c5a56fe857d7e3330980a56bee9d91e433f3be4f93",
+        "initial.bin": "d48ed5771bcaadb0a8df648874a3af43bdad78575dcd53d118b8bfec49e2c944",
+        "oracle.json": "e17bcf5e4ff3f914757814c2a9b2d68ecb334dbcb649f468cb4f0c6ce3fa0acc"
+      }
+    },
+    {
+      "name": "save-reopen",
+      "sha256": {
+        "base.bin": "1aeec7d6974d45c3bb07e335c0ebf3336d849b135a4be9be3f824d8ae0ae75b6",
+        "history.undo": "7b1d518c962975cb01540cd1872ec357e74733140d5296a836bc7b3ae99d668a",
+        "initial.bin": "01d09d19c2139a46aebfb577780d123d7396e97201bc7ead210a2ebff8239dee",
+        "oracle.json": "82b3ab4ddc71aea643c5e9551ad24eff9fb7b53462e5300a4fce5ff771f08689"
+      }
+    },
+    {
+      "name": "undone-anchor",
+      "sha256": {
+        "base.bin": "2c8b08da5ce60398e1f19af0e5dccc744df274b826abe585eaba68c525434806",
+        "history.undo": "8f01e504e4222bb4cc2c38e606716bfb67d374f7961b9a14998268b6aa12fa09",
+        "initial.bin": "4a6689419b00b11700c9b6246bcfa8936c8f5e1e824db3a7e57030e2d1c1a684",
+        "oracle.json": "139814681348ee89703cb4c0b0cc43e9e15d477185ab760ecf9c3ba4d1d8df80"
+      }
+    },
+    {
+      "name": "joined-edits",
+      "sha256": {
+        "base.bin": "d8a0666b811ca3bac8b0b94f2e9ef4c4f053dfbf848c329804a58c8a5ee7043d",
+        "history.undo": "338ef8e7f9d01a29f4463f801873e62afd1560bccebc45447671f2b4849871b9",
+        "initial.bin": "880553fca8fcea94e325ee2cfb48e5a985cc797f39a14cc6d3cedecfeb2ae4d2",
+        "oracle.json": "60435c5c666fd4d61ede6fc160e28dd138b52f0188982966dfe38a8a2fa53039"
+      }
+    },
+    {
+      "name": "no-final-newline",
+      "sha256": {
+        "base.bin": "d67e2e944994496c8d8ec76eed0cf9f09679448d584b532bebf941852a37f5ed",
+        "history.undo": "2be86708debcf13314929f19b2cc19415864f00f6d35c9d5ee180d294faa2c45",
+        "initial.bin": "19b25856e1c150ca834cffc8b59b23adbd0ec0389e58eb22b3b64768098d002b",
+        "oracle.json": "037e2071115f00f01482b0c908b5dcd629849fbb5f2dff3d28b156dc1b66ffc5"
+      }
+    },
+    {
+      "name": "eol-option-change",
+      "sha256": {
+        "base.bin": "d67e2e944994496c8d8ec76eed0cf9f09679448d584b532bebf941852a37f5ed",
+        "history.undo": "2be86708debcf13314929f19b2cc19415864f00f6d35c9d5ee180d294faa2c45",
+        "initial.bin": "4a6689419b00b11700c9b6246bcfa8936c8f5e1e824db3a7e57030e2d1c1a684",
+        "oracle.json": "8cb12e2c84f9e664f1ccc3ef1b7d238df0dba48733bd4374ac30561643bd41b0"
+      }
+    },
+    {
+      "name": "crlf",
+      "sha256": {
+        "base.bin": "c490595b3eacb7256f98f2ee40f45e3c3ce8c82b37804bc45a771ee38aa56898",
+        "history.undo": "2be86708debcf13314929f19b2cc19415864f00f6d35c9d5ee180d294faa2c45",
+        "initial.bin": "0e34d5a5567733f78cd3b5cbe615bc267581fcfa76f7cb1f7fe2484cc4a9a78f",
+        "oracle.json": "5010202b63abd82081af1aa0fb561cfdb351aece4685f3b5a92f401880a8b433"
+      }
+    },
+    {
+      "name": "latin1",
+      "sha256": {
+        "base.bin": "e9b160db84dc9a92817bea1d07c679f7337d27a5ce8abde00a7a02d282d70cda",
+        "history.undo": "5edc8b423770e936c47e44364b91d36f5e8b962c7f68af77f5c6eb5ba0d7d949",
+        "initial.bin": "9e4efed0ff1dbcf37240f82e1aad6c763eb9331434d2b394a6441abbbe3634eb",
+        "oracle.json": "617eb0f48d1a2a7477d2b7544228f2cc16d89a0874f64396221e1a6450d21d95"
+      }
+    },
+    {
+      "name": "invalid-utf8",
+      "sha256": {
+        "base.bin": "eabd005c94383ece1f45b538fc708cb5a6f2ee8b9da5032a46abab039b85c381",
+        "history.undo": "bcc8db217c503786214de464d39127ca91b5fcb1de758a5e2ebb26fa54c596cf",
+        "initial.bin": "c68ba66ce454c0ea6bfc522586b20de5d25aa46fea734d53737f96d96f525854",
+        "oracle.json": "3f3b9377ccaa96c3d476e2c5b0700373828ee92da58df3fd4356426656535f72"
+      }
+    },
+    {
+      "name": "terminal-controls",
+      "sha256": {
+        "base.bin": "ee339fb2d8e055af717382da207b912d14746ca7bb8601d1dcba7fea4e399cbd",
+        "history.undo": "dc707145729a6c24f29562708a3f6222035355f95ff4c151e4227f7794bb981f",
+        "initial.bin": "93d868f3b59590f611d7646894ce8def1cea5ad63a9af0d9ccc56e9bc6968c11",
+        "oracle.json": "dc2cfc521e039a8b25eac35448461c702476eb2fa247d15811c2b6143549bfb2"
+      }
+    },
+    {
+      "name": "embedded-nul",
+      "sha256": {
+        "base.bin": "a6041e776b200414bcf54dc72d88f602a136bd34efe69375bd5c4a626a2b4dbf",
+        "history.undo": "4e8d48867d19fdf6042f1b60b5ef3dcf7dcf63fbed8109d9dace5cc183dbb44b",
+        "initial.bin": "3a100994c4e38751871e6e8eef9adad2b20177fdeaf650daacdcd74f4c9421e3",
+        "oracle.json": "c35263f03ab5ef9aafc13fea087cb632c2c20cd2962650ecdacfa8690d7c0fa3"
+      }
+    },
+    {
+      "name": "unsaved-wundo",
+      "sha256": {
+        "base.bin": "cfc86eaf94ae7ae0c50f134845181941b9500a6d1dc7f8cd1e93871f458d077e",
+        "history.undo": "a3516264bcba67dfaaa8141b2134d5aade631c49a4b433bba2e1e42d1f7f6c3c",
+        "initial.bin": "2f0bc36d997d0234300e13257d8aaa4444ff4b6b24b4b56293da3bcdd5d9eb63",
+        "oracle.json": "3d608074c6aaff827dc34865b756d7eaaf719f7baec88ee4a023cc7edda0b8b5"
+      }
+    },
+    {
+      "name": "move-lines",
+      "sha256": {
+        "base.bin": "86d21a8446c01d787b45de2d17874777fd08245882d41df04b7afbea840bdd56",
+        "history.undo": "604816b45d03c82a452ee37d78d5a79ce891d1d8840f3f8366994b92580d3836",
+        "initial.bin": "f5c962601b413ccda2fc14d64d98479d9fc74c90c2dde15f25ee9922e57f5074",
+        "oracle.json": "5bb7475765521b16b87177a2b89ee9c6cf4634d15ee556863bb95401a18f5ba9"
+      }
+    }
+  ]
+}

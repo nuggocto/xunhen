@@ -113,7 +113,7 @@ contract:
 | Discovery | Resolve a source file against explicitly supplied undo directories with bounded search, visible ambiguity, and an explicit-path fallback. |
 | TUI | Keyboard tree navigation, state preview, choosing two states to compare, scrolling, help, cancellation, and clean terminal restoration. |
 | Compatibility | At least the source-verified initial Neovim producer/build, with every advertised format and feature covered by fixtures. |
-| Text | Verified common UTF-8/LF behavior, including empty buffers and final-newline handling. Publish the status of CRLF, other encodings, and binary-like content; unsupported cases must fail clearly. |
+| Text | Exact buffer-line reconstruction for the supported UTF-8/LF profile, including empty buffers. Export uses an explicit final-newline policy; historical encoding/newline options are not recoverable from the undo file. Publish rejected and unverified text cases. |
 | Reliability | Bounded input and work, errors instead of input-triggered panics, strict base matching, safe terminal output, and unchanged input contents. |
 | Distribution | A tested Linux/amd64 archive, a NixOS-compatible Nix package, and a maintained AUR recipe, with checksums, build provenance, license material, release notes, and installation instructions for each channel. |
 | Website | A live, accessible landing page and an in-site Changelog tab at `https://xunhen.org`, sharing the same visual design, with complete release notes and verified Linux download, NixOS, and AUR installation links. |
@@ -256,11 +256,13 @@ offsets or timestamps, and they are not global identifiers. Whether an on-disk
 sequence number can be exposed directly needs source verification. Selection
 must remain deterministic when reopening the same unchanged inputs.
 
-`show` displays a reconstructed state. A separate raw-output option may emit
-recovered text to redirected stdout. Raw output must not send arbitrary
-control bytes to a terminal. File export is an explicit shell operation, for
-example `show ... --raw > recovered.go`; xunhen does not overwrite the source.
-Exact source-byte export remains gated on verified encoding and newline rules.
+`show` displays reconstructed buffer lines. Raw output serializes supported
+text as UTF-8/LF and requires `--final-newline=include|omit`; the undo file does
+not preserve the historical value of that option. Raw output must not send
+arbitrary control bytes to a terminal. File export is an explicit shell
+operation, for example `show ... --raw --final-newline=include > recovered.go`.
+This is a declared serialization policy, not a claim of historically exact
+source-file bytes. xunhen does not overwrite the source.
 
 `diff` produces a unified, line-based comparison of two reconstructed states.
 It compares the underlying text before terminal escaping. Exceeding a work or
@@ -305,7 +307,7 @@ Keep the first packages small and internal to the application:
 | --- | --- | --- |
 | `cmd/xunhen` | Argument parsing, read-only file opens, command dispatch, limits, cancellation, exit status. | Coordinates packages; contains no binary-layout knowledge. |
 | `internal/discover` | Bounded lookup in supplied undo directories, source-path matching, and candidate reporting. | Uses verified filename rules and decoder metadata; never treats a filename guess as proof of a matching base. |
-| `internal/undofile` | Header recognition, format dispatch, bounded binary decoding, normalized records, and format-specific base-matching rules. | Only package that knows on-disk layout and record encoding. |
+| `internal/undofile` | Header recognition, format/ABI-profile dispatch, bounded binary decoding, normalized records, and base-matching rules. | Only package that knows on-disk layout and record encoding. |
 | `internal/history` | Graph validation, node identity, traversal, base association, reconstruction, and the state cache. | Consumes normalized decoder output; never switches on an undo-format version. |
 | `internal/diff` | Line comparison and structured diff hunks. | Consumes reconstructed text, not undo records or UI state. |
 | `internal/tui` | Bubble Tea model, user selection, background-operation requests, and rendered views. | Consumes history and diff operations; owns no reconstruction rules. |
@@ -366,17 +368,21 @@ supported encodings before allocating or exposing data. The history builder
 then checks identities, references, ancestry, and replay prerequisites.
 Reconstruction validates every edit range against the current text.
 
-The exact wire fields, normalized edit operations, and correspondence between
-stored links and logical branches remain source-study work. In particular, a
-serialized undo record must not be treated as a complete snapshot or a
-reversible forward patch without evidence.
+The initial wire layout and replay semantics are specified in
+[docs/undo-format.md](docs/undo-format.md), with pinned source references and
+an independent Neovim fixture corpus. Format 3 includes native-layout extmark
+payloads; version recognition alone cannot establish producer-ABI compatibility.
+A serialized undo record is a direction-dependent line-range swap, not a
+complete snapshot or an immutable forward patch.
 
 ### Reconstruction and ownership
 
-Plan for a matching base buffer. Neovim documents a content check when loading
-persistent undo; the exact hash input, text normalization, and reference state
-must be verified. A hash match establishes the documented content relationship,
-not the authenticity or safety of the undo file.
+Require matching base text under the selected normalization profile. The
+initial format hashes internal lines with NUL terminators, with a separate
+automatic-save case for empty buffers. The reference is the buffer when the
+undo file was written, which can differ from the current source on disk. A
+hash match establishes that content relationship, not the authenticity or
+safety of the undo file.
 
 First load and validate the history. Then match explicitly supplied base text
 using that decoder's verified rules and associate it with the correct history
@@ -394,10 +400,16 @@ Evict least-recently-used entries to stay within the byte budget; discard the
 cache when loading another history or base. Never reuse an entry merely because
 another file has the same node number.
 
-Navigation between branches may require replay through a shared ancestor.
-Whether records support both directions directly, or require deriving an
-opposite operation from known text, must be established against Neovim. Do not
-invent an inverse by swapping line ranges.
+A cached snapshot is an output, not a replay checkpoint. Returning it must
+not move the replay workspace unless the corresponding oriented entry data
+is restored too. Otherwise a subsequent branch traversal can apply the wrong
+direction of an edit.
+
+Navigation between branches replays through their shared ancestor. Applying
+an entry captures the replaced lines as its inverse, and applying a header
+reverses its entry list for the return traversal. Persisted entries have mixed
+directions relative to the reference state. Derive and track that orientation;
+do not invent an inverse by swapping line ranges alone.
 
 The TUI owns selection and viewport state. Use one bounded background worker
 for reconstruction and diff requests, with at most one running request and one
@@ -421,7 +433,7 @@ follow the format study; the type names are not claims about Neovim structs.
 | `EventTime` | A recorded timestamp when one is available. Missing time is explicit; equal or non-monotonic times do not invalidate otherwise valid ancestry. |
 | `BaseText` | An explicitly supplied buffer representation. Keep its provenance and text metadata; supplying bytes alone does not make them a verified base. |
 | `Reconstructor` | A validated history bound to matching base text and its reference state. Owns replay limits, workspace, and cache. |
-| `Snapshot` | A successfully reconstructed state, its history/node identity, text, and known text-format metadata. Never uses empty text to stand for failed reconstruction. |
+| `Snapshot` | Successfully reconstructed buffer lines and their history/node identity. Historical encoding/newline settings stay unknown; a chosen export policy is separate. Never uses empty text to stand for failed reconstruction. |
 | `Diff` | A completed comparison with ordered, valid hunks and identified inputs. Cancellation or exhausted limits do not produce an ordinary completed diff. |
 | `Limits` | Validated input, allocation, replay, cache, and output budgets. Reject zero/negative or overflowing settings instead of interpreting them as unlimited. |
 | `InputError` | An operational failure with a category, source label, and byte offset or node context when known. Examples include truncation, unsupported format, broken reference, and base mismatch. |
@@ -457,8 +469,8 @@ must be rejected rather than interpreted against whichever history is open.
   alone does not establish that the representation has the right semantics.
 
 For reconstructed text, begin with a private slice of byte-preserving line
-strings plus explicit newline/encoding metadata where those semantics are
-known. Go strings can hold non-UTF-8 bytes; terminal rendering must not assume
+strings plus the supported normalization profile and separate export policy.
+Go strings can hold non-UTF-8 bytes; terminal rendering must not assume
 valid UTF-8. A rope or piece table adds balancing and ownership machinery that
 ordinary source-file workloads have not yet justified.
 
@@ -483,22 +495,33 @@ counts or cause repeated reconstruction and diff work.
 
 Starting engineering budgets for the ordinary-source-file target:
 
-| Resource | Proposed initial bound |
+| Resource | Initial bound |
 | --- | --- |
 | Undo input | 64 MiB |
 | Supplied base text | 8 MiB |
 | Any reconstructed state | 16 MiB |
 | History nodes | 100,000 |
+| Text and extmark entries combined | 250,000 per file |
+| Stored lines across entries / lines in one state | 1,000,000 each |
+| Individual line, including the saved `U` line | 1 MiB |
+| Optional fields including framing | 1 MiB per file |
 | Total decoded text payload | 128 MiB |
 | Cached snapshot text | 32 MiB, charged by retained bytes rather than entry count |
 | Diff workspace | 32 MiB |
+| Replay header crossings / entry applications | 200,000 / 1,000,000 per request |
+| Replay line-reference moves or visits | 8,000,000 per request |
+| Replay bytes copied or compared | 256 MiB per request |
+| Diff frontier/comparison steps | 10,000,000 per request |
+| Diff bytes compared | 256 MiB per request |
+| Rendered CLI output after escaping | 16 MiB per command |
 
 These are project limits to validate with fixtures, not Neovim format limits or
 measured capacity claims. They are not a hard process-RSS guarantee: Go object,
-map, slice, allocator, and runtime overhead must also be accounted for. Before
-implementation, choose finite record-count, line-length, replay-work,
-diff-work, and rendered-output limits from the verified record model. Large
-single-line comparisons also need cancellation and bounded byte work.
+map, slice, allocator, and runtime overhead must also be accounted for. Charge
+work before it occurs, including moving unchanged line references. Check
+cancellation at least every 4,096 work steps or 64 KiB of byte processing.
+TUI rendering stays viewport-bounded. The format specification defines the
+units and the distinction between text work and comparison-step counts.
 
 Keep limits in one validated configuration passed explicitly into the core.
 Any later user override must retain finite ceilings and compatible arithmetic.
@@ -523,12 +546,14 @@ specification. Neovim's writer, reader, replay implementation, and tests are
 the authorities for supported formats. Start at `src/nvim/undo.c` and follow
 its referenced definitions in the exact source revision under investigation.
 
-Resolve these questions before claiming full reconstruction support:
+The initial producer's answers are in [the format specification](docs/undo-format.md).
+The following questions remain compatibility checks when extending that
+profile or making broader reconstruction claims:
 
 1. **Wire layout and format identity.** What are the magic bytes, version
    marker, byte order, integer widths, optional fields, record boundaries, and
    extension rules? Which differences are format changes versus release-only
-   implementation changes? None of those values is specified by this design.
+   implementation changes? Keep those values isolated in the relevant decoder.
 2. **Base state and checksum.** Exactly which buffer state must accompany the
    undo file? What bytes, line separators, counts, and encoding transformations
    participate in the check? How does the persisted current position relate
@@ -649,29 +674,29 @@ for recovery correctness, before parser assumptions become code.
 
 #### 1.1 Resolve the binary and replay model
 
-- [ ] Trace the producer's undo writer, reader, and replay code; record pinned source links and the build provenance used.
-- [ ] Document field widths, byte order, record boundaries, version markers, optional features, and supported limits without inventing missing details.
-- [ ] Establish stored-link meanings, branch order, current/reference positions, pruning behavior, and the distinction between events and reconstructable states.
-- [ ] Establish base-checksum input and normalization, line operations in each replay direction, and final-newline/encoding behavior.
-- [ ] List unsupported variants explicitly and identify which facts cannot be learned from an undo file alone.
-- [ ] Resolve finite record-count, line-length, replay-work, diff-work, and output budgets in addition to the byte limits already proposed.
+- [x] Trace the producer's undo writer, reader, and replay code; record pinned source links and the build provenance used.
+- [x] Document field widths, byte order, record boundaries, version markers, optional features, and supported limits without inventing missing details.
+- [x] Establish stored-link meanings, branch order, current/reference positions, pruning behavior, and the distinction between events and reconstructable states.
+- [x] Establish base-checksum input and normalization, line operations in each replay direction, and final-newline/encoding behavior.
+- [x] List unsupported variants explicitly and identify which facts cannot be learned from an undo file alone.
+- [x] Resolve finite record-count, line-length, replay-work, diff-work, and output budgets in addition to the byte limits already proposed.
 
 #### 1.2 Build an independent fixture corpus
 
-- [ ] Write an opt-in generator that invokes the pinned headless producer with isolated config, state, and temporary files.
-- [ ] Generate linear, branching, pruned, empty-buffer, repeated-line, and save/reopen histories with known base text and expected states.
-- [ ] Include an experiment undone before its source text was ever saved, then persisted as an abandoned branch after another edit is saved.
-- [ ] Exercise final-newline differences, CRLF, non-UTF-8 and embedded-control cases; classify supported reconstruction/export behavior separately.
-- [ ] Obtain expected node relationships and state text from Neovim or independently specified fixture contents, never xunhen's decoder.
-- [ ] Check in synthetic fixture bytes, generation instructions, producer provenance, and expected results; confirm ordinary tests need no editor executable.
+- [x] Write an opt-in generator that invokes the pinned headless producer with isolated config, state, and temporary files.
+- [x] Generate linear, branching, pruned, empty-buffer, repeated-line, and save/reopen histories with known base text and expected states.
+- [x] Include an experiment undone before its source text was ever saved, then persisted as an abandoned branch after another edit is saved.
+- [x] Exercise final-newline differences, CRLF, non-UTF-8 and embedded-control cases; classify supported reconstruction/export behavior separately.
+- [x] Obtain expected node relationships and state text from Neovim or independently specified fixture contents, never xunhen's decoder.
+- [x] Check in synthetic fixture bytes, generation instructions, producer provenance, and expected results; confirm ordinary tests need no editor executable.
 
 #### 1.3 Confirm feasibility
 
-- [ ] Explain which base is required and demonstrate why a mismatching or missing base cannot be treated as empty text.
-- [ ] Review the normalized record and domain model against the source-backed examples, including alternate branches and any root special cases.
-- [ ] Revise the product contract before proceeding if the promised recovery path cannot be demonstrated.
+- [x] Explain which base is required and demonstrate why a mismatching or missing base cannot be treated as empty text.
+- [x] Review the normalized record and domain model against the source-backed examples, including alternate branches and any root special cases.
+- [x] Revise the product contract before proceeding if the promised recovery path cannot be demonstrated.
 
-- [ ] **Phase 1 complete:** the reference corpus demonstrates the v1 recovery case, and the supported decoder/replay semantics are documented with evidence.
+- [x] **Phase 1 complete:** the reference corpus demonstrates the v1 recovery case, and the supported decoder/replay semantics are documented with evidence.
 
 ### Phase 2 — Bounded decoding and history inspection
 
@@ -728,7 +753,7 @@ Depends on phase 2. Outcome: recover a retained abandoned implementation with
 #### 3.3 Deliver recovery output
 
 - [ ] Implement terminal-safe `show` and redirected `show --raw` for verified export cases.
-- [ ] Preserve exact bytes for the documented raw-export contract and refuse unsupported conversions explicitly.
+- [ ] Verify exact serialized bytes under the selected UTF-8/LF and final-newline policy; keep unknown historical file options explicit and refuse unsupported conversions.
 - [ ] Reconstruct fully before writing raw output; handle short writes, broken pipes, and output errors without reporting success.
 - [ ] Demonstrate the abandoned-experiment recovery from the narrative using the built command, with byte-for-byte expected output.
 - [ ] Verify read-only behavior on undo/source inputs for both successful and failed recovery attempts.

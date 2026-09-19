@@ -1,0 +1,3 @@
+testdata/undo/**/*.bin binary
+testdata/undo/**/*.undo binary
+testdata/undo/**/*.json text eol=lf

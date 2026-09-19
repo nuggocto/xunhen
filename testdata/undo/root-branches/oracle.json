@@ -1,0 +1,195 @@
+{
+  "name": "root-branches",
+  "purpose": "Alternate changes share the retained root rather than another header.",
+  "classification": "buffer-lines-with-explicit-export-policy",
+  "recipe": {
+    "mode": "create",
+    "encoding": "utf-8",
+    "fileformat": "unix",
+    "undo_levels": 100,
+    "steps": [
+      {
+        "op": "edit",
+        "end": 1,
+        "lines_hex": [
+          "6c656674"
+        ]
+      },
+      {
+        "op": "undo"
+      },
+      {
+        "op": "edit",
+        "end": 1,
+        "lines_hex": [
+          "7269676874"
+        ]
+      }
+    ],
+    "visit": [
+      1,
+      2,
+      0,
+      2
+    ],
+    "pruned": [],
+    "persistence": "automatic"
+  },
+  "created": {
+    "anchor": {
+      "seq": 2,
+      "lines_hex": [
+        "7269676874"
+      ],
+      "endofline": true,
+      "fileformat": "unix",
+      "fileencoding": "utf-8"
+    },
+    "tree": {
+      "seq_last": 2,
+      "seq_cur": 2,
+      "time_cur": 1789769089,
+      "save_last": 1,
+      "save_cur": 1,
+      "synced": 1,
+      "entries": [
+        {
+          "seq": 2,
+          "time": 1789769088,
+          "save": 1,
+          "newhead": 1,
+          "alt": [
+            {
+              "seq": 1,
+              "time": 1789769088
+            }
+          ]
+        }
+      ]
+    },
+    "observations": [
+      {
+        "op": "initial",
+        "state": {
+          "seq": 0,
+          "lines_hex": [
+            "73656564"
+          ],
+          "endofline": true,
+          "fileformat": "unix",
+          "fileencoding": "utf-8"
+        }
+      },
+      {
+        "op": "edit",
+        "state": {
+          "seq": 1,
+          "lines_hex": [
+            "6c656674"
+          ],
+          "endofline": true,
+          "fileformat": "unix",
+          "fileencoding": "utf-8"
+        }
+      },
+      {
+        "op": "undo",
+        "state": {
+          "seq": 0,
+          "lines_hex": [
+            "73656564"
+          ],
+          "endofline": true,
+          "fileformat": "unix",
+          "fileencoding": "utf-8"
+        }
+      },
+      {
+        "op": "edit",
+        "state": {
+          "seq": 2,
+          "lines_hex": [
+            "7269676874"
+          ],
+          "endofline": true,
+          "fileformat": "unix",
+          "fileencoding": "utf-8"
+        }
+      }
+    ],
+    "saved_hex": "72696768740a"
+  },
+  "loaded": {
+    "anchor": {
+      "seq": 2,
+      "lines_hex": [
+        "7269676874"
+      ],
+      "endofline": true,
+      "fileformat": "unix",
+      "fileencoding": "utf-8"
+    },
+    "tree": {
+      "seq_last": 2,
+      "seq_cur": 2,
+      "time_cur": 1789769089,
+      "save_last": 1,
+      "save_cur": 1,
+      "synced": 1,
+      "entries": [
+        {
+          "seq": 2,
+          "time": 1789769088,
+          "save": 1,
+          "newhead": 1,
+          "alt": [
+            {
+              "seq": 1,
+              "time": 1789769088
+            }
+          ]
+        }
+      ]
+    },
+    "states": [
+      {
+        "seq": 1,
+        "lines_hex": [
+          "6c656674"
+        ],
+        "endofline": true,
+        "fileformat": "unix",
+        "fileencoding": "utf-8"
+      },
+      {
+        "seq": 2,
+        "lines_hex": [
+          "7269676874"
+        ],
+        "endofline": true,
+        "fileformat": "unix",
+        "fileencoding": "utf-8"
+      },
+      {
+        "seq": 0,
+        "lines_hex": [
+          "73656564"
+        ],
+        "endofline": true,
+        "fileformat": "unix",
+        "fileencoding": "utf-8"
+      },
+      {
+        "seq": 2,
+        "lines_hex": [
+          "7269676874"
+        ],
+        "endofline": true,
+        "fileformat": "unix",
+        "fileencoding": "utf-8"
+      }
+    ],
+    "mismatch_rejected": true,
+    "mismatch_message": "Reading undo file: history.undo"
+  }
+}

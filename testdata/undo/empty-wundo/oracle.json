@@ -1,0 +1,134 @@
+{
+  "name": "empty-wundo",
+  "purpose": "Explicit empty-buffer persistence hashes a NUL terminator rather than the automatic writer's empty byte stream.",
+  "classification": "buffer-lines-with-explicit-export-policy",
+  "recipe": {
+    "mode": "create",
+    "encoding": "utf-8",
+    "fileformat": "unix",
+    "undo_levels": 100,
+    "steps": [
+      {
+        "op": "edit",
+        "end": 1
+      }
+    ],
+    "visit": [
+      0,
+      1,
+      0
+    ],
+    "pruned": [],
+    "persistence": "explicit"
+  },
+  "created": {
+    "anchor": {
+      "seq": 1,
+      "lines_hex": [
+        ""
+      ],
+      "endofline": true,
+      "fileformat": "unix",
+      "fileencoding": "utf-8"
+    },
+    "tree": {
+      "seq_last": 1,
+      "seq_cur": 1,
+      "time_cur": 1789769089,
+      "save_last": 0,
+      "save_cur": 0,
+      "synced": 1,
+      "entries": [
+        {
+          "seq": 1,
+          "time": 1789769088,
+          "newhead": 1
+        }
+      ]
+    },
+    "observations": [
+      {
+        "op": "initial",
+        "state": {
+          "seq": 0,
+          "lines_hex": [
+            "6669727374"
+          ],
+          "endofline": true,
+          "fileformat": "unix",
+          "fileencoding": "utf-8"
+        }
+      },
+      {
+        "op": "edit",
+        "state": {
+          "seq": 1,
+          "lines_hex": [
+            ""
+          ],
+          "endofline": true,
+          "fileformat": "unix",
+          "fileencoding": "utf-8"
+        }
+      }
+    ],
+    "saved_hex": "66697273740a"
+  },
+  "loaded": {
+    "anchor": {
+      "seq": 1,
+      "lines_hex": [
+        ""
+      ],
+      "endofline": true,
+      "fileformat": "unix",
+      "fileencoding": "utf-8"
+    },
+    "tree": {
+      "seq_last": 1,
+      "seq_cur": 1,
+      "time_cur": 1789769089,
+      "save_last": 0,
+      "save_cur": 0,
+      "synced": 1,
+      "entries": [
+        {
+          "seq": 1,
+          "time": 1789769088,
+          "newhead": 1
+        }
+      ]
+    },
+    "states": [
+      {
+        "seq": 0,
+        "lines_hex": [
+          "6669727374"
+        ],
+        "endofline": true,
+        "fileformat": "unix",
+        "fileencoding": "utf-8"
+      },
+      {
+        "seq": 1,
+        "lines_hex": [
+          ""
+        ],
+        "endofline": true,
+        "fileformat": "unix",
+        "fileencoding": "utf-8"
+      },
+      {
+        "seq": 0,
+        "lines_hex": [
+          "6669727374"
+        ],
+        "endofline": true,
+        "fileformat": "unix",
+        "fileencoding": "utf-8"
+      }
+    ],
+    "mismatch_rejected": true,
+    "mismatch_message": "Reading undo file: history.undo"
+  }
+}

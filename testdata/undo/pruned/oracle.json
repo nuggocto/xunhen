@@ -1,0 +1,254 @@
+{
+  "name": "pruned",
+  "purpose": "The retained root is an intermediate state, not the original file.",
+  "classification": "buffer-lines-with-explicit-export-policy",
+  "recipe": {
+    "mode": "create",
+    "encoding": "utf-8",
+    "fileformat": "unix",
+    "undo_levels": 2,
+    "steps": [
+      {
+        "op": "edit",
+        "end": 1,
+        "lines_hex": [
+          "6f6e65"
+        ]
+      },
+      {
+        "op": "edit",
+        "end": 1,
+        "lines_hex": [
+          "74776f"
+        ]
+      },
+      {
+        "op": "edit",
+        "end": 1,
+        "lines_hex": [
+          "7468726565"
+        ]
+      },
+      {
+        "op": "edit",
+        "end": 1,
+        "lines_hex": [
+          "666f7572"
+        ]
+      },
+      {
+        "op": "edit",
+        "end": 1,
+        "lines_hex": [
+          "66697665"
+        ]
+      }
+    ],
+    "visit": [
+      0,
+      5,
+      3,
+      4,
+      5
+    ],
+    "pruned": [
+      1,
+      2
+    ],
+    "persistence": "automatic"
+  },
+  "created": {
+    "anchor": {
+      "seq": 5,
+      "lines_hex": [
+        "66697665"
+      ],
+      "endofline": true,
+      "fileformat": "unix",
+      "fileencoding": "utf-8"
+    },
+    "tree": {
+      "seq_last": 5,
+      "seq_cur": 5,
+      "time_cur": 1789769089,
+      "save_last": 1,
+      "save_cur": 1,
+      "synced": 1,
+      "entries": [
+        {
+          "seq": 3,
+          "time": 1789769088
+        },
+        {
+          "seq": 4,
+          "time": 1789769088
+        },
+        {
+          "seq": 5,
+          "time": 1789769088,
+          "save": 1,
+          "newhead": 1
+        }
+      ]
+    },
+    "observations": [
+      {
+        "op": "initial",
+        "state": {
+          "seq": 0,
+          "lines_hex": [
+            "73656564"
+          ],
+          "endofline": true,
+          "fileformat": "unix",
+          "fileencoding": "utf-8"
+        }
+      },
+      {
+        "op": "edit",
+        "state": {
+          "seq": 1,
+          "lines_hex": [
+            "6f6e65"
+          ],
+          "endofline": true,
+          "fileformat": "unix",
+          "fileencoding": "utf-8"
+        }
+      },
+      {
+        "op": "edit",
+        "state": {
+          "seq": 2,
+          "lines_hex": [
+            "74776f"
+          ],
+          "endofline": true,
+          "fileformat": "unix",
+          "fileencoding": "utf-8"
+        }
+      },
+      {
+        "op": "edit",
+        "state": {
+          "seq": 3,
+          "lines_hex": [
+            "7468726565"
+          ],
+          "endofline": true,
+          "fileformat": "unix",
+          "fileencoding": "utf-8"
+        }
+      },
+      {
+        "op": "edit",
+        "state": {
+          "seq": 4,
+          "lines_hex": [
+            "666f7572"
+          ],
+          "endofline": true,
+          "fileformat": "unix",
+          "fileencoding": "utf-8"
+        }
+      },
+      {
+        "op": "edit",
+        "state": {
+          "seq": 5,
+          "lines_hex": [
+            "66697665"
+          ],
+          "endofline": true,
+          "fileformat": "unix",
+          "fileencoding": "utf-8"
+        }
+      }
+    ],
+    "saved_hex": "666976650a"
+  },
+  "loaded": {
+    "anchor": {
+      "seq": 5,
+      "lines_hex": [
+        "66697665"
+      ],
+      "endofline": true,
+      "fileformat": "unix",
+      "fileencoding": "utf-8"
+    },
+    "tree": {
+      "seq_last": 5,
+      "seq_cur": 5,
+      "time_cur": 1789769089,
+      "save_last": 1,
+      "save_cur": 1,
+      "synced": 1,
+      "entries": [
+        {
+          "seq": 3,
+          "time": 1789769088
+        },
+        {
+          "seq": 4,
+          "time": 1789769088
+        },
+        {
+          "seq": 5,
+          "time": 1789769088,
+          "save": 1,
+          "newhead": 1
+        }
+      ]
+    },
+    "states": [
+      {
+        "seq": 0,
+        "lines_hex": [
+          "74776f"
+        ],
+        "endofline": true,
+        "fileformat": "unix",
+        "fileencoding": "utf-8"
+      },
+      {
+        "seq": 5,
+        "lines_hex": [
+          "66697665"
+        ],
+        "endofline": true,
+        "fileformat": "unix",
+        "fileencoding": "utf-8"
+      },
+      {
+        "seq": 3,
+        "lines_hex": [
+          "7468726565"
+        ],
+        "endofline": true,
+        "fileformat": "unix",
+        "fileencoding": "utf-8"
+      },
+      {
+        "seq": 4,
+        "lines_hex": [
+          "666f7572"
+        ],
+        "endofline": true,
+        "fileformat": "unix",
+        "fileencoding": "utf-8"
+      },
+      {
+        "seq": 5,
+        "lines_hex": [
+          "66697665"
+        ],
+        "endofline": true,
+        "fileformat": "unix",
+        "fileencoding": "utf-8"
+      }
+    ],
+    "mismatch_rejected": true,
+    "mismatch_message": "Reading undo file: history.undo"
+  }
+}

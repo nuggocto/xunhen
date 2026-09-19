@@ -1,0 +1,203 @@
+{
+  "name": "save-reopen",
+  "purpose": "Automatic persistent undo reloads before further editing.",
+  "classification": "buffer-lines-with-explicit-export-policy",
+  "recipe": {
+    "mode": "create",
+    "encoding": "utf-8",
+    "fileformat": "unix",
+    "undo_levels": 100,
+    "steps": [
+      {
+        "op": "edit",
+        "end": 1,
+        "lines_hex": [
+          "6e6577"
+        ]
+      },
+      {
+        "op": "save"
+      },
+      {
+        "op": "reopen"
+      },
+      {
+        "op": "edit",
+        "start": 1,
+        "end": 1,
+        "lines_hex": [
+          "7461696c"
+        ]
+      }
+    ],
+    "visit": [
+      0,
+      2,
+      1
+    ],
+    "pruned": [],
+    "persistence": "automatic"
+  },
+  "created": {
+    "anchor": {
+      "seq": 2,
+      "lines_hex": [
+        "6e6577",
+        "7461696c"
+      ],
+      "endofline": true,
+      "fileformat": "unix",
+      "fileencoding": "utf-8"
+    },
+    "tree": {
+      "seq_last": 2,
+      "seq_cur": 2,
+      "time_cur": 1789769089,
+      "save_last": 2,
+      "save_cur": 2,
+      "synced": 1,
+      "entries": [
+        {
+          "seq": 1,
+          "time": 1789769088,
+          "save": 1
+        },
+        {
+          "seq": 2,
+          "time": 1789769088,
+          "save": 2,
+          "newhead": 1
+        }
+      ]
+    },
+    "observations": [
+      {
+        "op": "initial",
+        "state": {
+          "seq": 0,
+          "lines_hex": [
+            "6f6c64"
+          ],
+          "endofline": true,
+          "fileformat": "unix",
+          "fileencoding": "utf-8"
+        }
+      },
+      {
+        "op": "edit",
+        "state": {
+          "seq": 1,
+          "lines_hex": [
+            "6e6577"
+          ],
+          "endofline": true,
+          "fileformat": "unix",
+          "fileencoding": "utf-8"
+        }
+      },
+      {
+        "op": "save",
+        "state": {
+          "seq": 1,
+          "lines_hex": [
+            "6e6577"
+          ],
+          "endofline": true,
+          "fileformat": "unix",
+          "fileencoding": "utf-8"
+        }
+      },
+      {
+        "op": "reopen",
+        "state": {
+          "seq": 1,
+          "lines_hex": [
+            "6e6577"
+          ],
+          "endofline": true,
+          "fileformat": "unix",
+          "fileencoding": "utf-8"
+        }
+      },
+      {
+        "op": "edit",
+        "state": {
+          "seq": 2,
+          "lines_hex": [
+            "6e6577",
+            "7461696c"
+          ],
+          "endofline": true,
+          "fileformat": "unix",
+          "fileencoding": "utf-8"
+        }
+      }
+    ],
+    "saved_hex": "6e65770a7461696c0a"
+  },
+  "loaded": {
+    "anchor": {
+      "seq": 2,
+      "lines_hex": [
+        "6e6577",
+        "7461696c"
+      ],
+      "endofline": true,
+      "fileformat": "unix",
+      "fileencoding": "utf-8"
+    },
+    "tree": {
+      "seq_last": 2,
+      "seq_cur": 2,
+      "time_cur": 1789769089,
+      "save_last": 2,
+      "save_cur": 2,
+      "synced": 1,
+      "entries": [
+        {
+          "seq": 1,
+          "time": 1789769088,
+          "save": 1
+        },
+        {
+          "seq": 2,
+          "time": 1789769088,
+          "save": 2,
+          "newhead": 1
+        }
+      ]
+    },
+    "states": [
+      {
+        "seq": 0,
+        "lines_hex": [
+          "6f6c64"
+        ],
+        "endofline": true,
+        "fileformat": "unix",
+        "fileencoding": "utf-8"
+      },
+      {
+        "seq": 2,
+        "lines_hex": [
+          "6e6577",
+          "7461696c"
+        ],
+        "endofline": true,
+        "fileformat": "unix",
+        "fileencoding": "utf-8"
+      },
+      {
+        "seq": 1,
+        "lines_hex": [
+          "6e6577"
+        ],
+        "endofline": true,
+        "fileformat": "unix",
+        "fileencoding": "utf-8"
+      }
+    ],
+    "mismatch_rejected": true,
+    "mismatch_message": "Reading undo file: history.undo"
+  }
+}
