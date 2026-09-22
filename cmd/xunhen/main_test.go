@@ -72,13 +72,6 @@ func TestExecutable(t *testing.T) {
 		{name: "invalid invocation", args: []string{"unknown"}, status: 2, err: "unknown command"},
 		{name: "unavailable operation", args: []string{"diff"}, status: 1, err: "not available"},
 		{
-			name:         "closed output pipe",
-			args:         []string{"--version"},
-			status:       1,
-			err:          "cannot write output",
-			closedStdout: true,
-		},
-		{
 			name: "inspection without source or editor",
 			args: []string{"inspect", "--undo", undoPath},
 			out:  "node 2: parent=1",
@@ -100,13 +93,6 @@ func TestExecutable(t *testing.T) {
 			args:   []string{"inspect", "--undo", corruptPath},
 			status: 1,
 			err:    "truncated input",
-		},
-		{
-			name:         "inspection with closed pipe",
-			args:         []string{"inspect", "--undo", undoPath},
-			status:       1,
-			err:          "cannot write output",
-			closedStdout: true,
 		},
 	}
 

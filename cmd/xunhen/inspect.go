@@ -91,14 +91,6 @@ func parseInspectArgs(args []string) (string, error) {
 	return path, nil
 }
 
-func operationError(stderr io.Writer, err error) int {
-	if errors.Is(err, context.Canceled) {
-		return diagnostic(stderr, exitInterrupted, "interrupted")
-	}
-
-	return diagnostic(stderr, exitFailure, err.Error())
-}
-
 func inspectionText(ctx context.Context, path string, h *history.History, maxBytes int) (string, error) {
 	meta, err := h.Metadata()
 	if err != nil {

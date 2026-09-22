@@ -476,14 +476,6 @@ func TestHistoryOwnershipAndInvalidSelectors(t *testing.T) {
 				return err
 			},
 		},
-		{
-			name: "root record",
-			call: func(_ *testing.T, h *history.History) error {
-				root, _ := h.Lookup(0)
-				_, err := h.Record(root)
-				return err
-			},
-		},
 	}
 
 	for _, tt := range tests {

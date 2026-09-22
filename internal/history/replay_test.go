@@ -156,16 +156,33 @@ func TestReplayCancellation(t *testing.T) {
 	}
 
 	h, r := reconstructor(t, readFixture(t, "abandoned-branch", "history.undo"), oracleLines(t, oracle.Loaded.Anchor.LinesHex), limits.Default())
-	root, err := h.Lookup(0)
-	if err != nil {
-		t.Fatal(err)
+
+	// Both targets need replay work: the root only undoes, while the abandoned
+	// experiment undoes to the shared ancestor and then redoes.
+	tests := []struct {
+		name   string
+		target history.NodeID
+	}{
+		{name: "up to the retained root", target: 0},
+		{name: "across to another branch", target: 2},
 	}
 
-	ctx, cancel := context.WithCancel(t.Context())
-	cancel()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-	if snapshot, err := r.Reconstruct(ctx, root); snapshot != nil || !errors.Is(err, context.Canceled) {
-		t.Fatalf("snapshot = %v, error = %v; want cancellation", snapshot, err)
+			ref, err := h.Lookup(tt.target)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			ctx, cancel := context.WithCancel(t.Context())
+			cancel()
+
+			if snapshot, err := r.Reconstruct(ctx, ref); snapshot != nil || !errors.Is(err, context.Canceled) {
+				t.Fatalf("snapshot = %v, error = %v; want cancellation", snapshot, err)
+			}
+		})
 	}
 }
 

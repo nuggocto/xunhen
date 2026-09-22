@@ -90,7 +90,6 @@ func TestWriteFailures(t *testing.T) {
 		diagnostic string
 	}{
 		{name: "stdout error", args: []string{"--help"}, writer: failedWriter{}, diagnostic: "cannot write output"},
-		{name: "short stdout write", args: []string{"--version"}, writer: shortWriter{}, diagnostic: "cannot write output"},
 		{name: "stderr error", args: []string{"unknown"}, writer: failedWriter{}, failStderr: true},
 	}
 
@@ -127,10 +126,4 @@ type failedWriter struct{}
 
 func (failedWriter) Write([]byte) (int, error) {
 	return 0, errors.New("output unavailable")
-}
-
-type shortWriter struct{}
-
-func (shortWriter) Write(p []byte) (int, error) {
-	return len(p) / 2, nil
 }

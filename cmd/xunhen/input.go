@@ -41,7 +41,7 @@ func loadBase(ctx context.Context, path string, lim limits.Limits) ([]string, er
 		var err error
 		data, err = io.ReadAll(io.LimitReader(file, lim.BaseBytes+1))
 		if err != nil {
-			return fmt.Errorf("%s: read base file: %w", path, err)
+			return fmt.Errorf("read base file: %w", err)
 		}
 		if int64(len(data)) > lim.BaseBytes {
 			return inputError(undofile.Limit, path, "base input bytes", "input exceeds its budget")
@@ -73,10 +73,14 @@ func splitBase(path string, data []byte, lim limits.Limits) ([]string, error) {
 		return nil, inputError(undofile.Unsupported, path, "base text", problem)
 	}
 
-	lines := strings.Split(strings.TrimSuffix(string(data), "\n"), "\n")
-	if len(lines) > lim.StateLines {
+	// Count before splitting. Eight MiB of LF bytes would otherwise build eight
+	// million string headers, about 128 MiB, before the line budget rejects them.
+	text := strings.TrimSuffix(string(data), "\n")
+	if strings.Count(text, "\n") >= lim.StateLines {
 		return nil, inputError(undofile.Limit, path, "base lines", "logical line count exceeds its budget")
 	}
+
+	lines := strings.Split(text, "\n")
 	for _, line := range lines {
 		if len(line) > lim.LineBytes {
 			return nil, inputError(undofile.Limit, path, "base line bytes", "line exceeds its budget")
@@ -110,7 +114,7 @@ func readRegular(ctx context.Context, path, kind string, maxBytes int64, read fu
 
 	before, err := file.Stat()
 	if err != nil {
-		return fmt.Errorf("%s: stat %s file: %w", path, kind, err)
+		return fmt.Errorf("stat %s file: %w", kind, err)
 	}
 	if !before.Mode().IsRegular() {
 		return fmt.Errorf("%s: %s input must be a regular file", path, kind)
@@ -125,7 +129,7 @@ func readRegular(ctx context.Context, path, kind string, maxBytes int64, read fu
 
 	after, err := file.Stat()
 	if err != nil {
-		return fmt.Errorf("%s: stat %s file after reading: %w", path, kind, err)
+		return fmt.Errorf("stat %s file after reading: %w", kind, err)
 	}
 	if changedFile(before, after) {
 		return fmt.Errorf("%s: %s input changed while reading; retry using an idle copy", path, kind)

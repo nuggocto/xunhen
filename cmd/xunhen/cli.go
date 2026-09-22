@@ -104,8 +104,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 }
 
 func writeOutput(stdout, stderr io.Writer, text string) int {
-	written, err := io.WriteString(stdout, text)
-	if err != nil || written != len(text) {
+	// A short write always returns an error, so err alone covers partial output.
+	if _, err := io.WriteString(stdout, text); err != nil {
 		return diagnostic(stderr, exitFailure, "cannot write output")
 	}
 
@@ -120,13 +120,21 @@ func diagnostic(stderr io.Writer, status int, message string) int {
 		status = exitFailure
 	}
 
-	text := prefix + safe + "\n"
-	written, err := io.WriteString(stderr, text)
-	if err != nil || written != len(text) {
+	if _, err := io.WriteString(stderr, prefix+safe+"\n"); err != nil {
 		return exitFailure
 	}
 
 	return status
+}
+
+// operationError maps cancellation to the interrupt status and everything else
+// to an operational failure.
+func operationError(stderr io.Writer, err error) int {
+	if errors.Is(err, context.Canceled) {
+		return diagnostic(stderr, exitInterrupted, "interrupted")
+	}
+
+	return diagnostic(stderr, exitFailure, err.Error())
 }
 
 // helpRequested reports whether a command's only argument asks for its help.

@@ -387,15 +387,3 @@ func (h *History) Info(ref NodeRef) (NodeInfo, error) {
 
 	return h.nodes[ref.index].info, nil
 }
-
-// Record exposes immutable normalized edits. The synthetic root has no record.
-func (h *History) Record(ref NodeRef) (undofile.Record, error) {
-	if err := h.check(ref); err != nil {
-		return undofile.Record{}, err
-	}
-	if ref.index == 0 {
-		return undofile.Record{}, errors.New("retained root has no change record")
-	}
-
-	return h.record(h.nodes[ref.index]), nil
-}

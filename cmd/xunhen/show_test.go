@@ -170,17 +170,28 @@ func TestShowRecovery(t *testing.T) {
 func TestShowDisplayEscaping(t *testing.T) {
 	t.Parallel()
 
-	dir := "../../testdata/undo/terminal-controls"
-	args := []string{"show", "--undo", filepath.Join(dir, "history.undo"), "--base", filepath.Join(dir, "base.bin"), "--node", "1"}
-
-	var out, diagnostic bytes.Buffer
-	if status := run(t.Context(), args, &out, &diagnostic); status != 0 {
-		t.Fatalf("status = %d; stderr = %q", status, diagnostic.String())
+	// The tab stays readable; ESC and BEL cannot reach the terminal.
+	tests := []struct {
+		name, fixture, node, want string
+	}{
+		{name: "terminal controls", fixture: "terminal-controls", node: "1", want: "x\\x1b[31mred\\x1b[0m\ttab\\a\n"},
 	}
 
-	// The tab stays readable; ESC and BEL cannot reach the terminal.
-	if want := "x\\x1b[31mred\\x1b[0m\ttab\\a\n"; out.String() != want {
-		t.Fatalf("display = %q, want %q", out.String(), want)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := filepath.Join("../../testdata/undo", tt.fixture)
+			args := []string{"show", "--undo", filepath.Join(dir, "history.undo"), "--base", filepath.Join(dir, "base.bin"), "--node", tt.node}
+
+			var out, diagnostic bytes.Buffer
+			if status := run(t.Context(), args, &out, &diagnostic); status != 0 {
+				t.Fatalf("status = %d; stderr = %q", status, diagnostic.String())
+			}
+			if out.String() != tt.want {
+				t.Fatalf("display = %q, want %q", out.String(), tt.want)
+			}
+		})
 	}
 }
 
@@ -202,7 +213,10 @@ func TestBaseTextProfile(t *testing.T) {
 		{name: "lone CR", text: "a\rb", want: []string{"a\rb"}},
 		{name: "NUL", text: "a\x00b", errorText: "embedded NUL"},
 		{name: "invalid UTF-8", text: "a\xffb", errorText: "invalid UTF-8"},
+		{name: "at line budget", text: "a\nb\n", want: []string{"a", "b"}, maxLines: 2},
+		{name: "at line budget without final LF", text: "a\nb", want: []string{"a", "b"}, maxLines: 2},
 		{name: "line budget", text: "a\nb\nc\n", errorText: "base lines", maxLines: 2},
+		{name: "blank line above budget", text: "a\n\n", errorText: "base lines", maxLines: 1},
 		{name: "byte budget", text: "abcd", errorText: "base input bytes", maxBytes: 3},
 	}
 
