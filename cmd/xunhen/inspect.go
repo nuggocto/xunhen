@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"strings"
@@ -42,7 +41,7 @@ closed pipes return status 1 without a panic trace.
 `
 
 func inspect(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	if len(args) == 1 && (args[0] == "--help" || args[0] == "-h") {
+	if helpRequested(args) {
 		return writeOutput(stdout, stderr, inspectHelp)
 	}
 
@@ -74,28 +73,18 @@ func inspect(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 }
 
 func parseInspectArgs(args []string) (string, error) {
-	flags := flag.NewFlagSet("inspect", flag.ContinueOnError)
-	flags.SetOutput(io.Discard)
+	flags := newFlags("inspect")
 
 	var path string
-	var supplied bool
-	flags.Func("undo", "undo-file path", func(value string) error {
-		if supplied {
-			return errors.New("--undo must be supplied only once")
-		}
-
-		supplied = true
+	flags.Func("undo", "undo-file path", once("undo", func(value string) error {
 		path = value
 		return nil
-	})
+	}))
 
-	if err := flags.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return "", errors.New("inspect --help must be used alone")
-		}
+	if err := parseFlags(flags, args); err != nil {
 		return "", err
 	}
-	if !supplied || path == "" || flags.NArg() != 0 {
+	if path == "" || flags.NArg() != 0 {
 		return "", errors.New("expected inspect --undo PATH; see 'xunhen inspect --help'")
 	}
 

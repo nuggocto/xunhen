@@ -71,3 +71,28 @@ func TestTerminalTextBoundsAndCancellation(t *testing.T) {
 		})
 	}
 }
+
+func TestDisplayText(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct{ name, input, want string }{
+		{name: "readable Unicode", input: "// café 尋痕", want: "// café 尋痕"},
+		{name: "source punctuation", input: "\tfmt.Println(\"a\\n\")", want: "\tfmt.Println(\"a\\n\")"},
+		{name: "terminal controls", input: "a\x1b[31m\a\r\x7f\u0085", want: `a\x1b[31m\a\r\x7f\u0085`},
+		{name: "line separators", input: "a\n\u2028b", want: `a\n\u2028b`},
+		{name: "bidi formatting", input: "a\u202eb", want: `a\u202eb`},
+		{name: "invalid byte", input: "a\xffb", want: `a\xffb`},
+		{name: "encoded replacement character", input: "\ufffd", want: "\ufffd"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := termtext.EscapeDisplay(t.Context(), tt.input, 100)
+			if err != nil || got != tt.want {
+				t.Fatalf("display = %q, %v; want %q", got, err, tt.want)
+			}
+		})
+	}
+}

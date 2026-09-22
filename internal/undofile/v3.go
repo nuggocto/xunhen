@@ -32,7 +32,7 @@ func (d *decoder) decodeV3() *DecodedFile {
 	meta.LastSave = d.optional()
 
 	for range meta.HeaderCount {
-		if d.err != nil {
+		if d.cancelled() {
 			break
 		}
 

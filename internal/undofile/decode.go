@@ -15,13 +15,17 @@ import (
 
 // Decode reads at most InputBytes+1 bytes, owns all retained text, and returns
 // nil on every failure. No partial records can become an ordinary DecodedFile.
-// Cancellation is checked between reads; the caller owns blocking I/O policy.
+// Cancellation is checked between records and text chunks; the caller owns
+// blocking I/O policy.
 func Decode(ctx context.Context, source string, input io.Reader, lim limits.Limits) (*DecodedFile, error) {
 	if err := lim.Validate(); err != nil {
 		return nil, err
 	}
 	if input == nil {
 		return nil, errors.New("nil undo reader")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 
 	d := decoder{
@@ -59,8 +63,8 @@ func Decode(ctx context.Context, source string, input io.Reader, lim limits.Limi
 }
 
 func (d *decoder) end() error {
-	if err := d.ctx.Err(); err != nil {
-		return err
+	if d.cancelled() {
+		return d.err
 	}
 
 	_, err := d.reader.ReadByte()
@@ -74,11 +78,7 @@ func (d *decoder) end() error {
 		d.readError(err, "end of file")
 	}
 
-	if d.err != nil {
-		return d.err
-	}
-
-	return d.ctx.Err()
+	return d.err
 }
 
 // A sticky error keeps scalar reads explicit without allowing a failed count
@@ -130,11 +130,18 @@ func (d *decoder) readError(err error, field string) {
 	}
 }
 
+// cancelled stores cancellation as the sticky error. Decoding checks it once
+// per record and text chunk rather than on every scalar field.
+func (d *decoder) cancelled() bool {
+	if d.err == nil {
+		d.err = d.ctx.Err()
+	}
+
+	return d.err != nil
+}
+
 func (d *decoder) read(dst []byte, field string) {
 	if d.err != nil {
-		return
-	}
-	if d.err = d.ctx.Err(); d.err != nil {
 		return
 	}
 	if int64(len(dst)) > d.limits.InputBytes-d.offset {
@@ -221,6 +228,10 @@ func (d *decoder) text(field string) string {
 	// Grow only as actual chunks arrive, rather than allocating a claimed length
 	// before finding out that a tiny input is truncated.
 	for remaining := n; remaining > 0 && d.err == nil; {
+		if d.cancelled() {
+			break
+		}
+
 		size := min(remaining, len(d.scratch))
 		chunk := d.scratch[:size]
 		start := d.offset

@@ -52,6 +52,7 @@ type History struct {
 
 // New checks identities, references, sibling lists, ancestry, connectivity,
 // and the persisted reference position in O(nodes) bounded iterative passes.
+// The node budget bounds each pass, so cancellation is checked between them.
 func New(ctx context.Context, file *undofile.DecodedFile, lim limits.Limits) (*History, error) {
 	if err := lim.Validate(); err != nil {
 		return nil, err
@@ -78,17 +79,13 @@ func New(ctx context.Context, file *undofile.DecodedFile, lim limits.Limits) (*H
 	h.byID = make(map[NodeID]int, meta.HeaderCount+1)
 	h.byID[0] = 0
 
-	if err := h.indexRecords(ctx); err != nil {
-		return nil, err
-	}
-	if err := h.validateLinks(ctx); err != nil {
-		return nil, err
-	}
-	if err := h.walk(ctx); err != nil {
-		return nil, err
-	}
-	if err := h.bindReference(ctx); err != nil {
-		return nil, err
+	for _, pass := range []func() error{h.indexRecords, h.validateLinks, h.walk, h.bindReference} {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if err := pass(); err != nil {
+			return nil, err
+		}
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -98,12 +95,8 @@ func New(ctx context.Context, file *undofile.DecodedFile, lim limits.Limits) (*H
 	return h, nil
 }
 
-func (h *History) indexRecords(ctx context.Context) error {
+func (h *History) indexRecords() error {
 	for i := range h.metadata.HeaderCount {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-
 		record, ok := h.file.Record(i)
 		if !ok {
 			return errors.New("decoded record inventory is incomplete")
@@ -172,14 +165,10 @@ func (h *History) record(n node) undofile.Record {
 	return r
 }
 
-func (h *History) validateLinks(ctx context.Context) error {
+func (h *History) validateLinks() error {
 	for i, n := range h.nodes {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-
 		info := n.info
-		links := []struct {
+		links := [...]struct {
 			name string
 			id   NodeID
 		}{
@@ -200,28 +189,28 @@ func (h *History) validateLinks(ctx context.Context) error {
 				return h.invalid(h.record(n), "parent", "parent must precede child in sequence allocation")
 			}
 
-			parent := h.nodes[h.byID[info.Parent]].info
+			parent := h.nodeInfo(info.Parent)
 			if info.PreviousSibling == 0 && parent.PreferredChild != info.ID {
 				return h.invalid(h.record(n), "preferred child", "first sibling is not selected by its parent")
 			}
 		}
 
 		if info.PreferredChild != 0 {
-			child := h.nodes[h.byID[info.PreferredChild]].info
+			child := h.nodeInfo(info.PreferredChild)
 			if child.Parent != info.ID || child.PreviousSibling != 0 {
 				return h.invalid(h.record(n), "preferred child", "child has another parent or an earlier sibling")
 			}
 		}
 
 		if info.NextSibling != 0 {
-			next := h.nodes[h.byID[info.NextSibling]].info
+			next := h.nodeInfo(info.NextSibling)
 			if next.ID == info.ID || next.Parent != info.Parent || next.PreviousSibling != info.ID {
 				return h.invalid(h.record(n), "next sibling", "siblings must share a parent and reciprocal links")
 			}
 		}
 
 		if info.PreviousSibling != 0 {
-			previous := h.nodes[h.byID[info.PreviousSibling]].info
+			previous := h.nodeInfo(info.PreviousSibling)
 			if previous.ID == info.ID || previous.Parent != info.Parent || previous.NextSibling != info.ID {
 				return h.invalid(h.record(n), "previous sibling", "siblings must share a parent and reciprocal links")
 			}
@@ -231,15 +220,11 @@ func (h *History) validateLinks(ctx context.Context) error {
 	return nil
 }
 
-func (h *History) walk(ctx context.Context) error {
+func (h *History) walk() error {
 	seen := make([]bool, len(h.nodes))
 	stack := []int{0}
 
 	for len(stack) != 0 {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-
 		index := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
 
@@ -266,7 +251,7 @@ func (h *History) walk(ctx context.Context) error {
 	return nil
 }
 
-func (h *History) bindReference(ctx context.Context) error {
+func (h *History) bindReference() error {
 	meta := h.metadata
 	for _, link := range []undofile.Sequence{meta.Newest, meta.NextRedo} {
 		if _, exists := h.byID[NodeID(link)]; !exists {
@@ -283,18 +268,14 @@ func (h *History) bindReference(ctx context.Context) error {
 	target := NodeID(meta.Newest)
 	if meta.NextRedo != 0 {
 		target = NodeID(meta.NextRedo)
-	} else if h.nodes[h.byID[target]].info.PreferredChild != 0 {
+	} else if h.nodeInfo(target).PreferredChild != 0 {
 		return h.invalid(undofile.Record{}, "newest header", "reference without a next redo must be a leaf")
 	}
 
-	for index := 0; ; {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-
-		info := h.nodes[index].info
-		if info.ID == target {
-			h.reference = index
+	for id := NodeID(0); ; {
+		info := h.nodeInfo(id)
+		if id == target {
+			h.reference = h.byID[id]
 			if meta.NextRedo != 0 {
 				h.reference = h.byID[info.Parent]
 			}
@@ -304,7 +285,7 @@ func (h *History) bindReference(ctx context.Context) error {
 			break
 		}
 
-		index = h.byID[info.PreferredChild]
+		id = info.PreferredChild
 	}
 
 	if meta.NextRedo != 0 {
@@ -312,6 +293,16 @@ func (h *History) bindReference(ctx context.Context) error {
 	}
 
 	return h.invalid(undofile.Record{}, "newest header", "reference is outside the preferred path")
+}
+
+// nodeInfo reads a node by an ID that validation has already resolved.
+func (h *History) nodeInfo(id NodeID) NodeInfo {
+	return h.nodes[h.byID[id]].info
+}
+
+// parent returns the node index of a validated node's parent.
+func (h *History) parent(index int) int {
+	return h.byID[h.nodes[index].info.Parent]
 }
 
 func (h *History) ready() error {

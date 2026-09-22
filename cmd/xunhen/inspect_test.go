@@ -256,7 +256,7 @@ func TestUndoInputTypes(t *testing.T) {
 	}
 }
 
-func TestInspectCancellation(t *testing.T) {
+func TestCancelledCommand(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {

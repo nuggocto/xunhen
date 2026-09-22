@@ -308,7 +308,7 @@ Keep the first packages small and internal to the application:
 | `cmd/xunhen` | Argument parsing, read-only file opens, command dispatch, limits, cancellation, exit status. | Coordinates packages; contains no binary-layout knowledge. |
 | `internal/discover` | Bounded lookup in supplied undo directories, source-path matching, and candidate reporting. | Uses verified filename rules and decoder metadata; never treats a filename guess as proof of a matching base. |
 | `internal/undofile` | Header recognition, format/ABI-profile dispatch, bounded binary decoding, normalized records, and base-matching rules. | Only package that knows on-disk layout and record encoding. |
-| `internal/history` | Graph validation, node identity, traversal, base association, reconstruction, and the state cache. | Consumes normalized decoder output; never switches on an undo-format version. |
+| `internal/history` | Graph validation, node identity, traversal, base association, and reconstruction. The later TUI owns any state cache. | Consumes normalized decoder output; never switches on an undo-format version. |
 | `internal/diff` | Line comparison and structured diff hunks. | Consumes reconstructed text, not undo records or UI state. |
 | `internal/tui` | Bubble Tea model, user selection, background-operation requests, and rendered views. | Consumes history and diff operations; owns no reconstruction rules. |
 | `internal/termtext` | Safe display of untrusted text, filenames, and diagnostics. | Escapes terminal controls at presentation boundaries without changing stored text. |
@@ -390,26 +390,19 @@ state. Only then construct a reconstructor. A missing or mismatched base keeps
 metadata inspection available but blocks complete-state claims.
 
 Decoded records and the validated history become immutable after loading.
-The reconstructor owns its mutable replay workspace and bounded snapshot
-cache. Snapshots exposed to callers must not share writable backing storage
-with that workspace. No package returns internal mutable slices for a caller
-to modify.
+Each reconstruction request owns a fresh workspace starting with the verified
+reference lines. Snapshots do not expose writable backing slices. No package
+returns internal mutable slices for a caller to modify.
 
-Cache entries belong to one reconstructor and are keyed by its node IDs.
-Evict least-recently-used entries to stay within the byte budget; discard the
-cache when loading another history or base. Never reuse an entry merely because
-another file has the same node number.
+Navigation between branches replays through their shared ancestor. Headers
+above it on the reference path contain undo text; headers below it on the
+target path contain redo text. A fresh request applies each persisted header
+once in its stored entry order. Inverse capture and entry reversal are needed
+only if a future worker keeps a mutable workspace across requests.
 
-A cached snapshot is an output, not a replay checkpoint. Returning it must
-not move the replay workspace unless the corresponding oriented entry data
-is restored too. Otherwise a subsequent branch traversal can apply the wrong
-direction of an edit.
-
-Navigation between branches replays through their shared ancestor. Applying
-an entry captures the replaced lines as its inverse, and applying a header
-reverses its entry list for the return traversal. Persisted entries have mixed
-directions relative to the reference state. Derive and track that orientation;
-do not invent an inverse by swapping line ranges alone.
+The later TUI may cache completed immutable snapshots by history/base and node
+identity. A cached text snapshot is an output, not a replay checkpoint. Evict
+by retained bytes and discard the cache on a new history/base load.
 
 The TUI owns selection and viewport state. Use one bounded background worker
 for reconstruction and diff requests, with at most one running request and one
@@ -431,11 +424,11 @@ follow the format study; the type names are not claims about Neovim structs.
 | `History` | Immutable validated nodes, replay records, and navigation indexes. No duplicate identities, dangling references, cycles in logical ancestry, or unexplained disconnected nodes. |
 | `Node` | Event identity, logical relationships, available metadata, and references to replay data. A node is not itself a full-text snapshot. |
 | `EventTime` | A recorded timestamp when one is available. Missing time is explicit; equal or non-monotonic times do not invalidate otherwise valid ancestry. |
-| `BaseText` | An explicitly supplied buffer representation. Keep its provenance and text metadata; supplying bytes alone does not make them a verified base. |
-| `Reconstructor` | A validated history bound to matching base text and its reference state. Owns replay limits, workspace, and cache. |
+| `VerifiedBase` | Immutable logical buffer lines checked against one decoded file's reference hash and line count. The source label is used for diagnostics; historical file options remain unknown. |
+| `Reconstructor` | A validated history bound to matching base text and its reference state. Owns replay limits and gives each request a fresh workspace. |
 | `Snapshot` | Successfully reconstructed buffer lines and their history/node identity. Historical encoding/newline settings stay unknown; a chosen export policy is separate. Never uses empty text to stand for failed reconstruction. |
 | `Diff` | A completed comparison with ordered, valid hunks and identified inputs. Cancellation or exhausted limits do not produce an ordinary completed diff. |
-| `Limits` | Validated input, allocation, replay, cache, and output budgets. Reject zero/negative or overflowing settings instead of interpreting them as unlimited. |
+| `Limits` | Validated input, allocation, replay, and output budgets. Reject zero/negative or overflowing settings instead of interpreting them as unlimited. |
 | `InputError` | An operational failure with a category, source label, and byte offset or node context when known. Examples include truncation, unsupported format, broken reference, and base mismatch. |
 
 Use private fields and checked constructors for `History`, `Reconstructor`,
@@ -506,11 +499,9 @@ Starting engineering budgets for the ordinary-source-file target:
 | Individual line, including the saved `U` line | 1 MiB |
 | Optional fields including framing | 1 MiB per file |
 | Total decoded text payload | 128 MiB |
-| Cached snapshot text | 32 MiB, charged by retained bytes rather than entry count |
 | Diff workspace | 32 MiB |
 | Replay header crossings / entry applications | 200,000 / 1,000,000 per request |
 | Replay line-reference moves or visits | 8,000,000 per request |
-| Replay bytes copied or compared | 256 MiB per request |
 | Diff frontier/comparison steps | 10,000,000 per request |
 | Diff bytes compared | 256 MiB per request |
 | Rendered CLI output after escaping | 16 MiB per command |
@@ -519,8 +510,9 @@ These are project limits to validate with fixtures, not Neovim format limits or
 measured capacity claims. They are not a hard process-RSS guarantee: Go object,
 map, slice, allocator, and runtime overhead must also be accounted for. Charge
 work before it occurs, including moving unchanged line references. Check
-cancellation at least every 4,096 work steps or 64 KiB of byte processing.
-TUI rendering stays viewport-bounded. The format specification defines the
+cancellation between bounded units of work, such as a line, replay entry, or
+history header, so no unit runs for more than a few milliseconds at these
+limits. TUI rendering stays viewport-bounded. The format specification defines the
 units and the distinction between text work and comparison-step counts.
 
 Keep limits in one validated configuration passed explicitly into the core.
@@ -736,29 +728,29 @@ Depends on phase 2. Outcome: recover a retained abandoned implementation with
 
 #### 3.1 Bind the base safely
 
-- [ ] Load bounded base text through a read-only handle and preserve the metadata required by the verified text model.
-- [ ] Implement the documented producer-specific content check and reference-state association.
-- [ ] Construct a reconstructor only after successful history/base binding; distinguish missing base, mismatch, and unsupported text cases.
-- [ ] Reject observably inconsistent input reads rather than combine unrelated undo and source states.
+- [x] Load bounded base text through a read-only handle and preserve the metadata required by the verified text model.
+- [x] Implement the documented producer-specific content check and reference-state association.
+- [x] Construct a reconstructor only after successful history/base binding; distinguish missing base, mismatch, and unsupported text cases.
+- [x] Reject observably inconsistent input reads rather than combine unrelated undo and source states.
 
 #### 3.2 Implement replay
 
-- [ ] Implement checked normalized edit operations with explicit direction and line-range validation.
-- [ ] Traverse within a branch and across a shared ancestor using the verified semantics, including retained-root and current-position cases.
-- [ ] Bound replay work and resulting state size; support cancellation at meaningful work boundaries.
-- [ ] Return immutable snapshots with history/node identity and known text-format metadata.
-- [ ] Verify every selected fixture state against the independent oracle, including repeated back-and-forth and cross-branch navigation.
-- [ ] Test history/base mismatch, invalid replay ranges, cancellation, and missing information as errors rather than successful empty snapshots.
+- [x] Implement checked normalized edit operations with explicit direction and line-range validation.
+- [x] Traverse within a branch and across a shared ancestor using the verified semantics, including retained-root and current-position cases.
+- [x] Bound replay work and resulting state size; support cancellation at meaningful work boundaries.
+- [x] Return immutable snapshots with history/node identity and an explicit buffer-line representation; keep unavailable historical format metadata unknown.
+- [x] Verify every selected fixture state against the independent oracle, including repeated back-and-forth and cross-branch navigation.
+- [x] Test history/base mismatch, invalid replay ranges, cancellation, and missing information as errors rather than successful empty snapshots.
 
 #### 3.3 Deliver recovery output
 
-- [ ] Implement terminal-safe `show` and redirected `show --raw` for verified export cases.
-- [ ] Verify exact serialized bytes under the selected UTF-8/LF and final-newline policy; keep unknown historical file options explicit and refuse unsupported conversions.
-- [ ] Reconstruct fully before writing raw output; handle short writes, broken pipes, and output errors without reporting success.
-- [ ] Demonstrate the abandoned-experiment recovery from the narrative using the built command, with byte-for-byte expected output.
-- [ ] Verify read-only behavior on undo/source inputs for both successful and failed recovery attempts.
+- [x] Implement terminal-safe `show` and redirected `show --raw` for verified export cases.
+- [x] Verify exact serialized bytes under the selected UTF-8/LF and final-newline policy; keep unknown historical file options explicit and refuse unsupported conversions.
+- [x] Reconstruct fully before writing raw output; handle short writes, broken pipes, and output errors without reporting success.
+- [x] Demonstrate the abandoned-experiment recovery from the narrative using the built command, with byte-for-byte expected output.
+- [x] Verify read-only behavior on undo/source inputs for both successful and failed recovery attempts.
 
-- [ ] **Phase 3 complete:** all supported reference states reconstruct correctly, raw export matches expected bytes, and missing or incompatible bases fail clearly.
+- [x] **Phase 3 complete:** all supported reference states reconstruct correctly, raw export matches expected bytes, and missing or incompatible bases fail clearly.
 
 ### Phase 4 — Bounded diffing and complete CLI behavior
 
@@ -825,7 +817,7 @@ repeatedly entering node selectors.
 
 - [ ] Add the single reconstruction/diff worker with at most one running and one latest pending request.
 - [ ] Cancel obsolete work and use load/selection generations to reject late results.
-- [ ] Implement the byte-accounted LRU snapshot cache with immutable entries and explicit ownership of retained backing storage.
+- [ ] Implement a 32 MiB byte-accounted LRU snapshot cache with immutable entries and explicit ownership of retained backing storage.
 - [ ] Discard the cache on a new history/base load and ensure evicted entries cannot corrupt still-displayed snapshots.
 - [ ] Keep decoding, replay, and diff work out of rendering callbacks and preserve usable input handling while work runs.
 

@@ -45,6 +45,14 @@ func TestExecutable(t *testing.T) {
 	if err := os.WriteFile(undoPath, undo, 0444); err != nil {
 		t.Fatal(err)
 	}
+	base, err := os.ReadFile("../../testdata/undo/abandoned-branch/base.bin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	basePath := filepath.Join(dir, "matching base.go")
+	if err := os.WriteFile(basePath, base, 0444); err != nil {
+		t.Fatal(err)
+	}
 
 	corruptPath := filepath.Join(dir, "corrupt.undo")
 	if err := os.WriteFile(corruptPath, undo[:len(undo)-1], 0444); err != nil {
@@ -62,7 +70,7 @@ func TestExecutable(t *testing.T) {
 		{name: "help", args: []string{"--help"}, out: "Usage:"},
 		{name: "stamped version", args: []string{"--version"}, out: "xunhen v0.0.0-test\n"},
 		{name: "invalid invocation", args: []string{"unknown"}, status: 2, err: "unknown command"},
-		{name: "unavailable operation", args: []string{"show"}, status: 1, err: "not available"},
+		{name: "unavailable operation", args: []string{"diff"}, status: 1, err: "not available"},
 		{
 			name:         "closed output pipe",
 			args:         []string{"--version"},
@@ -74,6 +82,18 @@ func TestExecutable(t *testing.T) {
 			name: "inspection without source or editor",
 			args: []string{"inspect", "--undo", undoPath},
 			out:  "node 2: parent=1",
+		},
+		{
+			name: "recover abandoned experiment",
+			args: []string{"show", "--undo", undoPath, "--base", basePath, "--node", "2", "--raw", "--final-newline=include"},
+			out:  "package sample\n\nfunc experiment() int { return 42 }\n",
+		},
+		{
+			name:         "recovery with closed output pipe",
+			args:         []string{"show", "--undo", undoPath, "--base", basePath, "--node", "2", "--raw", "--final-newline=include"},
+			status:       1,
+			err:          "cannot write output",
+			closedStdout: true,
 		},
 		{
 			name:   "truncated inspection",
@@ -134,6 +154,10 @@ func TestExecutable(t *testing.T) {
 	after, err := os.ReadFile(undoPath)
 	if err != nil || !bytes.Equal(undo, after) {
 		t.Fatalf("executable changed undo input: %v", err)
+	}
+	after, err = os.ReadFile(basePath)
+	if err != nil || !bytes.Equal(base, after) {
+		t.Fatalf("executable changed base input: %v", err)
 	}
 
 	t.Run("interrupt while stdout is blocked", func(t *testing.T) {

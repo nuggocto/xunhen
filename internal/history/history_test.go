@@ -36,6 +36,10 @@ type oracleFile struct {
 			TimeCur int64 `json:"time_cur"`
 			Entries []oracleEntry
 		}
+		States []struct {
+			Seq      int
+			LinesHex []string `json:"lines_hex"`
+		}
 	}
 }
 

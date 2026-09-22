@@ -236,13 +236,16 @@ Cursor, marks, visual selection, and modified flags also swap, but do not
 replace the text operations. Extmarks are replayed separately in the direction
 appropriate to undo or redo.
 
-Keep decoded records immutable. Each reconstructor owns a replay workspace
-with a current state and entry directions. Derive those directions from the
-reference path, and retain the inverse entries after each traversal.
+Keep decoded records immutable. Each reconstruction starts with fresh reference
+lines and follows the path through the shared ancestor to its target. Headers
+on the reference-to-ancestor path contain undo text; headers below the ancestor
+on the target path contain redo text. Apply each header once in stored entry
+order. Neovim captures and reverses inverse entries because its workspace
+persists across navigation; a fresh request does not need those inverses.
 
-A cached snapshot contains text, not the matching replay workspace. Returning
-one must not move the workspace: its entries would face the wrong directions.
-A checkpoint would need both, or replay must restart from the reference state.
+A future snapshot cache can retain completed text, but a text snapshot alone
+is not a replay checkpoint. A request must still start at the reference unless
+it also owns correctly oriented entry data.
 
 ## Base text and information that is absent
 
@@ -283,12 +286,16 @@ supported normalization profile**. It cannot promise historically exact source
 file bytes. The endofline-option fixture starts with a final newline; revisiting
 its old state retains the new no-final-newline option instead of restoring it.
 
-Start with valid UTF-8, LF-separated base text without BOM or embedded NUL.
+Start with valid UTF-8, LF-separated base text without BOM, embedded NUL, or
+CRLF. A lone CR is line content and remains subject to hash verification.
 Handle empty buffers and bases with or without a final LF. Historical
 final-newline state remains unknown. Raw export serializes recovered lines as
 UTF-8/LF and requires an explicit `--final-newline=include|omit` policy. Describe
 that policy in help; do not call it restoration of the original file bytes.
-Preview/diff operate on lines and escape terminal controls for display.
+Preview/diff operate on lines and escape terminal controls for display. Raw
+export checks the selected state too: invalid UTF-8, NUL, and embedded LF
+within a logical line are unsupported. A lone CR is preserved as literal data
+in redirected raw output.
 
 The corpus classifies CRLF, Latin-1, invalid UTF-8, and NUL cases separately.
 They establish behavior and future regression inputs, not initial support
@@ -309,11 +316,10 @@ These are xunhen policy limits, not claims about Neovim's maximum capacity.
 | Stored lines across entries, and lines in one state | 1,000,000 each |
 | One stored/base/reconstructed line or saved `U` line | 1 MiB |
 | Optional-field payload per file, including framing | 1 MiB |
-| Decoded text / snapshot cache / diff workspace | 128 MiB / 32 MiB / 32 MiB |
+| Decoded text / diff workspace | 128 MiB / 32 MiB |
 | Replay header crossings | 200,000 per request |
 | Replay entry applications | 1,000,000 per request |
 | Replay line-reference moves or visits | 8,000,000 per request |
-| Text bytes copied/compared during replay | 256 MiB per request |
 | Diff frontier/comparison steps | 10,000,000 per request |
 | Text bytes compared during diff | 256 MiB per request |
 | Rendered CLI output, after escaping | 16 MiB per command |
@@ -321,7 +327,8 @@ These are xunhen policy limits, not claims about Neovim's maximum capacity.
 Charge work before performing it, including copying unchanged line references
 when inserting into a slice. Byte comparisons need their own budget; one
 comparison of very long lines is not constant-cost work. Check cancellation
-at least every 4,096 work steps or 64 KiB of byte processing. Use iterative
+between bounded units of work, such as a line, replay entry, or history header;
+at these limits no unit runs for more than a few milliseconds. Use iterative
 walks and checked arithmetic before allocation, conversion, and range edits.
 
 Check cumulative counts even when every individual record is small. Reject a

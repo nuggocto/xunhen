@@ -11,6 +11,7 @@ const (
 	Unsupported ErrorKind = "unsupported input"
 	Limit       ErrorKind = "limit exceeded"
 	ReadFailure ErrorKind = "read failure"
+	Mismatch    ErrorKind = "base mismatch"
 )
 
 // InputError identifies an input failure. Offset is zero-based, or -1 when

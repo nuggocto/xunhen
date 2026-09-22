@@ -19,9 +19,9 @@ go test ./...
 ```
 
 Tests read the stored files; they do not start Neovim. They check file hashes,
-expected text and ancestry, and the undo envelope's reference hash. Decoder and
-history tests also load every fixture and compare validated relationships,
-reference positions, and event metadata with the independent oracle.
+expected text and ancestry, the undo envelope's reference hash, and every
+recorded replay state against the independent oracle. Command tests also load
+the supported base files from disk.
 
 ## Regenerate
 

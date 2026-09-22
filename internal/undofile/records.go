@@ -2,6 +2,8 @@
 // establishes framing and field validity, not graph validity or replay safety.
 package undofile
 
+import "slices"
+
 // Sequence is a producer-assigned change identity; zero is an absent wire link.
 type Sequence int32
 
@@ -82,6 +84,9 @@ type Entry struct {
 
 // LineCount is the number of lines stored on this side of the swap.
 func (e Entry) LineCount() int { return len(e.lines) }
+
+// Lines returns a copy of the stored lines. The strings themselves are immutable.
+func (e Entry) Lines() []string { return slices.Clone(e.lines) }
 
 // Line returns an immutable string, or false for an out-of-range selector.
 func (e Entry) Line(index int) (string, bool) {

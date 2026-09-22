@@ -1,71 +1,137 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
+	"strings"
 	"syscall"
+	"unicode/utf8"
 
 	"github.com/nuggocto/xunhen/internal/limits"
 	"github.com/nuggocto/xunhen/internal/undofile"
 )
 
-// Explicit paths follow symlinks. O_NONBLOCK prevents a FIFO target from
-// hanging open; fstat then rejects anything other than a regular file.
-func loadUndo(ctx context.Context, path string, lim limits.Limits) (decoded *undofile.DecodedFile, err error) {
+func loadUndo(ctx context.Context, path string, lim limits.Limits) (*undofile.DecodedFile, error) {
+	var decoded *undofile.DecodedFile
+	err := readRegular(ctx, path, "undo", lim.InputBytes, func(file *os.File) error {
+		var err error
+		decoded, err = undofile.Decode(ctx, path, file, lim)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return decoded, nil
+}
+
+// loadBase reads a base file and splits it into logical lines under the
+// supported UTF-8/LF disk profile.
+func loadBase(ctx context.Context, path string, lim limits.Limits) ([]string, error) {
 	if err := lim.Validate(); err != nil {
 		return nil, err
 	}
-	if err := ctx.Err(); err != nil {
+
+	var data []byte
+	err := readRegular(ctx, path, "base", lim.BaseBytes, func(file *os.File) error {
+		var err error
+		data, err = io.ReadAll(io.LimitReader(file, lim.BaseBytes+1))
+		if err != nil {
+			return fmt.Errorf("%s: read base file: %w", path, err)
+		}
+		if int64(len(data)) > lim.BaseBytes {
+			return inputError(undofile.Limit, path, "base input bytes", "input exceeds its budget")
+		}
+		return nil
+	})
+	if err != nil {
 		return nil, err
+	}
+
+	return splitBase(path, data, lim)
+}
+
+// splitBase follows Neovim's reader for Unix files: LF ends a line, and a
+// final LF does not start another one. An empty file is one empty line.
+func splitBase(path string, data []byte, lim limits.Limits) ([]string, error) {
+	var problem string
+	switch {
+	case bytes.HasPrefix(data, []byte("\xef\xbb\xbf")):
+		problem = "UTF-8 BOM"
+	case !utf8.Valid(data):
+		problem = "invalid UTF-8"
+	case bytes.IndexByte(data, 0) >= 0:
+		problem = "embedded NUL"
+	case bytes.Contains(data, []byte("\r\n")):
+		problem = "CRLF base text"
+	}
+	if problem != "" {
+		return nil, inputError(undofile.Unsupported, path, "base text", problem)
+	}
+
+	lines := strings.Split(strings.TrimSuffix(string(data), "\n"), "\n")
+	if len(lines) > lim.StateLines {
+		return nil, inputError(undofile.Limit, path, "base lines", "logical line count exceeds its budget")
+	}
+	for _, line := range lines {
+		if len(line) > lim.LineBytes {
+			return nil, inputError(undofile.Limit, path, "base line bytes", "line exceeds its budget")
+		}
+	}
+
+	return lines, nil
+}
+
+func inputError(kind undofile.ErrorKind, path, field, detail string) error {
+	return &undofile.InputError{Kind: kind, Source: path, Offset: -1, Field: field, Detail: detail}
+}
+
+// readRegular opens path read-only and rejects anything but a regular file
+// that stayed unchanged while read ran. Explicit paths follow symlinks.
+// O_NONBLOCK keeps a FIFO from hanging the open; fstat then rejects it.
+func readRegular(ctx context.Context, path, kind string, maxBytes int64, read func(*os.File) error) (err error) {
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	file, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
-		return nil, fmt.Errorf("open undo file: %w", err)
+		return fmt.Errorf("open %s file: %w", kind, err)
 	}
 	defer func() {
 		if closeErr := file.Close(); closeErr != nil {
-			err = errors.Join(err, fmt.Errorf("close undo file: %w", closeErr))
-			decoded = nil
+			err = errors.Join(err, fmt.Errorf("close %s file: %w", kind, closeErr))
 		}
 	}()
 
 	before, err := file.Stat()
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("%s: stat %s file: %w", path, kind, err)
 	}
 	if !before.Mode().IsRegular() {
-		return nil, fmt.Errorf("%s: undo input must be a regular file", path)
+		return fmt.Errorf("%s: %s input must be a regular file", path, kind)
 	}
-	if before.Size() > lim.InputBytes {
-		return nil, &undofile.InputError{
-			Kind:   undofile.Limit,
-			Source: path,
-			Offset: -1,
-			Field:  "undo input bytes",
-			Detail: fmt.Sprintf("file exceeds %d bytes", lim.InputBytes),
-		}
+	if before.Size() > maxBytes {
+		return inputError(undofile.Limit, path, kind+" input bytes", fmt.Sprintf("file exceeds %d bytes", maxBytes))
 	}
 
-	decoded, err = undofile.Decode(ctx, path, file, lim)
-	if err != nil {
-		return nil, err
+	if err := read(file); err != nil {
+		return err
 	}
 
 	after, err := file.Stat()
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("%s: stat %s file after reading: %w", path, kind, err)
 	}
 	if changedFile(before, after) {
-		return nil, fmt.Errorf("%s: undo input changed while reading; retry using an idle copy", path)
-	}
-	if err := ctx.Err(); err != nil {
-		return nil, err
+		return fmt.Errorf("%s: %s input changed while reading; retry using an idle copy", path, kind)
 	}
 
-	return decoded, nil
+	return ctx.Err()
 }
 
 func changedFile(before, after os.FileInfo) bool {
