@@ -26,53 +26,6 @@ func undoFixture(t testing.TB, name string) []byte {
 	return data
 }
 
-func TestInspectArguments(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name   string
-		args   []string
-		status int
-	}{
-		{"long help", []string{"inspect", "--help"}, 0},
-		{"short help", []string{"inspect", "-h"}, 0},
-		{"missing path", []string{"inspect"}, 2},
-		{"missing value", []string{"inspect", "--undo"}, 2},
-		{"empty path", []string{"inspect", "--undo="}, 2},
-		{"duplicate input", []string{"inspect", "--undo", "one", "--undo", "two"}, 2},
-		{"positional input", []string{"inspect", "file"}, 2},
-		{"extra argument", []string{"inspect", "--undo", "file", "extra"}, 2},
-		{"unknown flag", []string{"inspect", "--source=file"}, 2},
-		{"extra help argument", []string{"inspect", "--help", "extra"}, 2},
-		{"unsafe flag", []string{"inspect", "--bad\n\x1b[2J"}, 2},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			var out, diagnostic bytes.Buffer
-			status := run(t.Context(), tt.args, &out, &diagnostic)
-			if status != tt.status {
-				t.Fatalf("status = %d; stderr = %q", status, diagnostic.String())
-			}
-
-			if tt.status == 0 {
-				assertOutput(t, "help", out.String(), "Usage: xunhen inspect --undo PATH")
-				assertOutput(t, "stderr", diagnostic.String(), "")
-				return
-			}
-
-			if out.Len() != 0 {
-				t.Fatalf("usage error wrote to stdout: %q", out.String())
-			}
-			if strings.Count(diagnostic.String(), "\n") != 1 || strings.ContainsRune(diagnostic.String(), '\x1b') {
-				t.Fatalf("unsafe diagnostic: %q", diagnostic.String())
-			}
-		})
-	}
-}
-
 func TestInspectReadOnlyAndSafeOutput(t *testing.T) {
 	t.Parallel()
 

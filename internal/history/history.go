@@ -21,6 +21,12 @@ type NodeRef struct {
 	index int
 }
 
+// SameHistory reports whether both references came from one validated
+// history. Zero references belong to no history.
+func (r NodeRef) SameHistory(other NodeRef) bool {
+	return r.owner != nil && r.owner == other.owner
+}
+
 // NodeInfo is a value copy. Root has no event time or save metadata.
 // Zero child/sibling IDs mean absent, while Parent == 0 names the retained root.
 type NodeInfo struct {

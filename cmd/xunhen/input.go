@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"unicode/utf8"
 
+	"github.com/nuggocto/xunhen/internal/history"
 	"github.com/nuggocto/xunhen/internal/limits"
 	"github.com/nuggocto/xunhen/internal/undofile"
 )
@@ -146,4 +147,50 @@ func changedFile(before, after os.FileInfo) bool {
 	left, lok := before.Sys().(*syscall.Stat_t)
 	right, rok := after.Sys().(*syscall.Stat_t)
 	return lok && rok && left.Ctim != right.Ctim
+}
+
+// recoverStates validates the history and resolves every selector before it
+// reads the base, so an unknown node fails without touching the base file.
+// Each state is replayed from the verified reference in a fresh workspace.
+func recoverStates(ctx context.Context, undoPath, basePath string, nodes []history.NodeID, lim limits.Limits) ([]*history.Snapshot, error) {
+	file, err := loadUndo(ctx, undoPath, lim)
+	if err != nil {
+		return nil, err
+	}
+
+	h, err := history.New(ctx, file, lim)
+	if err != nil {
+		return nil, err
+	}
+
+	refs := make([]history.NodeRef, len(nodes))
+	for i, id := range nodes {
+		if refs[i], err = h.Lookup(id); err != nil {
+			return nil, err
+		}
+	}
+
+	lines, err := loadBase(ctx, basePath, lim)
+	if err != nil {
+		return nil, err
+	}
+
+	base, err := undofile.VerifyBase(ctx, file, basePath, lines, lim)
+	if err != nil {
+		return nil, err
+	}
+
+	reconstructor, err := history.Bind(h, base, lim)
+	if err != nil {
+		return nil, err
+	}
+
+	states := make([]*history.Snapshot, len(refs))
+	for i, ref := range refs {
+		if states[i], err = reconstructor.Reconstruct(ctx, ref); err != nil {
+			return nil, err
+		}
+	}
+
+	return states, nil
 }

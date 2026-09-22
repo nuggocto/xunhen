@@ -14,31 +14,23 @@ import (
 	"github.com/nuggocto/xunhen/internal/limits"
 )
 
-func TestShowArguments(t *testing.T) {
+func TestShowExportPolicyArguments(t *testing.T) {
 	t.Parallel()
 
-	// Every invalid case fails before a file is opened, so the paths are fake.
+	// Every case fails before a file is opened, so the paths are fake.
 	args := func(extra ...string) []string {
-		return append([]string{"show", "--undo", "file", "--base", "base"}, extra...)
+		return append([]string{"show", "--undo", "file", "--base", "base", "--node", "0"}, extra...)
 	}
 
 	tests := []struct {
 		name, diagnostic string
 		args             []string
-		status           int
 	}{
-		{name: "help", args: []string{"show", "--help"}},
-		{name: "missing base", args: []string{"show", "--undo", "file", "--node", "0"}, status: 2},
-		{name: "missing node", args: args(), status: 2},
-		{name: "negative node", args: args("--node", "-1"), status: 2},
-		{name: "signed node", args: args("--node", "+1"), status: 2},
-		{name: "node overflow", args: args("--node", "2147483648"), status: 2, diagnostic: "supported ID range"},
-		{name: "duplicate node", args: args("--node", "0", "--node", "1"), status: 2, diagnostic: "only once"},
-		{name: "raw without policy", args: args("--node", "0", "--raw"), status: 2},
-		{name: "policy without raw", args: args("--node", "0", "--final-newline=omit"), status: 2},
-		{name: "invalid policy", args: args("--node", "0", "--raw", "--final-newline=auto"), status: 2},
-		{name: "empty policy without raw", args: args("--node", "0", "--final-newline="), status: 2},
-		{name: "help among other flags", args: args("--help"), status: 2, diagnostic: "must be used alone"},
+		{name: "raw without policy", args: args("--raw"), diagnostic: "--raw requires"},
+		{name: "policy without raw", args: args("--final-newline=omit"), diagnostic: "requires --raw"},
+		{name: "invalid policy", args: args("--raw", "--final-newline=auto"), diagnostic: "include or omit"},
+		{name: "empty policy without raw", args: args("--final-newline="), diagnostic: "include or omit"},
+		{name: "duplicate policy", args: args("--raw", "--final-newline=omit", "--final-newline=omit"), diagnostic: "only once"},
 	}
 
 	for _, tt := range tests {
@@ -46,17 +38,11 @@ func TestShowArguments(t *testing.T) {
 			t.Parallel()
 
 			var out, diagnostic bytes.Buffer
-			status := run(t.Context(), tt.args, &out, &diagnostic)
-			if status != tt.status {
-				t.Fatalf("status = %d, want %d; stderr = %q", status, tt.status, diagnostic.String())
+			if status := run(t.Context(), tt.args, &out, &diagnostic); status != exitUsage {
+				t.Fatalf("status = %d, want %d; stderr = %q", status, exitUsage, diagnostic.String())
 			}
-
-			if tt.status == 0 {
-				assertOutput(t, "help", out.String(), "Usage: xunhen show")
-				return
-			}
-			if out.Len() != 0 || diagnostic.Len() == 0 || !strings.Contains(diagnostic.String(), tt.diagnostic) {
-				t.Fatalf("invalid invocation: stdout %q, stderr %q", out.String(), diagnostic.String())
+			if out.Len() != 0 || !strings.Contains(diagnostic.String(), tt.diagnostic) {
+				t.Fatalf("stdout %q, stderr %q; want a diagnostic containing %q", out.String(), diagnostic.String(), tt.diagnostic)
 			}
 		})
 	}

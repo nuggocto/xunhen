@@ -34,6 +34,9 @@ func TestFiniteBudgets(t *testing.T) {
 		{"excess options", func(l *limits.Limits) { l.OptionalBytes++ }, false},
 		{"negative text budget", func(l *limits.Limits) { l.TextBytes = -1 }, false},
 		{"excess output", func(l *limits.Limits) { l.OutputBytes++ }, false},
+		{"unlimited diff workspace", func(l *limits.Limits) { l.DiffWorkspaceBytes = 0 }, false},
+		{"excess diff steps", func(l *limits.Limits) { l.DiffSteps++ }, false},
+		{"negative diff comparison budget", func(l *limits.Limits) { l.DiffCompareBytes = -1 }, false},
 	}
 
 	for _, tt := range tests {

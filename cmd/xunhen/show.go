@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strconv"
 	"strings"
 	"syscall"
 	"unicode/utf8"
@@ -14,7 +13,6 @@ import (
 	"github.com/nuggocto/xunhen/internal/history"
 	"github.com/nuggocto/xunhen/internal/limits"
 	"github.com/nuggocto/xunhen/internal/termtext"
-	"github.com/nuggocto/xunhen/internal/undofile"
 )
 
 const showHelp = `Usage: xunhen show --undo PATH --base PATH --node ID [--raw --final-newline=include|omit]
@@ -69,10 +67,11 @@ func show(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	}
 
 	lim := limits.Default()
-	snapshot, err := recoverState(ctx, options, lim)
+	states, err := recoverStates(ctx, options.undo, options.base, []history.NodeID{options.node}, lim)
 	if err != nil {
 		return operationError(stderr, err)
 	}
+	snapshot := states[0]
 
 	text, err := showText(ctx, snapshot, options, lim.OutputBytes)
 	if err != nil {
@@ -88,19 +87,9 @@ func parseShowArgs(args []string) (showOptions, error) {
 	flags := newFlags("show")
 	flags.BoolVar(&options.raw, "raw", false, "raw export")
 
-	flags.Func("undo", "undo-file path", once("undo", func(value string) error {
-		options.undo = value
-		return nil
-	}))
-	flags.Func("base", "base-file path", once("base", func(value string) error {
-		options.base = value
-		return nil
-	}))
-	flags.Func("node", "node ID", once("node", func(value string) (err error) {
-		options.node, err = parseNode(value)
-		options.hasNode = err == nil
-		return err
-	}))
+	pathFlag(flags, "undo", &options.undo)
+	pathFlag(flags, "base", &options.base)
+	nodeFlag(flags, "node", &options.node, &options.hasNode)
 	flags.Func("final-newline", "include or omit", once("final-newline", func(value string) error {
 		if value != "include" && value != "omit" {
 			return errors.New("--final-newline must be include or omit")
@@ -123,55 +112,6 @@ func parseShowArgs(args []string) (showOptions, error) {
 	}
 
 	return options, nil
-}
-
-// parseNode accepts plain decimal digits only: no sign, prefix, or separator.
-func parseNode(value string) (history.NodeID, error) {
-	id, err := strconv.ParseUint(value, 10, 31)
-	if errors.Is(err, strconv.ErrRange) {
-		return 0, errors.New("--node exceeds the supported ID range")
-	}
-	if err != nil {
-		return 0, errors.New("--node requires a non-negative decimal ID")
-	}
-
-	return history.NodeID(id), nil
-}
-
-// recoverState validates the history, then binds a matching base, before any
-// text is replayed.
-func recoverState(ctx context.Context, options showOptions, lim limits.Limits) (*history.Snapshot, error) {
-	file, err := loadUndo(ctx, options.undo, lim)
-	if err != nil {
-		return nil, err
-	}
-
-	h, err := history.New(ctx, file, lim)
-	if err != nil {
-		return nil, err
-	}
-
-	ref, err := h.Lookup(options.node)
-	if err != nil {
-		return nil, err
-	}
-
-	lines, err := loadBase(ctx, options.base, lim)
-	if err != nil {
-		return nil, err
-	}
-
-	base, err := undofile.VerifyBase(ctx, file, options.base, lines, lim)
-	if err != nil {
-		return nil, err
-	}
-
-	reconstructor, err := history.Bind(h, base, lim)
-	if err != nil {
-		return nil, err
-	}
-
-	return reconstructor.Reconstruct(ctx, ref)
 }
 
 // TCGETS checks the descriptor, so /dev/null is not mistaken for a terminal.

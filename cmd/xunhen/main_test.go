@@ -54,6 +54,11 @@ func TestExecutable(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Relative to the command's directory, this name looks like an option.
+	if err := os.WriteFile(filepath.Join(dir, "-x.undo"), undo, 0444); err != nil {
+		t.Fatal(err)
+	}
+
 	corruptPath := filepath.Join(dir, "corrupt.undo")
 	if err := os.WriteFile(corruptPath, undo[:len(undo)-1], 0444); err != nil {
 		t.Fatal(err)
@@ -66,11 +71,13 @@ func TestExecutable(t *testing.T) {
 		out          string
 		err          string
 		closedStdout bool
+		exact        bool // stdout must equal out rather than contain it
+		stdoutFile   bool // redirect stdout to a regular file
 	}{
 		{name: "help", args: []string{"--help"}, out: "Usage:"},
 		{name: "stamped version", args: []string{"--version"}, out: "xunhen v0.0.0-test\n"},
 		{name: "invalid invocation", args: []string{"unknown"}, status: 2, err: "unknown command"},
-		{name: "unavailable operation", args: []string{"diff"}, status: 1, err: "not available"},
+		{name: "unavailable operation", args: []string{"browse"}, status: 1, err: "not available"},
 		{
 			name: "inspection without source or editor",
 			args: []string{"inspect", "--undo", undoPath},
@@ -87,6 +94,36 @@ func TestExecutable(t *testing.T) {
 			status:       1,
 			err:          "cannot write output",
 			closedStdout: true,
+		},
+		{
+			name:  "compare abandoned experiment with chosen fix",
+			args:  []string{"diff", "--undo", undoPath, "--base", basePath, "--from", "2", "--to", "3"},
+			out:   experimentAgainstChoice,
+			exact: true,
+		},
+		{
+			name:         "comparison with closed output pipe",
+			args:         []string{"diff", "--undo", undoPath, "--base", basePath, "--from", "2", "--to", "3"},
+			status:       1,
+			err:          "cannot write output",
+			closedStdout: true,
+		},
+		{
+			name:       "raw export redirected to a file",
+			args:       []string{"show", "--undo", undoPath, "--base", basePath, "--node", "2", "--raw", "--final-newline=omit"},
+			out:        "package sample\n\nfunc experiment() int { return 42 }",
+			exact:      true,
+			stdoutFile: true,
+		},
+		{
+			name: "separate path that looks like an option",
+			args: []string{"inspect", "--undo", "-x.undo"},
+			out:  "History: \"-x.undo\"",
+		},
+		{
+			name: "attached path that looks like an option",
+			args: []string{"diff", "--undo=-x.undo", "--base", basePath, "--from", "2", "--to", "3"},
+			out:  experimentAgainstChoice,
 		},
 		{
 			name:   "truncated inspection",
@@ -123,6 +160,16 @@ func TestExecutable(t *testing.T) {
 				command.Stdout = writer
 			}
 
+			var redirected *os.File
+			if tt.stdoutFile {
+				var err error
+				if redirected, err = os.Create(filepath.Join(t.TempDir(), "stdout")); err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { _ = redirected.Close() })
+				command.Stdout = redirected
+			}
+
 			err := command.Run()
 			var exitErr *exec.ExitError
 			if err != nil && !errors.As(err, &exitErr) {
@@ -132,10 +179,29 @@ func TestExecutable(t *testing.T) {
 				t.Fatalf("exit status = %d, want %d; stderr = %q", status, tt.status, stderr.String())
 			}
 
-			assertOutput(t, "stdout", stdout.String(), tt.out)
+			got := stdout.String()
+			if redirected != nil {
+				data, err := os.ReadFile(redirected.Name())
+				if err != nil {
+					t.Fatal(err)
+				}
+				got = string(data)
+			}
+
+			if tt.exact && got != tt.out {
+				t.Fatalf("stdout = %q, want %q", got, tt.out)
+			}
+			assertOutput(t, "stdout", got, tt.out)
 			assertOutput(t, "stderr", stderr.String(), tt.err)
 		})
 	}
+
+	t.Run("output independent of time zone and locale", func(t *testing.T) {
+		checkLocaleIndependence(t, ctx, binary, dir, [][]string{
+			{"inspect", "--undo", undoPath},
+			{"diff", "--undo", undoPath, "--base", basePath, "--from", "3", "--to", "2"},
+		})
+	})
 
 	after, err := os.ReadFile(undoPath)
 	if err != nil || !bytes.Equal(undo, after) {
@@ -149,6 +215,35 @@ func TestExecutable(t *testing.T) {
 	t.Run("interrupt while stdout is blocked", func(t *testing.T) {
 		checkBlockedOutputInterrupt(t, binary, dir)
 	})
+}
+
+// checkLocaleIndependence runs each command under two environments and
+// requires byte-identical results. Times print as Unix seconds, so neither the
+// zone nor the locale may change them.
+func checkLocaleIndependence(t *testing.T, ctx context.Context, binary, dir string, commands [][]string) {
+	t.Helper()
+
+	environments := [][]string{
+		{"PATH=", "HOME=" + dir, "LC_ALL=C", "TZ=UTC"},
+		{"PATH=", "HOME=" + dir, "LC_ALL=fr_FR.UTF-8", "LANG=ja_JP.UTF-8", "TZ=Asia/Tokyo"},
+	}
+
+	for _, args := range commands {
+		var outputs []string
+		for _, env := range environments {
+			command := exec.CommandContext(ctx, binary, args...)
+			command.Env = env
+			out, err := command.Output()
+			if err != nil {
+				t.Fatalf("%s: %v", args[0], err)
+			}
+			outputs = append(outputs, string(out))
+		}
+
+		if outputs[0] != outputs[1] || outputs[0] == "" {
+			t.Fatalf("%s output depends on its environment:\n%s\n---\n%s", args[0], outputs[0], outputs[1])
+		}
+	}
 }
 
 func checkBlockedOutputInterrupt(t *testing.T, binary, dir string) {

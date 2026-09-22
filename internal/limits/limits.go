@@ -1,4 +1,5 @@
-// Package limits defines finite budgets for loading and recovering one history.
+// Package limits defines finite budgets for loading, recovering, and comparing
+// states of one history.
 package limits
 
 import "fmt"
@@ -20,6 +21,14 @@ type Limits struct {
 	ReplayHeaders int
 	ReplayEntries int
 	ReplayMoves   int
+
+	// Diff budgets count the units defined in docs/diff.md: workspace bytes for
+	// identifiers, lookup-table entries, and stored search rounds; steps for
+	// diagonals visited and matched lines followed; compared bytes for line
+	// bytes read while trimming and identifying.
+	DiffWorkspaceBytes int
+	DiffSteps          int
+	DiffCompareBytes   int
 }
 
 // Default returns the command budgets documented in docs/undo-format.md.
@@ -39,6 +48,10 @@ func Default() Limits {
 		ReplayHeaders: 200_000,
 		ReplayEntries: 1_000_000,
 		ReplayMoves:   8_000_000,
+
+		DiffWorkspaceBytes: 32 << 20,
+		DiffSteps:          10_000_000,
+		DiffCompareBytes:   256 << 20,
 	}
 }
 
@@ -64,6 +77,9 @@ func (l Limits) Validate() error {
 		{"replay headers", int64(l.ReplayHeaders), int64(ceiling.ReplayHeaders)},
 		{"replay entries", int64(l.ReplayEntries), int64(ceiling.ReplayEntries)},
 		{"replay line moves", int64(l.ReplayMoves), int64(ceiling.ReplayMoves)},
+		{"diff workspace bytes", int64(l.DiffWorkspaceBytes), int64(ceiling.DiffWorkspaceBytes)},
+		{"diff steps", int64(l.DiffSteps), int64(ceiling.DiffSteps)},
+		{"diff compared bytes", int64(l.DiffCompareBytes), int64(ceiling.DiffCompareBytes)},
 	}
 
 	for _, bound := range bounds {

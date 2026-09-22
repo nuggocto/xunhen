@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strings"
 
 	"github.com/nuggocto/xunhen/internal/history"
 	"github.com/nuggocto/xunhen/internal/limits"
@@ -76,10 +75,7 @@ func parseInspectArgs(args []string) (string, error) {
 	flags := newFlags("inspect")
 
 	var path string
-	flags.Func("undo", "undo-file path", once("undo", func(value string) error {
-		path = value
-		return nil
-	}))
+	pathFlag(flags, "undo", &path)
 
 	if err := parseFlags(flags, args); err != nil {
 		return "", err
@@ -112,7 +108,7 @@ func inspectionText(ctx context.Context, path string, h *history.History, maxByt
 		return "", err
 	}
 
-	out := inspectionOutput{ctx: ctx, maxBytes: maxBytes}
+	out := boundedOutput{ctx: ctx, maxBytes: maxBytes}
 	out.line("History: \"%s\"\n", label)
 	out.line("Format: Neovim undo %d\n", meta.Format.Version)
 	out.line("Decode profile: %s (assumed; producer ABI is not recorded)\n", meta.Format.Profile)
@@ -149,14 +145,7 @@ func inspectionText(ctx context.Context, path string, h *history.History, maxByt
 		out.node(info)
 	}
 
-	if out.err != nil {
-		return "", out.err
-	}
-	if err := ctx.Err(); err != nil {
-		return "", err
-	}
-
-	return out.text.String(), nil
+	return out.result()
 }
 
 func saveLabel(save undofile.SaveNumber) string {
@@ -170,32 +159,8 @@ func saveLabel(save undofile.SaveNumber) string {
 	return fmt.Sprint(save.Value)
 }
 
-type inspectionOutput struct {
-	ctx      context.Context
-	text     strings.Builder
-	maxBytes int
-	err      error
-}
-
-func (o *inspectionOutput) line(format string, args ...any) {
-	if o.err != nil {
-		return
-	}
-	if o.err = o.ctx.Err(); o.err != nil {
-		return
-	}
-
-	// Arguments are bounded scalars or an already bounded, escaped path.
-	line := fmt.Sprintf(format, args...)
-	if len(line) > o.maxBytes-o.text.Len() {
-		o.err = errors.New("inspection exceeds output byte budget")
-		return
-	}
-
-	o.text.WriteString(line)
-}
-
-func (o *inspectionOutput) node(info history.NodeInfo) {
+// node renders one validated node. Its fields are bounded scalars.
+func (o *boundedOutput) node(info history.NodeInfo) {
 	if !info.HasEvent {
 		o.line("node 0: retained root; preferred-child=%d; time=unavailable; save=unavailable\n",
 			info.PreferredChild)

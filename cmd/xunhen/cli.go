@@ -6,7 +6,10 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"strconv"
+	"strings"
 
+	"github.com/nuggocto/xunhen/internal/history"
 	"github.com/nuggocto/xunhen/internal/limits"
 	"github.com/nuggocto/xunhen/internal/termtext"
 )
@@ -26,18 +29,19 @@ Usage:
   xunhen version
   xunhen inspect --undo PATH
   xunhen show --undo PATH --base PATH --node ID [--raw --final-newline=include|omit]
+  xunhen diff --undo PATH --base PATH --from ID --to ID
 
 Available commands:
   help       Show help
   version    Show version and build information
   inspect    Describe an undo history
   show       Reconstruct a retained state
-
-Planned commands (not available in this build):
   diff       Compare two retained states
+
+Planned command (not available in this build):
   browse     Explore a history in the terminal
 
-This development build provides history inspection and state recovery.
+This development build inspects histories, recovers states, and compares them.
 `
 
 const versionHelp = "Usage: xunhen version\nShow version and build information.\n"
@@ -49,6 +53,7 @@ var commandHelp = map[string]string{
 	"version": versionHelp,
 	"inspect": inspectHelp,
 	"show":    showHelp,
+	"diff":    diffHelp,
 }
 
 func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
@@ -77,7 +82,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		if text, ok := commandHelp[args[1]]; ok {
 			return writeOutput(stdout, stderr, text)
 		}
-		if args[1] == "diff" || args[1] == "browse" {
+		if args[1] == "browse" {
 			return writeOutput(stdout, stderr, args[1]+" is planned and not available in this build.\n")
 		}
 		return diagnostic(stderr, exitUsage, "unknown command; see 'xunhen --help'")
@@ -92,8 +97,10 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return inspect(ctx, args[1:], stdout, stderr)
 	case "show":
 		return show(ctx, args[1:], stdout, stderr)
+	case "diff":
+		return compareStates(ctx, args[1:], stdout, stderr)
 
-	case "diff", "browse":
+	case "browse":
 		// Future command arguments are deliberately not parsed or opened yet.
 		return diagnostic(stderr, exitFailure, args[0]+" is not available in this build")
 
@@ -159,6 +166,71 @@ func parseFlags(flags *flag.FlagSet, args []string) error {
 	}
 
 	return err
+}
+
+// boundedOutput collects a command's whole result before anything is written,
+// so a budget or cancellation failure never leaves output that looks complete.
+type boundedOutput struct {
+	ctx      context.Context
+	text     strings.Builder
+	maxBytes int
+	err      error
+}
+
+// line appends formatted text. Callers pass bounded scalars or text that is
+// already escaped and bounded.
+func (o *boundedOutput) line(format string, args ...any) {
+	if o.err != nil {
+		return
+	}
+	if o.err = o.ctx.Err(); o.err != nil {
+		return
+	}
+
+	line := fmt.Sprintf(format, args...)
+	if len(line) > o.maxBytes-o.text.Len() {
+		o.err = errors.New("output exceeds its byte budget")
+		return
+	}
+
+	o.text.WriteString(line)
+}
+
+// result returns the collected text, or the first failure.
+func (o *boundedOutput) result() (string, error) {
+	if o.err != nil {
+		return "", o.err
+	}
+	if err := o.ctx.Err(); err != nil {
+		return "", err
+	}
+
+	return o.text.String(), nil
+}
+
+// pathFlag registers a path flag that may be given once.
+func pathFlag(flags *flag.FlagSet, name string, path *string) {
+	flags.Func(name, name+" path", once(name, func(value string) error {
+		*path = value
+		return nil
+	}))
+}
+
+// nodeFlag registers a node selector that may be given once. It accepts plain
+// decimal digits only: no sign, prefix, or separator.
+func nodeFlag(flags *flag.FlagSet, name string, id *history.NodeID, set *bool) {
+	flags.Func(name, "node ID", once(name, func(value string) error {
+		n, err := strconv.ParseUint(value, 10, 31)
+		if errors.Is(err, strconv.ErrRange) {
+			return fmt.Errorf("--%s exceeds the supported ID range", name)
+		}
+		if err != nil {
+			return fmt.Errorf("--%s requires a non-negative decimal ID", name)
+		}
+
+		*id, *set = history.NodeID(n), true
+		return nil
+	}))
 }
 
 // once wraps a flag setter so that repeating the flag is a usage error.

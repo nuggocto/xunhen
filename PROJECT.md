@@ -759,21 +759,21 @@ compare retained alternatives before the TUI exists.
 
 #### 4.1 Implement line diffs
 
-- [ ] Implement the documented line-diff algorithm with checked workspace, comparison-work, and output budgets.
-- [ ] Define structured hunks, context-line rules, and final-newline reporting without conflating display escaping with text equality.
-- [ ] Handle identical states, empty inputs, repeated lines, large changes, and long lines deterministically.
-- [ ] Verify that applying completed hunks reconstructs the right-hand input; use independently known small examples for hunk semantics.
-- [ ] Exercise budget exhaustion and cancellation without emitting a completed-looking truncated diff.
+- [x] Implement the documented line-diff algorithm with checked workspace, comparison-work, and output budgets.
+- [x] Define structured hunks, context-line rules, and final-newline reporting without conflating display escaping with text equality.
+- [x] Handle identical states, empty inputs, repeated lines, large changes, and long lines deterministically.
+- [x] Verify that applying completed hunks reconstructs the right-hand input; use independently known small examples for hunk semantics.
+- [x] Exercise budget exhaustion and cancellation without emitting a completed-looking truncated diff.
 
 #### 4.2 Finish the CLI contract
 
-- [ ] Implement `diff --from --to` and reject invalid or foreign-history selections.
-- [ ] Apply the same argument validation, help, diagnostics, and exit-status rules across `inspect`, `show`, and `diff`.
-- [ ] Verify redirected output, closed pipes, interrupted work, paths with spaces, and filenames that resemble options.
-- [ ] Make plain output deterministic enough for scripts; keep timestamps/time zones explicit and presentation independent of locale surprises.
-- [ ] Verify the executable works when `nvim` and `git` are absent from `PATH`.
+- [x] Implement `diff --from --to` and reject invalid or foreign-history selections.
+- [x] Apply the same argument validation, help, diagnostics, and exit-status rules across `inspect`, `show`, and `diff`.
+- [x] Verify redirected output, closed pipes, interrupted work, paths with spaces, and filenames that resemble options.
+- [x] Make plain output deterministic enough for scripts; keep timestamps/time zones explicit and presentation independent of locale surprises.
+- [x] Verify the executable works when `nvim` and `git` are absent from `PATH`.
 
-- [ ] **Phase 4 complete:** the CLI can reproduce a documented inspect/recover/compare session with correct output and exit behavior, including failures.
+- [x] **Phase 4 complete:** the CLI can reproduce a documented inspect/recover/compare session with correct output and exit behavior, including failures.
 
 ### Phase 5 — History discovery and input lifecycle
 
