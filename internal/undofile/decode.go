@@ -190,11 +190,11 @@ func (d *decoder) i64(field string) int64 {
 	return int64(binary.BigEndian.Uint64(b[:]))
 }
 
-func (d *decoder) count(field string, max int) int {
+func (d *decoder) count(field string, limit int) int {
 	offset := d.offset
 	n := d.nonnegative(field)
-	if int64(n) > int64(max) {
-		d.fail(Limit, offset, field, fmt.Sprintf("count exceeds budget %d", max))
+	if int64(n) > int64(limit) {
+		d.fail(Limit, offset, field, fmt.Sprintf("count exceeds budget %d", limit))
 	}
 	if d.err != nil {
 		return 0

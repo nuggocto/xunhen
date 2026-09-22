@@ -583,7 +583,7 @@ func FuzzHistory(f *testing.F) {
 		}
 
 		seen := make(map[history.NodeID]bool)
-		for i := 0; i < h.Count(); i++ {
+		for i := range h.Count() {
 			ref, err := h.At(i)
 			if err != nil {
 				t.Fatal(err)

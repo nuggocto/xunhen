@@ -93,7 +93,7 @@ The command prints a unified diff with three lines of context:
 +++ node 3
 @@ -1,3 +1,3 @@
  package sample
-
+ 
 -func experiment() int { return 42 }
 +func chosen() int { return 1 }
 ```

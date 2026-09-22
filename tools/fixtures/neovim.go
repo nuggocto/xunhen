@@ -42,7 +42,7 @@ func resolveProducer(path string) (string, error) {
 		return "", err
 	}
 	if digest(binary) != producerDigest {
-		return "", errors.New("Neovim executable does not match the pinned producer SHA-256")
+		return "", errors.New("the Neovim executable does not match the pinned producer SHA-256")
 	}
 	return resolved, nil
 }
@@ -103,7 +103,7 @@ func invoke(parent context.Context, nvim, dir string, args ...string) (string, e
 	cmd.Stderr = &output
 
 	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("Neovim failed: %w; output: %q", err, output.String())
+		return "", fmt.Errorf("run Neovim: %w; output: %q", err, output.String())
 	}
 	return output.String(), nil
 }

@@ -225,7 +225,7 @@ func checkDiff(t *testing.T, left, right []string, hunks []diff.Hunk) {
 	}
 
 	result = append(result, left[cursor:]...)
-	if !slices.Equal(result, right) && !(len(result) == 0 && len(right) == 0) {
+	if !slices.Equal(result, right) {
 		t.Fatalf("%q -> %q: applying hunks gave %q", left, right, result)
 	}
 	if want := len(left) + len(right) - 2*lcs(left, right); edits != want {
@@ -261,8 +261,8 @@ func checkContext(t *testing.T, ops []diff.Op) {
 }
 
 func lastChange(ops []diff.Op) int {
-	for i := len(ops) - 1; i >= 0; i-- {
-		if ops[i] != diff.Equal {
+	for i, op := range slices.Backward(ops) {
+		if op != diff.Equal {
 			return i
 		}
 	}

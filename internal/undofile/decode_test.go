@@ -234,7 +234,7 @@ func TestDecodeTruncations(t *testing.T) {
 
 			// Every byte cut includes partial scalars, strings, native bodies,
 			// and missing list terminators. A complete prefix is never success.
-			for cut := range len(data) {
+			for cut := range data {
 				file, err := undofile.Decode(t.Context(), name, bytes.NewReader(data[:cut]), limits.Default())
 
 				var problem *undofile.InputError

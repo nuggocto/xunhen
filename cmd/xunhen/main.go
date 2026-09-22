@@ -1,3 +1,5 @@
+// Command xunhen inspects Neovim undo histories, recovers retained states, and
+// compares them. It reads its inputs and never modifies them.
 package main
 
 import (

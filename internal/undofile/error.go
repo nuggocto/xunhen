@@ -5,6 +5,7 @@ import "fmt"
 // ErrorKind distinguishes input failures without matching diagnostic text.
 type ErrorKind string
 
+// Input error kinds. Each value doubles as the text shown in diagnostics.
 const (
 	Truncated   ErrorKind = "truncated input"
 	Invalid     ErrorKind = "invalid input"

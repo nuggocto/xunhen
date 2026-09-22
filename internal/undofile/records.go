@@ -100,6 +100,7 @@ func (e Entry) Line(index int) (string, bool) {
 // ExtmarkKind identifies the two native records serialized by this producer.
 type ExtmarkKind uint8
 
+// Native extmark record types, numbered as the producer serializes them.
 const (
 	Splice ExtmarkKind = iota
 	Move

@@ -63,7 +63,7 @@ go run ./cmd/xunhen diff --undo testdata/undo/abandoned-branch/history.undo --ba
 +++ node 3
 @@ -1,3 +1,3 @@
  package sample
-
+ 
 -func experiment() int { return 42 }
 +func chosen() int { return 1 }
 ```

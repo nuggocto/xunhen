@@ -197,7 +197,7 @@ func TestExecutable(t *testing.T) {
 	}
 
 	t.Run("output independent of time zone and locale", func(t *testing.T) {
-		checkLocaleIndependence(t, ctx, binary, dir, [][]string{
+		checkLocaleIndependence(t, binary, dir, [][]string{
 			{"inspect", "--undo", undoPath},
 			{"diff", "--undo", undoPath, "--base", basePath, "--from", "3", "--to", "2"},
 		})
@@ -219,8 +219,9 @@ func TestExecutable(t *testing.T) {
 
 // checkLocaleIndependence runs each command under two environments and
 // requires byte-identical results. Times print as Unix seconds, so neither the
-// zone nor the locale may change them.
-func checkLocaleIndependence(t *testing.T, ctx context.Context, binary, dir string, commands [][]string) {
+// zone nor the locale may change them. Each run gets its own deadline, so a
+// stalled command fails this check instead of waiting for the test timeout.
+func checkLocaleIndependence(t *testing.T, binary, dir string, commands [][]string) {
 	t.Helper()
 
 	environments := [][]string{
@@ -228,16 +229,23 @@ func checkLocaleIndependence(t *testing.T, ctx context.Context, binary, dir stri
 		{"PATH=", "HOME=" + dir, "LC_ALL=fr_FR.UTF-8", "LANG=ja_JP.UTF-8", "TZ=Asia/Tokyo"},
 	}
 
+	output := func(args, env []string) string {
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+		defer cancel()
+
+		command := exec.CommandContext(ctx, binary, args...)
+		command.Env = env
+		out, err := command.Output()
+		if err != nil {
+			t.Fatalf("%s: %v", args[0], err)
+		}
+		return string(out)
+	}
+
 	for _, args := range commands {
 		var outputs []string
 		for _, env := range environments {
-			command := exec.CommandContext(ctx, binary, args...)
-			command.Env = env
-			out, err := command.Output()
-			if err != nil {
-				t.Fatalf("%s: %v", args[0], err)
-			}
-			outputs = append(outputs, string(out))
+			outputs = append(outputs, output(args, env))
 		}
 
 		if outputs[0] != outputs[1] || outputs[0] == "" {

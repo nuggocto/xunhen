@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 
 	"github.com/nuggocto/xunhen/internal/diff"
 	"github.com/nuggocto/xunhen/internal/history"
@@ -126,7 +127,7 @@ func hunkRange(start, count int) string {
 	case 0:
 		return fmt.Sprintf("%d,0", start)
 	case 1:
-		return fmt.Sprint(start + 1)
+		return strconv.Itoa(start + 1)
 	default:
 		return fmt.Sprintf("%d,%d", start+1, count)
 	}

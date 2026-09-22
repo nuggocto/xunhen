@@ -3,8 +3,8 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
+	"strconv"
 
 	"github.com/nuggocto/xunhen/internal/history"
 	"github.com/nuggocto/xunhen/internal/limits"
@@ -156,7 +156,7 @@ func saveLabel(save undofile.SaveNumber) string {
 		return "none"
 	}
 
-	return fmt.Sprint(save.Value)
+	return strconv.Itoa(int(save.Value))
 }
 
 // node renders one validated node. Its fields are bounded scalars.

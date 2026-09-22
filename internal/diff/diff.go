@@ -19,6 +19,7 @@ const ContextLines = 3
 // Op says how a line takes part in the comparison.
 type Op uint8
 
+// Line operations, in the order a unified diff prefixes them: " ", "-", "+".
 const (
 	Equal Op = iota
 	Delete
