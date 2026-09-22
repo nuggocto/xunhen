@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"os/signal"
 	"syscall"
@@ -9,5 +10,7 @@ import (
 func main() {
 	// Report closed output pipes through the same error path as other writes.
 	signal.Ignore(syscall.SIGPIPE)
-	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
+	// No background work needs joining. Keep SIGINT's default disposition so
+	// a blocked stdout write does not swallow interrupts.
+	os.Exit(run(context.Background(), os.Args[1:], os.Stdout, os.Stderr))
 }

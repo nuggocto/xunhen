@@ -180,6 +180,15 @@
         "initial.bin": "f5c962601b413ccda2fc14d64d98479d9fc74c90c2dde15f25ee9922e57f5074",
         "oracle.json": "5bb7475765521b16b87177a2b89ee9c6cf4634d15ee556863bb95401a18f5ba9"
       }
+    },
+    {
+      "name": "intermediate-branch",
+      "sha256": {
+        "base.bin": "d67f542be042885e4268a1c670f058a103e6ff52a3a8d36c194453cb9260eaed",
+        "history.undo": "931fe54dea93d31f2d67f8713c2631afe6bdfa97940aecf4c44edf1565dff2fb",
+        "initial.bin": "4a6689419b00b11700c9b6246bcfa8936c8f5e1e824db3a7e57030e2d1c1a684",
+        "oracle.json": "70994ca8a04c7a456cf015340449ec5114fcc737f13ce37980f9ae51adacd904"
+      }
     }
   ]
 }

@@ -705,29 +705,29 @@ when their source text is missing.
 
 #### 2.1 Implement the decoder boundary
 
-- [ ] Open regular-file inputs read-only; implement a bounded reader with precise offset tracking and checked integer conversions.
-- [ ] Recognize the envelope, reject unsupported formats/features, and dispatch to isolated version-specific decoding code.
-- [ ] Validate lengths and counts before allocation, including cumulative payload and record budgets.
-- [ ] Return contextual typed errors for truncation, invalid records, unsupported interpretation, and exhausted limits.
-- [ ] Keep header-only diagnostic information separate from successfully decoded records.
+- [x] Open regular-file inputs read-only; implement a bounded reader with precise offset tracking and checked integer conversions.
+- [x] Recognize the envelope, reject unsupported formats/features, and dispatch to isolated version-specific decoding code.
+- [x] Validate lengths and counts before allocation, including cumulative payload and record budgets.
+- [x] Return contextual typed errors for truncation, invalid records, unsupported interpretation, and exhausted limits.
+- [x] Keep header-only diagnostic information separate from successfully decoded records.
 
 #### 2.2 Construct the history model
 
-- [ ] Translate supported wire records into documented normalized meanings; keep wire types private.
-- [ ] Build private node storage, history-scoped IDs/references, and immutable lookup/navigation indexes.
-- [ ] Reject duplicate identities, dangling links, invalid ancestry, and unexplained disconnected nodes with iterative bounded validation.
-- [ ] Preserve recorded ordering and optional timestamps without assuming clock order defines ancestry.
-- [ ] Make unsupported zero values and foreign-history references return errors at public operation boundaries.
+- [x] Translate supported wire records into documented normalized meanings; keep wire types private.
+- [x] Build private node storage, history-scoped IDs/references, and immutable lookup/navigation indexes.
+- [x] Reject duplicate identities, dangling links, invalid ancestry, and unexplained disconnected nodes with iterative bounded validation.
+- [x] Preserve recorded ordering and optional timestamps without assuming clock order defines ancestry.
+- [x] Make unsupported zero values and foreign-history references return errors at public operation boundaries.
 
 #### 2.3 Deliver the inspector
 
-- [ ] Implement `inspect --undo` with deterministic node selectors, readable relationships, format information, and metadata-availability labels.
-- [ ] Escape untrusted filenames, metadata, and error context before terminal output.
-- [ ] Verify known fixture graphs and errors for representative truncations, oversized fields, broken links, and unknown format markers.
-- [ ] Add bounded decoder/graph fuzz targets and retain any discovered regressions as small synthetic cases.
-- [ ] Check that inspection leaves input contents unchanged and works without source text or Neovim installed.
+- [x] Implement `inspect --undo` with deterministic node selectors, readable relationships, format information, and metadata-availability labels.
+- [x] Escape untrusted filenames, metadata, and error context before terminal output.
+- [x] Verify known fixture graphs and errors for representative truncations, oversized fields, broken links, and unknown format markers.
+- [x] Add bounded decoder/graph fuzz targets and retain any discovered regressions as small synthetic cases.
+- [x] Check that inspection leaves input contents unchanged and works without source text or Neovim installed.
 
-- [ ] **Phase 2 complete:** the inspector reports the reference histories correctly and rejects malformed input without panics or presenting partial graphs as valid.
+- [x] **Phase 2 complete:** the inspector reports the reference histories correctly and rejects malformed input without panics or presenting partial graphs as valid.
 
 ### Phase 3 — Base binding and exact state recovery
 

@@ -68,7 +68,7 @@ on its byte length, `L`.
 | `51 + L` | `U` line number | 4 |
 | `55 + L` | `U` column | 4 |
 | `59 + L` | Oldest/preferred branch header sequence | 4 |
-| `63 + L` | Selected branch's newest header sequence | 4 |
+| `63 + L` | Recorded newest header sequence | 4 |
 | `67 + L` | Current undo header sequence | 4 |
 | `71 + L` | Number of serialized headers | 4 |
 | `75 + L` | Last allocated sequence | 4 |
@@ -123,6 +123,8 @@ After `f5 18`, read four signed 32-bit big-endian fields: `top`, `bot`,
 `lcount`, and `size`. Then read `size` lines, each encoded as a four-byte
 nonnegative length followed by that many bytes. The bytes exclude the C NUL
 terminator and contain no source-file line separators.
+Serialized lines contain no NUL bytes; embedded disk NUL uses LF as described
+below. The decoder converts that LF to NUL in its immutable buffer-line strings.
 
 `top` is the one-based line number just above the replaced range; zero means
 before the first line. `bot` is the line just below the range; zero means the
@@ -170,7 +172,8 @@ The source's names are easy to read backwards:
 - `alt_next` and `alt_prev` connect alternative children of the same parent.
 - The old-head pointer selects the first retained root alternative. It need
   not have the smallest sequence number.
-- New-head is the selected branch's leaf, even if some changes are undone.
+- New-head records the last reached leaf. While changes are undone, it can
+  still refer to a different branch than the current preferred path.
 - Current-head is the last undone change, which is the next redo. It is null
   when at the selected branch's leaf.
 
@@ -178,6 +181,14 @@ Find the reference state from the current-head pointer and its parent, or
 from new-head when current-head is absent. Preserve `seq_cur` as timeline
 metadata: `undo_time()` can use a position just before a sequence, so it must
 not universally be treated as a foreign key to a stored header.
+
+In `intermediate-branch`, new-head is 4, current-head is 3, and the reference
+is current-head's parent, 2. The preferred path is 1 → 2 → 3. `undo_time()`
+updates new-head when it reaches a leaf, so stopping at 2 leaves the earlier
+leaf marker unchanged. Do not require new-head to lie on the preferred path
+when current-head is present. Undo-and-forget can also leave new-head at a
+non-leaf parent or null; current-head still determines the reference in that
+case. See [undo-and-forget][forget] and [branch selection][selection].
 
 Create one synthetic retained-root state for null parent links. The oracle
 uses sequence `0` for it; the wire format has no header with sequence `0`.
@@ -336,6 +347,7 @@ their own producer fixtures and workload measurements.
 [scalar-reads]: https://github.com/neovim/neovim/blob/5885a30e1e1225349079e7a1c4a3848aa8e43e42/src/nvim/fileio.c#L2530-L2614
 [replay]: https://github.com/neovim/neovim/blob/5885a30e1e1225349079e7a1c4a3848aa8e43e42/src/nvim/undo.c#L2254-L2544
 [selection]: https://github.com/neovim/neovim/blob/5885a30e1e1225349079e7a1c4a3848aa8e43e42/src/nvim/undo.c#L1932-L2252
+[forget]: https://github.com/neovim/neovim/blob/5885a30e1e1225349079e7a1c4a3848aa8e43e42/src/nvim/undo.c#L1811-L1853
 [extmarks]: https://github.com/neovim/neovim/blob/5885a30e1e1225349079e7a1c4a3848aa8e43e42/src/nvim/extmark.h#L17-L57
 [positions]: https://github.com/neovim/neovim/blob/5885a30e1e1225349079e7a1c4a3848aa8e43e42/src/nvim/pos_defs.h#L5-L30
 [byte-count]: https://github.com/neovim/neovim/blob/5885a30e1e1225349079e7a1c4a3848aa8e43e42/src/nvim/extmark_defs.h#L5-L6

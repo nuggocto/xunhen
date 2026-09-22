@@ -419,5 +419,26 @@ func corpusCases() []fixtureCase {
 			Parents: map[int]int{1: 0},
 			Visit:   []int{0, 1, 0},
 		},
+		{
+			Name: "intermediate-branch",
+			Purpose: "Selecting an intermediate state on another branch leaves the newest " +
+				"marker on the previous branch; the next-redo parent locates the base.",
+			Initial: "seed\n",
+			Final:   "left-middle\n",
+			Steps: []step{
+				edit(0, 1, "common"),
+				edit(0, 1, "left-middle"),
+				edit(0, 1, "left-leaf"),
+				{Op: "undo", Seq: 1},
+				edit(0, 1, "right-leaf"),
+				{Op: "undo", Seq: 2},
+			},
+			States: map[int][]string{
+				0: {"seed"}, 1: {"common"}, 2: {"left-middle"},
+				3: {"left-leaf"}, 4: {"right-leaf"},
+			},
+			Parents: map[int]int{1: 0, 2: 1, 3: 2, 4: 1},
+			Visit:   []int{4, 3, 0, 2, 1, 4, 2},
+		},
 	}
 }

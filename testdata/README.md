@@ -19,8 +19,9 @@ go test ./...
 ```
 
 Tests read the stored files; they do not start Neovim. They check file hashes,
-expected text and ancestry, and the undo envelope's reference hash. The full
-binary decoder is separate work.
+expected text and ancestry, and the undo envelope's reference hash. Decoder and
+history tests also load every fixture and compare validated relationships,
+reference positions, and event metadata with the independent oracle.
 
 ## Regenerate
 
@@ -60,6 +61,8 @@ Cases worth starting with:
 - **joined-edits:** an insertion makes inverse-entry order matter.
 - **eol-option-change:** undo restores text but leaves the current newline option.
 - **unsaved-wundo:** the undo file needs text that had not been saved to disk.
+- **intermediate-branch:** the newest marker remains on another branch; the
+  next-redo header's parent identifies the reference state.
 
 The corpus also covers empty buffers, repeated lines, save/reopen, line moves,
 CRLF, Latin-1, invalid UTF-8, NUL, and terminal controls. A fixture documents a

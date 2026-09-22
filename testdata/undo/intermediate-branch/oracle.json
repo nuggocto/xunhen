@@ -1,0 +1,298 @@
+{
+  "name": "intermediate-branch",
+  "purpose": "Selecting an intermediate state on another branch leaves the newest marker on the previous branch; the next-redo parent locates the base.",
+  "classification": "buffer-lines-with-explicit-export-policy",
+  "recipe": {
+    "mode": "create",
+    "encoding": "utf-8",
+    "fileformat": "unix",
+    "undo_levels": 100,
+    "steps": [
+      {
+        "op": "edit",
+        "end": 1,
+        "lines_hex": [
+          "636f6d6d6f6e"
+        ]
+      },
+      {
+        "op": "edit",
+        "end": 1,
+        "lines_hex": [
+          "6c6566742d6d6964646c65"
+        ]
+      },
+      {
+        "op": "edit",
+        "end": 1,
+        "lines_hex": [
+          "6c6566742d6c656166"
+        ]
+      },
+      {
+        "op": "undo",
+        "seq": 1
+      },
+      {
+        "op": "edit",
+        "end": 1,
+        "lines_hex": [
+          "72696768742d6c656166"
+        ]
+      },
+      {
+        "op": "undo",
+        "seq": 2
+      }
+    ],
+    "visit": [
+      4,
+      3,
+      0,
+      2,
+      1,
+      4,
+      2
+    ],
+    "pruned": [],
+    "persistence": "automatic"
+  },
+  "created": {
+    "anchor": {
+      "seq": 2,
+      "lines_hex": [
+        "6c6566742d6d6964646c65"
+      ],
+      "endofline": true,
+      "fileformat": "unix",
+      "fileencoding": "utf-8"
+    },
+    "tree": {
+      "seq_last": 4,
+      "seq_cur": 2,
+      "time_cur": 1790096859,
+      "save_last": 1,
+      "save_cur": 1,
+      "synced": 1,
+      "entries": [
+        {
+          "seq": 1,
+          "time": 1790096859
+        },
+        {
+          "seq": 2,
+          "time": 1790096859,
+          "save": 1,
+          "alt": [
+            {
+              "seq": 4,
+              "time": 1790096859,
+              "newhead": 1
+            }
+          ]
+        },
+        {
+          "seq": 3,
+          "time": 1790096859,
+          "curhead": 1
+        }
+      ]
+    },
+    "observations": [
+      {
+        "op": "initial",
+        "state": {
+          "seq": 0,
+          "lines_hex": [
+            "73656564"
+          ],
+          "endofline": true,
+          "fileformat": "unix",
+          "fileencoding": "utf-8"
+        }
+      },
+      {
+        "op": "edit",
+        "state": {
+          "seq": 1,
+          "lines_hex": [
+            "636f6d6d6f6e"
+          ],
+          "endofline": true,
+          "fileformat": "unix",
+          "fileencoding": "utf-8"
+        }
+      },
+      {
+        "op": "edit",
+        "state": {
+          "seq": 2,
+          "lines_hex": [
+            "6c6566742d6d6964646c65"
+          ],
+          "endofline": true,
+          "fileformat": "unix",
+          "fileencoding": "utf-8"
+        }
+      },
+      {
+        "op": "edit",
+        "state": {
+          "seq": 3,
+          "lines_hex": [
+            "6c6566742d6c656166"
+          ],
+          "endofline": true,
+          "fileformat": "unix",
+          "fileencoding": "utf-8"
+        }
+      },
+      {
+        "op": "undo",
+        "state": {
+          "seq": 1,
+          "lines_hex": [
+            "636f6d6d6f6e"
+          ],
+          "endofline": true,
+          "fileformat": "unix",
+          "fileencoding": "utf-8"
+        }
+      },
+      {
+        "op": "edit",
+        "state": {
+          "seq": 4,
+          "lines_hex": [
+            "72696768742d6c656166"
+          ],
+          "endofline": true,
+          "fileformat": "unix",
+          "fileencoding": "utf-8"
+        }
+      },
+      {
+        "op": "undo",
+        "state": {
+          "seq": 2,
+          "lines_hex": [
+            "6c6566742d6d6964646c65"
+          ],
+          "endofline": true,
+          "fileformat": "unix",
+          "fileencoding": "utf-8"
+        }
+      }
+    ],
+    "saved_hex": "6c6566742d6d6964646c650a"
+  },
+  "loaded": {
+    "anchor": {
+      "seq": 2,
+      "lines_hex": [
+        "6c6566742d6d6964646c65"
+      ],
+      "endofline": true,
+      "fileformat": "unix",
+      "fileencoding": "utf-8"
+    },
+    "tree": {
+      "seq_last": 4,
+      "seq_cur": 2,
+      "time_cur": 1790096859,
+      "save_last": 1,
+      "save_cur": 1,
+      "synced": 1,
+      "entries": [
+        {
+          "seq": 1,
+          "time": 1790096859
+        },
+        {
+          "seq": 2,
+          "time": 1790096859,
+          "save": 1,
+          "alt": [
+            {
+              "seq": 4,
+              "time": 1790096859,
+              "newhead": 1
+            }
+          ]
+        },
+        {
+          "seq": 3,
+          "time": 1790096859,
+          "curhead": 1
+        }
+      ]
+    },
+    "states": [
+      {
+        "seq": 4,
+        "lines_hex": [
+          "72696768742d6c656166"
+        ],
+        "endofline": true,
+        "fileformat": "unix",
+        "fileencoding": "utf-8"
+      },
+      {
+        "seq": 3,
+        "lines_hex": [
+          "6c6566742d6c656166"
+        ],
+        "endofline": true,
+        "fileformat": "unix",
+        "fileencoding": "utf-8"
+      },
+      {
+        "seq": 0,
+        "lines_hex": [
+          "73656564"
+        ],
+        "endofline": true,
+        "fileformat": "unix",
+        "fileencoding": "utf-8"
+      },
+      {
+        "seq": 2,
+        "lines_hex": [
+          "6c6566742d6d6964646c65"
+        ],
+        "endofline": true,
+        "fileformat": "unix",
+        "fileencoding": "utf-8"
+      },
+      {
+        "seq": 1,
+        "lines_hex": [
+          "636f6d6d6f6e"
+        ],
+        "endofline": true,
+        "fileformat": "unix",
+        "fileencoding": "utf-8"
+      },
+      {
+        "seq": 4,
+        "lines_hex": [
+          "72696768742d6c656166"
+        ],
+        "endofline": true,
+        "fileformat": "unix",
+        "fileencoding": "utf-8"
+      },
+      {
+        "seq": 2,
+        "lines_hex": [
+          "6c6566742d6d6964646c65"
+        ],
+        "endofline": true,
+        "fileformat": "unix",
+        "fileencoding": "utf-8"
+      }
+    ],
+    "mismatch_rejected": true,
+    "mismatch_message": "Reading undo file: history.undo"
+  }
+}

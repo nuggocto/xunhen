@@ -7,25 +7,38 @@
 You write a passage of code, undo it, and follow another path.
 The first branch disappears from view. It may not be gone.
 
-**xunhen** will be a read-only Linux tool for exploring Neovim's saved undo
-history. That history can preserve abandoned editing branches, including code
-that was never saved as source text and never committed to git.
+**xunhen** is a read-only Linux tool for inspecting Neovim's saved undo history.
+It can reveal abandoned editing branches, including code that never reached a
+source file or git. The current build has an `inspect` command; recovery,
+diffing, and a terminal browser are planned.
 
-## Follow the branches
+Only edits that Neovim persisted and retained can be found. Reconstructing text
+will also require a matching source file or copy.
 
-The planned application will let you:
+## Inspect a history
 
-- Browse an undo tree in a terminal interface.
-- Read recoverable past states, including abandoned branches.
-- Compare two states and export recovered text.
-- Inspect, recover, and diff history through CLI commands.
+```sh
+go run ./cmd/xunhen inspect --undo testdata/undo/abandoned-branch/history.undo
+```
 
-It will read undo files and matching base text without modifying them, and
-work independently of a running Neovim instance.
+`inspect` shows the validated undo tree and its reference state without reading
+source text or starting Neovim. It does not reconstruct past text. The decoder
+uses a Neovim v0.12.5 Linux/amd64 format profile; undo files do not identify
+their producer or ABI, so other profiles are unverified. Run
+`go run ./cmd/xunhen inspect --help` for options. The
+[format notes](docs/undo-format.md) cover compatibility and limits.
 
-Recovery has limits. Only history that Neovim actually persisted and retained
-can survive between sessions. Complete reconstruction may require matching
-source text or a preserved copy; an undo file is not a record of every
-keystroke forever.
+## Development
+
+Use Go 1.27.1 on Linux/amd64. Ordinary builds and tests need no Neovim
+installation. With [mise](mise.toml):
+
+```sh
+mise run check
+mise run fuzz
+```
+
+`check` runs tests, vet, and a build. `fuzz` runs short decoder and history
+checks. Fixture generation is separate; see [testdata](testdata/README.md).
 
 Licensed under [Apache-2.0](LICENSE).
