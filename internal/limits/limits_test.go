@@ -33,6 +33,8 @@ func TestFiniteLimits(t *testing.T) {
 		{"unlimited stored lines", func(l *limits.Limits) { l.StoredLines = 0 }, false},
 		{"excess state lines", func(l *limits.Limits) { l.StateLines++ }, false},
 		{"unlimited line bytes", func(l *limits.Limits) { l.LineBytes = 0 }, false},
+		{"excess search directories", func(l *limits.Limits) { l.SearchDirs++ }, false},
+		{"unlimited search bytes", func(l *limits.Limits) { l.SearchBytes = 0 }, false},
 	}
 
 	for _, tt := range tests {

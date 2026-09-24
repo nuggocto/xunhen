@@ -21,28 +21,31 @@ type VerifiedBase struct {
 	bytes int
 }
 
-// VerifyBase checks the producer's line count and buffer hash. Lines use buffer
-// bytes, so an embedded NUL is NUL and no line may contain LF. The source is
-// only a diagnostic label. Strings are immutable; the line slice is copied.
-func VerifyBase(ctx context.Context, file *DecodedFile, source string, lines []string, lim limits.Limits) (*VerifiedBase, error) {
+// PreparedBase is candidate base text that has been checked and hashed once,
+// so it can be verified against any number of decoded files at no further
+// cost per file. Its lines are immutable and shared with every VerifiedBase
+// made from it.
+type PreparedBase struct {
+	source string
+	lines  []string
+	bytes  int
+	hash   [32]byte
+}
+
+// PrepareBase checks lines against the limits and computes the reference hash
+// the producer would store for them. Lines use buffer bytes, so an embedded
+// NUL is NUL and no line may contain LF. The source is only a diagnostic
+// label. Strings are immutable; the line slice is copied.
+func PrepareBase(ctx context.Context, source string, lines []string, lim limits.Limits) (*PreparedBase, error) {
 	if err := lim.Validate(); err != nil {
 		return nil, err
-	}
-
-	meta, ok := file.Metadata()
-	if !ok {
-		return nil, errors.New("base requires a complete decoded file")
 	}
 
 	fail := func(kind ErrorKind, detail string) error {
 		return &InputError{Kind: kind, Source: source, Offset: -1, Field: "base text", Detail: detail}
 	}
-
 	if len(lines) > lim.StateLines {
 		return nil, fail(Limit, "base exceeds the state line limit")
-	}
-	if len(lines) != int(meta.BaseLines) {
-		return nil, fail(Mismatch, fmt.Sprintf("line count %d does not match undo reference", len(lines)))
 	}
 
 	digest := sha256.New()
@@ -89,11 +92,51 @@ func VerifyBase(ctx context.Context, file *DecodedFile, source string, lines []s
 	}
 	_, _ = digest.Write(buffer)
 
-	if [32]byte(digest.Sum(nil)) != meta.BaseHash && !emptyAutomaticSave(lines, meta.BaseHash) {
-		return nil, fail(Mismatch, "content hash does not match undo reference")
+	return &PreparedBase{
+		source: source,
+		lines:  slices.Clone(lines),
+		bytes:  stateBytes,
+		hash:   [32]byte(digest.Sum(nil)),
+	}, nil
+}
+
+// Verify checks the prepared lines against file's reference line count and
+// hash. A mismatch is an InputError of kind Mismatch.
+func (b *PreparedBase) Verify(file *DecodedFile) (*VerifiedBase, error) {
+	if b == nil {
+		return nil, errors.New("base was not prepared")
 	}
 
-	return &VerifiedBase{file: file, lines: slices.Clone(lines), bytes: stateBytes}, nil
+	meta, ok := file.Metadata()
+	if !ok {
+		return nil, errors.New("base requires a complete decoded file")
+	}
+
+	fail := func(detail string) error {
+		return &InputError{Kind: Mismatch, Source: b.source, Offset: -1, Field: "base text", Detail: detail}
+	}
+	if len(b.lines) != int(meta.BaseLines) {
+		return nil, fail(fmt.Sprintf("line count %d does not match undo reference", len(b.lines)))
+	}
+	if b.hash != meta.BaseHash && !emptyAutomaticSave(b.lines, meta.BaseHash) {
+		return nil, fail("content hash does not match undo reference")
+	}
+
+	return &VerifiedBase{file: file, lines: b.lines, bytes: b.bytes}, nil
+}
+
+// VerifyBase prepares lines and verifies them against one decoded file.
+func VerifyBase(ctx context.Context, file *DecodedFile, source string, lines []string, lim limits.Limits) (*VerifiedBase, error) {
+	if _, ok := file.Metadata(); !ok {
+		return nil, errors.New("base requires a complete decoded file")
+	}
+
+	prepared, err := PrepareBase(ctx, source, lines, lim)
+	if err != nil {
+		return nil, err
+	}
+
+	return prepared.Verify(file)
 }
 
 // emptyAutomaticSave matches the one hash exception: automatic persistence

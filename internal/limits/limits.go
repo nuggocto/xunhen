@@ -18,6 +18,13 @@ type Limits struct {
 	StateLines  int
 	StateBytes  int
 	LineBytes   int
+
+	// A source-based search examines at most SearchDirs undo directories and
+	// reads at most SearchBytes of undo files across every candidate,
+	// including the ones it rejects. Each directory holds at most two
+	// candidate names, so the directory limit also bounds the candidates.
+	SearchDirs  int
+	SearchBytes int64
 }
 
 // Default returns the ceilings documented in docs/undo-format.md. The worst
@@ -33,6 +40,9 @@ func Default() Limits {
 		StateLines:  4_000_000,
 		StateBytes:  64 << 20,
 		LineBytes:   16 << 20,
+
+		SearchDirs:  32,
+		SearchBytes: 512 << 20,
 	}
 }
 
@@ -52,6 +62,8 @@ func (l Limits) Validate() error {
 		{"state lines", int64(l.StateLines), int64(ceiling.StateLines)},
 		{"state bytes", int64(l.StateBytes), int64(ceiling.StateBytes)},
 		{"line bytes", int64(l.LineBytes), int64(ceiling.LineBytes)},
+		{"search directories", int64(l.SearchDirs), int64(ceiling.SearchDirs)},
+		{"search bytes", l.SearchBytes, ceiling.SearchBytes},
 	}
 
 	for _, bound := range bounds {
