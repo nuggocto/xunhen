@@ -146,7 +146,7 @@ func compare(ctx context.Context, left, right []string, lim limits.Limits, e eff
 		return nil, err
 	}
 	if len(left) > lim.StateLines || len(right) > lim.StateLines {
-		return nil, &LimitError{Budget: "state lines"}
+		return nil, &LimitError{Limit: "state lines"}
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err

@@ -58,7 +58,7 @@ type History struct {
 
 // New checks identities, references, sibling lists, ancestry, connectivity,
 // and the persisted reference position in O(nodes) bounded iterative passes.
-// The node budget bounds each pass, so cancellation is checked between them.
+// The node limit bounds each pass, so cancellation is checked between them.
 func New(ctx context.Context, file *undofile.DecodedFile, lim limits.Limits) (*History, error) {
 	if err := lim.Validate(); err != nil {
 		return nil, err
@@ -74,7 +74,7 @@ func New(ctx context.Context, file *undofile.DecodedFile, lim limits.Limits) (*H
 
 	h := &History{file: file, metadata: meta}
 	if meta.HeaderCount > lim.Nodes {
-		return nil, h.failure(undofile.Limit, undofile.Record{}, "history nodes", "node budget exceeded")
+		return nil, h.failure(undofile.Limit, undofile.Record{}, "history nodes", "node limit exceeded")
 	}
 
 	h.nodes = make([]node, 1, meta.HeaderCount+1)

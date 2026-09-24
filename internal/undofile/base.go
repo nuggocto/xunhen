@@ -1,11 +1,11 @@
 package undofile
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"errors"
 	"fmt"
-	"io"
 	"slices"
 	"strings"
 
@@ -39,7 +39,7 @@ func VerifyBase(ctx context.Context, file *DecodedFile, source string, lines []s
 	}
 
 	if len(lines) > lim.StateLines {
-		return nil, fail(Limit, "base exceeds state line budget")
+		return nil, fail(Limit, "base exceeds the state line limit")
 	}
 	if len(lines) != int(meta.BaseLines) {
 		return nil, fail(Mismatch, fmt.Sprintf("line count %d does not match undo reference", len(lines)))
@@ -48,12 +48,18 @@ func VerifyBase(ctx context.Context, file *DecodedFile, source string, lines []s
 	digest := sha256.New()
 	stateBytes := 0
 
-	for _, line := range lines {
-		if err := ctx.Err(); err != nil {
-			return nil, err
+	// Hash through a buffer, one digest write per 64 KiB rather than two per
+	// line. A line longer than the buffer grows it once.
+	buffer := make([]byte, 0, 64<<10)
+
+	for i, line := range lines {
+		if i%1024 == 0 {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
 		}
 		if len(line) > lim.LineBytes || len(line)+1 > lim.StateBytes-stateBytes {
-			return nil, fail(Limit, "base state exceeds line or state byte budget")
+			return nil, fail(Limit, "base exceeds the line or state byte limit")
 		}
 		// A buffer line never holds LF. Rejecting it here also keeps "a\nb"
 		// from verifying as "a\x00b", which hashes the same way.
@@ -63,10 +69,25 @@ func VerifyBase(ctx context.Context, file *DecodedFile, source string, lines []s
 		stateBytes += len(line) + 1
 
 		// Neovim stores an embedded NUL as LF in an internal memline, and
-		// terminates each line with NUL. SHA-256 writes never fail.
-		_, _ = io.WriteString(digest, strings.ReplaceAll(line, "\x00", "\n"))
-		_, _ = digest.Write([]byte{0})
+		// terminates each line with NUL.
+		start := len(buffer)
+		buffer = append(buffer, line...)
+		for rest := buffer[start:]; ; {
+			at := bytes.IndexByte(rest, 0)
+			if at < 0 {
+				break
+			}
+			rest[at] = '\n'
+			rest = rest[at+1:]
+		}
+		buffer = append(buffer, 0)
+
+		if len(buffer) >= 64<<10 {
+			_, _ = digest.Write(buffer) // SHA-256 writes never fail.
+			buffer = buffer[:0]
+		}
 	}
+	_, _ = digest.Write(buffer)
 
 	if [32]byte(digest.Sum(nil)) != meta.BaseHash && !emptyAutomaticSave(lines, meta.BaseHash) {
 		return nil, fail(Mismatch, "content hash does not match undo reference")

@@ -323,7 +323,7 @@ Decoded text cannot outgrow the undo input, and an optional-field list holds
 at most one field, so neither has a limit of its own. Command output streams
 as it is rendered and has none either.
 
-Replay has no work budget of its own. A request applies each header on its
+Replay has no work limit of its own. A request applies each header on its
 path once, and its working state keeps lines in chunks of at most 1,024, so an
 entry costs a scan of the chunk list plus the chunks it touches rather than a
 shift of every later line. The entry and stored-line limits above therefore
@@ -341,7 +341,7 @@ is not permission to build a whole huge tree into a string on every key press.
 These byte limits do not cap total Go RSS by themselves. Indexes,
 string/slice headers, retained backing storage, allocator behavior, and GC
 overhead come on top. The worst synthetic inputs measured at these ceilings
-peaked at 797 MiB; `PROJECT.md` lists the cases. Capacity claims beyond this
+peaked at 766 MiB; `PROJECT.md` lists the cases. Capacity claims beyond this
 profile require their own producer fixtures and workload measurements.
 
 [revision]: https://github.com/neovim/neovim/tree/5885a30e1e1225349079e7a1c4a3848aa8e43e42

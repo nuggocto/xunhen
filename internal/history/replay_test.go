@@ -100,7 +100,7 @@ func TestReplayRejectsInvalidWork(t *testing.T) {
 		field    string
 		sequence undofile.Sequence
 	}{
-		{name: "state byte budget", target: 2, limits: func(l *limits.Limits) { l.StateBytes = baseBytes }, kind: undofile.Limit, field: "state bytes", sequence: 2},
+		{name: "state byte limit", target: 2, limits: func(l *limits.Limits) { l.StateBytes = baseBytes }, kind: undofile.Limit, field: "state bytes", sequence: 2},
 		{name: "invalid range", mutate: func(t *testing.T, data []byte) {
 			at := bytes.Index(data, []byte{0xf5, 0x18})
 			if at < 0 {

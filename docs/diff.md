@@ -88,10 +88,13 @@ lines than the state line limit (4,000,000). Search work is bounded by effort,
 and every other cost is linear in the size of the two states: trimming and
 identifying read each line at most once, and the frontiers, identifiers,
 anchoring counts, and script all hold one entry per line or less. The line
-lookup table is an open-addressed array of line indexes rather than a map of
-strings, so it gives the garbage collector nothing to scan. Two 4,000,000-line
-states with the same lines in shuffled order compare in 2.1 s, with a peak of
-797 MiB for the whole command.
+lookup table is an open-addressed array of line indexes, each slot tagged
+with 32 bits of the line's hash, rather than a map of strings, so it gives the
+garbage collector nothing to scan. Once the left-hand lines are in the table,
+it no longer changes, and more than 131,072 right-hand lines are looked up on
+up to eight goroutines, each owning one contiguous range of the result. Two
+4,000,000-line states with the same lines in shuffled order compare in 1.5 s,
+with a peak of 766 MiB for the whole command.
 
 Cancellation is checked before each round of the exact search, before each
 region, and every 1,024 lines while trimming and identifying.

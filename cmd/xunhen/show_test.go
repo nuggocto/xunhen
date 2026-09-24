@@ -199,11 +199,11 @@ func TestBaseTextProfile(t *testing.T) {
 		{name: "lone CR", text: "a\rb", want: []string{"a\rb"}},
 		{name: "NUL", text: "a\x00b", errorText: "embedded NUL"},
 		{name: "invalid UTF-8", text: "a\xffb", errorText: "invalid UTF-8"},
-		{name: "at line budget", text: "a\nb\n", want: []string{"a", "b"}, maxLines: 2},
-		{name: "at line budget without final LF", text: "a\nb", want: []string{"a", "b"}, maxLines: 2},
-		{name: "line budget", text: "a\nb\nc\n", errorText: "base lines", maxLines: 2},
-		{name: "blank line above budget", text: "a\n\n", errorText: "base lines", maxLines: 1},
-		{name: "byte budget", text: "abcd", errorText: "base input bytes", maxBytes: 3},
+		{name: "at line limit", text: "a\nb\n", want: []string{"a", "b"}, maxLines: 2},
+		{name: "at line limit without final LF", text: "a\nb", want: []string{"a", "b"}, maxLines: 2},
+		{name: "above line limit", text: "a\nb\nc\n", errorText: "base lines", maxLines: 2},
+		{name: "blank line above line limit", text: "a\n\n", errorText: "base lines", maxLines: 1},
+		{name: "above byte limit", text: "abcd", errorText: "base input bytes", maxBytes: 3},
 	}
 
 	for _, tt := range tests {

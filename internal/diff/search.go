@@ -4,7 +4,8 @@ import (
 	"context"
 	"fmt"
 	"hash/maphash"
-	"sort"
+	"runtime"
+	"sync"
 )
 
 // Effort counts the comparison's search work: diagonals visited, matched
@@ -31,15 +32,20 @@ const (
 	// cancelInterval is the number of lines between cancellation checks
 	// while trimming and identifying.
 	cancelInterval = 1024
+
+	// Right-hand lookups run on up to maxLookupWorkers goroutines, each with
+	// at least minLookupLines lines, so short inputs stay on one goroutine.
+	maxLookupWorkers = 8
+	minLookupLines   = 1 << 16
 )
 
 // LimitError reports the limit that stopped a comparison.
 type LimitError struct {
-	Budget string
+	Limit string
 }
 
 func (e *LimitError) Error() string {
-	return e.Budget + " limit exceeded while comparing states"
+	return e.Limit + " limit exceeded while comparing states"
 }
 
 // search is one comparison's workspace.
@@ -147,18 +153,15 @@ func (s *search) matches(left, right []string) ([]run, error) {
 	}
 
 	// A right-hand line missing from the table gets -1 and can never match.
+	rightIDs, err := s.findAll(table, right)
+	if err != nil {
+		return nil, err
+	}
 	shared := make([]bool, table.count())
-	rightIDs := make([]int32, len(right))
-	for i, line := range right {
-		if err := s.checkpoint(i); err != nil {
-			return nil, err
-		}
-
-		id := table.find(line)
+	for _, id := range rightIDs {
 		if id >= 0 {
 			shared[id] = true
 		}
-		rightIDs[i] = id
 	}
 
 	a, aIndex := keep(leftIDs, func(id int32) bool { return shared[id] })
@@ -248,6 +251,37 @@ func (t *lineTable) find(line string) int32 {
 
 func (t *lineTable) count() int {
 	return len(t.first)
+}
+
+// findAll looks up every right-hand line. The table no longer changes, so a
+// long input splits its lookups across a bounded number of goroutines, each
+// writing only its own contiguous range of the result. Scattered reads into
+// the table dominate the lookups, so they gain from running side by side.
+func (s *search) findAll(table *lineTable, right []string) ([]int32, error) {
+	ids := make([]int32, len(right))
+	workers := max(1, min(runtime.GOMAXPROCS(0), maxLookupWorkers, len(right)/minLookupLines))
+
+	// A worker that sees cancellation stops early. Cancellation is permanent,
+	// so checking the context once every worker has returned catches it.
+	var wg sync.WaitGroup
+	for w := range workers {
+		lo, hi := w*len(right)/workers, (w+1)*len(right)/workers
+		wg.Go(func() {
+			for i := lo; i < hi; i++ {
+				if s.checkpoint(i-lo) != nil {
+					return
+				}
+				ids[i] = table.find(right[i])
+			}
+		})
+	}
+	wg.Wait()
+
+	if err := s.ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	return ids, nil
 }
 
 func (s *search) checkpoint(i int) error {
@@ -604,7 +638,17 @@ func longestIncreasing(pairs []pair) []pair {
 	var tails []int
 	previous := make([]int, len(pairs))
 	for i, p := range pairs {
-		k := sort.Search(len(tails), func(j int) bool { return pairs[tails[j]].b >= p.b })
+		// Find the first chain whose last b is at least p.b.
+		k, hi := 0, len(tails)
+		for k < hi {
+			mid := int(uint(k+hi) >> 1)
+			if pairs[tails[mid]].b >= p.b {
+				hi = mid
+			} else {
+				k = mid + 1
+			}
+		}
+
 		previous[i] = -1
 		if k > 0 {
 			previous[i] = tails[k-1]

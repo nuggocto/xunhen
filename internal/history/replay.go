@@ -30,7 +30,7 @@ func Bind(h *History, base *undofile.VerifiedBase, lim limits.Limits) (*Reconstr
 		return nil, errors.New("history requires a matching verified base")
 	}
 	if base.LineCount() > lim.StateLines || base.StateBytes() > lim.StateBytes {
-		return nil, errors.New("verified base exceeds reconstruction budget")
+		return nil, errors.New("verified base exceeds the state limits")
 	}
 
 	return &Reconstructor{history: h, base: base, limits: lim}, nil
@@ -93,7 +93,7 @@ func (r *Reconstructor) Reconstruct(ctx context.Context, target NodeRef) (*Snaps
 
 // replayPath lists headers in application order: up from the reference to the
 // shared ancestor, then down to the target. New proved that every parent chain
-// ends at the root, and the node budget bounds each walk.
+// ends at the root, and the node limit bounds each walk.
 func (h *History) replayPath(target int) []int {
 	onReferencePath := make([]bool, len(h.nodes))
 	for i := h.reference; ; i = h.parent(i) {
@@ -119,10 +119,10 @@ func (h *History) replayPath(target int) []int {
 	return append(path, down...)
 }
 
-// replay is one request's workspace. It needs no work budget of its own: a
+// replay is one request's workspace. It needs no work limit of its own: a
 // request applies each header on its path once, the decoder bounds the file's
 // entries and stored lines, and one entry costs a few chunks plus a scan of
-// the chunk list. The state budgets bound memory; cancellation stops the rest.
+// the chunk list. The state limits bound memory; cancellation stops the rest.
 type replay struct {
 	ctx     context.Context
 	history *History
@@ -181,5 +181,5 @@ func (w *replay) applyEntry(record undofile.Record, number int, entry undofile.E
 }
 
 func (w *replay) limit(record undofile.Record, field string) error {
-	return w.history.failure(undofile.Limit, record, field, "budget exceeded during replay")
+	return w.history.failure(undofile.Limit, record, field, "limit exceeded during replay")
 }

@@ -7,7 +7,7 @@ import (
 	"github.com/nuggocto/xunhen/internal/limits"
 )
 
-func TestFiniteBudgets(t *testing.T) {
+func TestFiniteLimits(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -17,7 +17,7 @@ func TestFiniteBudgets(t *testing.T) {
 	}{
 		{"defaults", func(*limits.Limits) {}, true},
 		{
-			name: "lower budgets",
+			name: "lower limits",
 			change: func(l *limits.Limits) {
 				l.Nodes = 1
 				l.InputBytes = 1
@@ -25,7 +25,7 @@ func TestFiniteBudgets(t *testing.T) {
 			valid: true,
 		},
 		{"zero configuration", func(l *limits.Limits) { *l = limits.Limits{} }, false},
-		{"overflowing input budget", func(l *limits.Limits) { l.InputBytes = math.MaxInt64 }, false},
+		{"overflowing input limit", func(l *limits.Limits) { l.InputBytes = math.MaxInt64 }, false},
 		{"unlimited base bytes", func(l *limits.Limits) { l.BaseBytes = 0 }, false},
 		{"excess state bytes", func(l *limits.Limits) { l.StateBytes++ }, false},
 		{"negative nodes", func(l *limits.Limits) { l.Nodes = -1 }, false},

@@ -70,7 +70,7 @@ func (d *decoder) end() error {
 	_, err := d.reader.ReadByte()
 	if err == nil {
 		if d.offset == d.limits.InputBytes {
-			d.fail(Limit, d.offset, "undo input bytes", "input exceeds its budget")
+			d.fail(Limit, d.offset, "undo input bytes", "input exceeds its limit")
 		} else {
 			d.fail(Invalid, d.offset, "end of file", "trailing data after headers-end marker")
 		}
@@ -143,7 +143,7 @@ func (d *decoder) read(dst []byte, field string) {
 		return
 	}
 	if int64(len(dst)) > d.limits.InputBytes-d.offset {
-		d.fail(Limit, d.offset, "undo input bytes", "field exceeds remaining input budget")
+		d.fail(Limit, d.offset, "undo input bytes", "field exceeds the remaining input limit")
 		return
 	}
 
@@ -192,7 +192,7 @@ func (d *decoder) count(field string, limit int) int {
 	offset := d.offset
 	n := d.nonnegative(field)
 	if int64(n) > int64(limit) {
-		d.fail(Limit, offset, field, fmt.Sprintf("count exceeds budget %d", limit))
+		d.fail(Limit, offset, field, fmt.Sprintf("count exceeds limit %d", limit))
 	}
 	if d.err != nil {
 		return 0
@@ -213,7 +213,7 @@ func (d *decoder) text(field, lengthField string) string {
 	// limit also bounds all text together.
 	n := d.count(lengthField, d.limits.LineBytes)
 	if int64(n) > d.limits.InputBytes-d.offset {
-		d.fail(Limit, d.offset-4, "undo input bytes", "text exceeds remaining input budget")
+		d.fail(Limit, d.offset-4, "undo input bytes", "text exceeds the remaining input limit")
 	}
 	if d.err != nil {
 		return ""

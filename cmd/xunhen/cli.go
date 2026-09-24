@@ -124,7 +124,7 @@ func diagnostic(stderr io.Writer, status int, message string) int {
 	return status
 }
 
-// operationError reports a failed input, budget, or output operation.
+// operationError reports a failed input, limit, or output operation.
 func operationError(stderr io.Writer, err error) int {
 	return diagnostic(stderr, exitFailure, err.Error())
 }

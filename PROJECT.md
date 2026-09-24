@@ -514,25 +514,31 @@ field, so neither needs a limit of its own. Output streams as it is rendered,
 so it has none either.
 
 The memory target is 1 GiB per command. Synthetic inputs at these ceilings
-reached, as the highest peak resident memory of three runs on the development
-machine: 302 MiB to inspect 600,000 changes in a 240 MiB undo file, in 1.1 s;
-403 MiB to inspect, show, or compare states built from 192 MiB of 16 MiB
-lines; 445 MiB to replay 1,000,000 entries on a 4,000,000-line state, in
-0.4 s; 744 MiB to show a 4,000,000-line state; and 797 MiB, in 2.1 s, to
-compare two 4,000,000-line, 57 MiB states holding the same lines in shuffled
-order. The
-command sets a 768 MiB soft limit for the Go heap unless `GOMEMLIMIT` is set,
-so the collector keeps the heap near its live size on inputs this large.
+reached, as the highest peak resident memory and time of three runs on the
+development machine:
+
+| Input | Command | Peak memory | Time |
+| --- | --- | --- | --- |
+| 600,000 changes in a 240 MiB undo file | `inspect`, `show` | 325 MiB | 0.6 s |
+| States built from 192 MiB of 16 MiB lines | `inspect`, `show`, `diff` | 396 MiB | 0.2 s |
+| 1,000,000 entries on a 4,000,000-line state | `show` | 443 MiB | 0.4 s |
+| A 4,000,000-line, 57 MiB state | `show` | 633 MiB | 0.6 s |
+| Two such states holding the same lines in shuffled order | `diff` | 766 MiB | 1.5 s |
+
+The last case is the slowest input found: every line must be looked up, and
+none can be trimmed. The command sets a 768 MiB soft limit for the Go heap
+unless `GOMEMLIMIT` is set, so the collector keeps the heap near its live size
+on inputs this large.
 These figures cover the Go heap and runtime overhead as the operating system
 reports them; they are measurements of these inputs, not a guarantee for
 every input.
 
 Each limit is a safety ceiling sized so that no real file reaches it. Oversized
 or corrupt input then gets a named error instead of a hang or an out-of-memory
-kill. When the input limits already bound some work, that work gets no budget
+kill. When the input limits already bound some work, that work gets no limit
 of its own; make it cheap instead. Replay, for example, touches a few chunks
 per edit, and the decoder's entry and stored-line limits bound a whole request,
-so replay has no work budget. Check cancellation between bounded units of
+so replay has no work limit. Check cancellation between bounded units of
 work, such as a line, replay entry, or history header, so no unit runs for
 more than a few milliseconds at these limits. The diff counts its search
 work as effort and changes strategy instead of failing, as
@@ -840,7 +846,7 @@ repeatedly entering node selectors.
 
 - [ ] Add the single reconstruction/diff worker with at most one running and one latest pending request.
 - [ ] Cancel obsolete work and use load/selection generations to reject late results.
-- [ ] Implement a 32 MiB byte-accounted LRU snapshot cache with immutable entries and explicit ownership of retained backing storage.
+- [ ] Implement a 128 MiB byte-accounted LRU snapshot cache, room for a compared pair of the largest 64 MiB states, with immutable entries and explicit ownership of retained backing storage.
 - [ ] Discard the cache on a new history/base load and ensure evicted entries cannot corrupt still-displayed snapshots.
 - [ ] Keep decoding, replay, and diff work out of rendering callbacks and preserve usable input handling while work runs.
 

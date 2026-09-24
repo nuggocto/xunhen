@@ -20,9 +20,9 @@ type Limits struct {
 	LineBytes   int
 }
 
-// Default returns the ceilings documented in docs/undo-format.md. At these
-// sizes one command stays under about 1 GiB of memory on the worst inputs
-// measured there.
+// Default returns the ceilings documented in docs/undo-format.md. The worst
+// synthetic inputs measured at these sizes, listed in PROJECT.md, kept one
+// command under 800 MiB of resident memory against a 1 GiB target.
 func Default() Limits {
 	return Limits{
 		InputBytes:  256 << 20,

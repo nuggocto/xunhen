@@ -275,7 +275,7 @@ func TestDecodeErrorRecordContext(t *testing.T) {
 	}
 }
 
-func TestDecodeBudgets(t *testing.T) {
+func TestDecodeLimits(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -298,7 +298,7 @@ func TestDecodeBudgets(t *testing.T) {
 			lim := limits.Default()
 			tt.set(&lim)
 
-			file, err := undofile.Decode(t.Context(), "budget", bytes.NewReader(fixtureBytes(t, "linear")), lim)
+			file, err := undofile.Decode(t.Context(), "limit", bytes.NewReader(fixtureBytes(t, "linear")), lim)
 
 			var problem *undofile.InputError
 			if file != nil || !errors.As(err, &problem) || problem.Kind != undofile.Limit || problem.Field != tt.field {

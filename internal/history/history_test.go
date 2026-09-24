@@ -554,7 +554,7 @@ func TestHistoryBoundsAndCancellation(t *testing.T) {
 			case tt.wantKind != "":
 				var problem *undofile.InputError
 				if h != nil || !errors.As(err, &problem) || problem.Kind != tt.wantKind {
-					t.Fatalf("expected node budget error, got %v", err)
+					t.Fatalf("expected node limit error, got %v", err)
 				}
 
 			default:

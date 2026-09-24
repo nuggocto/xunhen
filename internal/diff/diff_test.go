@@ -312,7 +312,7 @@ func TestStateLineLimit(t *testing.T) {
 
 			hunks, err := diff.Lines(t.Context(), tt.left, tt.right, lim)
 			var problem *diff.LimitError
-			if hunks != nil || !errors.As(err, &problem) || problem.Budget != "state lines" {
+			if hunks != nil || !errors.As(err, &problem) || problem.Limit != "state lines" {
 				t.Fatalf("hunks = %v, error = %v; want the state line limit", hunks, err)
 			}
 		})
@@ -381,7 +381,7 @@ func TestLargeChanges(t *testing.T) {
 		return left, right
 	}
 	// A shared line between every pair of moved lines forces about 3,000
-	// edits. A search that kept every round ran out of memory budget here;
+	// edits. A search that kept every round ran out of memory here;
 	// the linear-space search finds the minimal diff.
 	shuffle := func() ([]string, []string) {
 		var left, right []string
@@ -392,12 +392,24 @@ func TestLargeChanges(t *testing.T) {
 		return left, right
 	}
 
+	// Enough lines that right-hand lookups split across goroutines. The
+	// reversed order also exhausts the exact effort, so the diff is complete
+	// but not minimal, and too long for the quadratic LCS check.
+	reversed := func() ([]string, []string) {
+		left := numbered(300_000)
+		right := slices.Clone(left)
+		slices.Reverse(right)
+		return left, right
+	}
+
 	tests := []struct {
-		name  string
-		input func() ([]string, []string)
+		name    string
+		input   func() ([]string, []string)
+		minimal bool
 	}{
-		{name: "complete rewrite", input: rewrite},
-		{name: "thousands of interleaved moves", input: shuffle},
+		{name: "complete rewrite", input: rewrite, minimal: true},
+		{name: "thousands of interleaved moves", input: shuffle, minimal: true},
+		{name: "300,000 lines reversed", input: reversed},
 	}
 
 	for _, tt := range tests {
@@ -409,7 +421,7 @@ func TestLargeChanges(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			checkDiff(t, left, right, first, true)
+			checkDiff(t, left, right, first, tt.minimal)
 
 			second, err := diff.Lines(t.Context(), left, right, limits.Default())
 			if err != nil || render(second) != render(first) {

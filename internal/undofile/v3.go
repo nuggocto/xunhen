@@ -87,36 +87,48 @@ func (d *decoder) recordV3() Record {
 	info.Offset = d.offset
 
 	d.marker(0x5fd0, "header start")
-	info.Parent = Sequence(d.nonnegative("parent"))
-	info.PreferredChild = Sequence(d.nonnegative("preferred child"))
-	info.NextSibling = Sequence(d.nonnegative("next sibling"))
-	info.PreviousSibling = Sequence(d.nonnegative("previous sibling"))
-	info.Sequence = Sequence(d.nonnegative("sequence"))
+
+	// Everything up to the event time has a fixed size. Reading it in one
+	// call and parsing it from memory costs far less than a buffered read
+	// per field, and it is about a hundred fields.
+	var fixed [headerFieldBytes]byte
+	start := d.offset
+	d.read(fixed[:], "header fields")
+	if d.err != nil {
+		return record
+	}
+	f := block{d: d, bytes: fixed[:], start: start}
+
+	info.Parent = Sequence(f.nonnegative("parent"))
+	info.PreferredChild = Sequence(f.nonnegative("preferred child"))
+	info.NextSibling = Sequence(f.nonnegative("next sibling"))
+	info.PreviousSibling = Sequence(f.nonnegative("previous sibling"))
+	info.Sequence = Sequence(f.nonnegative("sequence"))
 	d.sequence = info.Sequence
 	if info.Sequence == 0 {
-		d.fail(Invalid, d.offset-4, "sequence", "zero is reserved for absent links")
+		d.fail(Invalid, f.offset()-4, "sequence", "zero is reserved for absent links")
 	}
 
-	info.Cursor = d.position(cursorFields)
-	info.CursorVirtualColumn = d.i32("cursor virtual column")
+	info.Cursor = f.position(cursorFields)
+	info.CursorVirtualColumn = f.i32()
 	if info.CursorVirtualColumn < -1 {
-		d.fail(Invalid, d.offset-4, "cursor virtual column", "value below -1")
+		d.fail(Invalid, f.offset()-4, "cursor virtual column", "value below -1")
 	}
 
-	info.Flags = d.u16("flags")
+	info.Flags = f.u16()
 	if info.Flags & ^uint16(7) != 0 {
-		d.fail(Unsupported, d.offset-2, "flags", fmt.Sprintf("flags 0x%04x include unsupported bits", info.Flags))
+		d.fail(Unsupported, f.offset()-2, "flags", fmt.Sprintf("flags 0x%04x include unsupported bits", info.Flags))
 	}
 
 	for range 26 {
-		d.position(markFields)
+		f.position(markFields)
 	}
-	d.position(visualStartFields)
-	d.position(visualEndFields)
-	d.nonnegative("visual mode")
-	d.nonnegative("visual desired column")
+	f.position(visualStartFields)
+	f.position(visualEndFields)
+	f.nonnegative("visual mode")
+	f.nonnegative("visual desired column")
 
-	info.Time = d.i64("event time")
+	info.Time = f.i64()
 	info.Save = d.optional()
 
 	for d.nextEntry("text entries") {
@@ -181,11 +193,56 @@ var (
 	visualEndFields   = fieldsOf("visual end")
 )
 
-func (d *decoder) position(field positionFields) Position {
+// headerFieldBytes is the fixed part of a header after its start marker: five
+// links and the sequence, the cursor and its virtual column, flags, 26 named
+// marks, the visual selection, and the event time.
+const headerFieldBytes = 5*4 + 12 + 4 + 2 + 26*12 + (2*12 + 2*4) + 8
+
+// block parses big-endian scalars from bytes the decoder has already read in
+// one call. A failure reports its field's own input offset, as a scalar read
+// would, through the decoder's sticky error.
+type block struct {
+	d     *decoder
+	bytes []byte
+	start int64 // input offset of bytes[0]
+	pos   int
+}
+
+func (b *block) offset() int64 { return b.start + int64(b.pos) }
+
+func (b *block) u16() uint16 {
+	v := binary.BigEndian.Uint16(b.bytes[b.pos:])
+	b.pos += 2
+	return v
+}
+
+func (b *block) i32() int32 {
+	v := int32(binary.BigEndian.Uint32(b.bytes[b.pos:]))
+	b.pos += 4
+	return v
+}
+
+func (b *block) i64() int64 {
+	v := int64(binary.BigEndian.Uint64(b.bytes[b.pos:]))
+	b.pos += 8
+	return v
+}
+
+func (b *block) nonnegative(field string) int32 {
+	at := b.offset()
+	v := b.i32()
+	if v < 0 {
+		b.d.fail(Invalid, at, field, "negative value")
+	}
+
+	return v
+}
+
+func (b *block) position(field positionFields) Position {
 	return Position{
-		Line:   d.nonnegative(field.line),
-		Column: d.nonnegative(field.column),
-		Extra:  d.nonnegative(field.extra),
+		Line:   b.nonnegative(field.line),
+		Column: b.nonnegative(field.column),
+		Extra:  b.nonnegative(field.extra),
 	}
 }
 
@@ -204,7 +261,7 @@ func (d *decoder) nextEntry(field string) bool {
 		return false
 	}
 	if d.entries == d.limits.Entries {
-		d.fail(Limit, offset, "entries", "text and extmark entries exceed budget")
+		d.fail(Limit, offset, "entries", "text and extmark entries exceed the limit")
 		return false
 	}
 
