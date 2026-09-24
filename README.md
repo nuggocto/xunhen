@@ -71,7 +71,7 @@ go run ./cmd/xunhen diff --undo testdata/undo/abandoned-branch/history.undo --ba
 `diff` prints a unified diff with three lines of context and exits 0 whether
 or not the states differ; identical states print nothing. Lines compare as
 exact bytes and print escaped, like `show`. The [diff notes](docs/diff.md)
-cover the algorithm, its budgets, and the output rules.
+cover the algorithm, how it bounds its work, and the output rules.
 
 ## Development
 

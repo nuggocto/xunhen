@@ -3,102 +3,75 @@ package diff
 import (
 	"context"
 	"fmt"
-	"slices"
-
-	"github.com/nuggocto/xunhen/internal/limits"
+	"sort"
 )
 
-// Workspace charges, in bytes. A lookup-table entry is an estimate covering
-// the map slot, string header, and identifier; the key bytes are shared with
-// the compared lines and are not copied.
+// Effort counts the comparison's search work: diagonals visited, matched
+// lines followed, and frontier entries reset by the exact search, and lines
+// and anchors handled while anchoring. The anchoring weights make one unit of
+// either kind cost 1 to 1.5 ns on the development machine. Effort never fails
+// a comparison. It decides how much of the comparison gets the exact search,
+// so search time stays bounded however far apart the states are.
 const (
-	idBytes         = 4
-	keptLineBytes   = 8 // identifier plus original index
-	tableEntryBytes = 64
-	runBytes        = 32
-	cancelInterval  = 1024 // lines between cancellation checks while indexing
+	// defaultExactEffort is spent on the exact search before the remaining
+	// regions switch to anchoring: about 0.1 s, far more than two branches
+	// of one source file need.
+	defaultExactEffort = 64_000_000
+
+	// defaultTotalEffort ends all searching, at about 0.4 s. Whatever is
+	// still unmatched becomes plain deletions followed by insertions.
+	defaultTotalEffort = 256_000_000
+
+	// smallRegion is the combined size of both sides below which an anchored
+	// comparison still runs the exact search. The exact search visits at most
+	// about smallRegion²/4 diagonal steps on such a region.
+	smallRegion = 512
+
+	// cancelInterval is the number of lines between cancellation checks
+	// while trimming and identifying.
+	cancelInterval = 1024
 )
 
-// LimitError reports the diff budget that stopped a comparison.
+// LimitError reports the limit that stopped a comparison.
 type LimitError struct {
 	Budget string
 }
 
 func (e *LimitError) Error() string {
-	return e.Budget + " budget exceeded while comparing states"
+	return e.Budget + " limit exceeded while comparing states"
 }
 
-// search is one comparison's workspace. Every budget is charged before its
-// work, so an exhausted budget never leaves a partial edit script behind.
+// search is one comparison's workspace.
 type search struct {
-	ctx    context.Context
-	limits limits.Limits
+	ctx context.Context
 
-	steps, workspace, compared int
-}
+	exactEffort, totalEffort int
+	effort                   int
 
-func (s *search) step(n int) error {
-	if n > s.limits.DiffSteps-s.steps {
-		return &LimitError{Budget: "diff steps"}
-	}
+	// forward and backward are the exact search's frontiers, sized once for
+	// the largest region and reused by every smaller one.
+	forward, backward []int32
 
-	s.steps += n
-	return nil
-}
-
-func (s *search) alloc(n int) error {
-	if n > s.limits.DiffWorkspaceBytes-s.workspace {
-		return &LimitError{Budget: "diff workspace bytes"}
-	}
-
-	s.workspace += n
-	return nil
-}
-
-func (s *search) compare(n int) error {
-	if n > s.limits.DiffCompareBytes-s.compared {
-		return &LimitError{Budget: "diff compared bytes"}
-	}
-
-	s.compared += n
-	return nil
-}
-
-// equal compares two lines, charging their bytes when the lengths match.
-func (s *search) equal(a, b string) (bool, error) {
-	if len(a) != len(b) {
-		return false, nil
-	}
-	if err := s.compare(len(a)); err != nil {
-		return false, err
-	}
-
-	return a == b, nil
+	// Anchoring counts each line identifier's copies in a region. The slices
+	// are indexed by identifier and reset after each region.
+	leftCount, rightCount, rightAt []int32
 }
 
 // script returns a complete edit script in line order. Trimming the common
 // prefix and suffix first keeps the search to the region that changed.
 func (s *search) script(left, right []string) ([]run, error) {
 	prefix := 0
-	for prefix < min(len(left), len(right)) {
-		same, err := s.equal(left[prefix], right[prefix])
-		if err != nil {
+	for prefix < min(len(left), len(right)) && left[prefix] == right[prefix] {
+		if err := s.checkpoint(prefix); err != nil {
 			return nil, err
-		}
-		if !same {
-			break
 		}
 		prefix++
 	}
 
 	suffix := 0
-	for suffix < min(len(left), len(right))-prefix {
-		same, err := s.equal(left[len(left)-1-suffix], right[len(right)-1-suffix])
-		if err != nil {
+	for suffix < min(len(left), len(right))-prefix && left[len(left)-1-suffix] == right[len(right)-1-suffix] {
+		if err := s.checkpoint(suffix); err != nil {
 			return nil, err
-		}
-		if !same {
-			break
 		}
 		suffix++
 	}
@@ -108,79 +81,50 @@ func (s *search) script(left, right []string) ([]run, error) {
 		return nil, err
 	}
 
-	b := builder{search: s}
-	matched := []run{{op: Equal, count: prefix}}
+	b := builder{}
+	b.equal(0, 0, prefix)
 	for _, m := range middle {
-		matched = append(matched, run{op: Equal, left: prefix + m.left, right: prefix + m.right, count: m.count})
+		b.equal(prefix+m.left, prefix+m.right, m.count)
 	}
-	matched = append(matched, run{op: Equal, left: len(left) - suffix, right: len(right) - suffix, count: suffix})
-
-	for _, m := range matched {
-		if err := b.equal(m.left, m.right, m.count); err != nil {
-			return nil, err
-		}
-	}
-	if err := b.finish(len(left), len(right)); err != nil {
-		return nil, err
-	}
+	b.equal(len(left)-suffix, len(right)-suffix, suffix)
+	b.gap(len(left), len(right))
 
 	return b.runs, nil
 }
 
 // builder turns ordered matches into an edit script with every line covered.
 type builder struct {
-	search      *search
 	runs        []run
 	left, right int
 }
 
-func (b *builder) add(r run) error {
-	if r.count == 0 {
-		return nil
+func (b *builder) add(r run) {
+	if r.count != 0 {
+		b.runs = append(b.runs, r)
 	}
-	if err := b.search.alloc(runBytes); err != nil {
-		return err
-	}
-
-	b.runs = append(b.runs, r)
-	return nil
 }
 
 // gap covers the unmatched lines before a match, deletions first.
-func (b *builder) gap(left, right int) error {
-	if err := b.add(run{op: Delete, left: b.left, right: b.right, count: left - b.left}); err != nil {
-		return err
-	}
+func (b *builder) gap(left, right int) {
+	b.add(run{op: Delete, left: b.left, right: b.right, count: left - b.left})
 	b.left = left
-
-	if err := b.add(run{op: Insert, left: b.left, right: b.right, count: right - b.right}); err != nil {
-		return err
-	}
+	b.add(run{op: Insert, left: b.left, right: b.right, count: right - b.right})
 	b.right = right
-	return nil
 }
 
-func (b *builder) equal(left, right, count int) error {
+func (b *builder) equal(left, right, count int) {
 	if count == 0 {
-		return nil
+		return
 	}
-	if err := b.gap(left, right); err != nil {
-		return err
-	}
+	b.gap(left, right)
 
 	if n := len(b.runs); n != 0 && b.runs[n-1].op == Equal {
 		// Contiguous matches on both sides extend the previous equal run.
 		b.runs[n-1].count += count
-	} else if err := b.add(run{op: Equal, left: left, right: right, count: count}); err != nil {
-		return err
+	} else {
+		b.add(run{op: Equal, left: left, right: right, count: count})
 	}
-
 	b.left, b.right = left+count, right+count
-	return nil
-}
-
-func (b *builder) finish(left, right int) error {
-	return b.gap(left, right)
 }
 
 // matches returns equal runs between two regions, in order, using indexes
@@ -191,9 +135,6 @@ func (s *search) matches(left, right []string) ([]run, error) {
 	if len(left) == 0 || len(right) == 0 {
 		return nil, nil
 	}
-	if err := s.alloc(idBytes * (len(left) + len(right))); err != nil {
-		return nil, err
-	}
 
 	table := make(map[string]int32)
 	leftIDs := make([]int32, len(left))
@@ -201,15 +142,9 @@ func (s *search) matches(left, right []string) ([]run, error) {
 		if err := s.checkpoint(i); err != nil {
 			return nil, err
 		}
-		if err := s.compare(len(line)); err != nil {
-			return nil, err
-		}
 
 		id, ok := table[line]
 		if !ok {
-			if err := s.alloc(tableEntryBytes); err != nil {
-				return nil, err
-			}
 			id = int32(len(table))
 			table[line] = id
 		}
@@ -223,9 +158,6 @@ func (s *search) matches(left, right []string) ([]run, error) {
 		if err := s.checkpoint(i); err != nil {
 			return nil, err
 		}
-		if err := s.compare(len(line)); err != nil {
-			return nil, err
-		}
 
 		id, ok := table[line]
 		if !ok {
@@ -236,16 +168,10 @@ func (s *search) matches(left, right []string) ([]run, error) {
 		rightIDs[i] = id
 	}
 
-	a, aIndex, err := s.keep(leftIDs, func(id int32) bool { return shared[id] })
-	if err != nil {
-		return nil, err
-	}
-	b, bIndex, err := s.keep(rightIDs, func(id int32) bool { return id >= 0 })
-	if err != nil {
-		return nil, err
-	}
+	a, aIndex := keep(leftIDs, func(id int32) bool { return shared[id] })
+	b, bIndex := keep(rightIDs, func(id int32) bool { return id >= 0 })
 
-	found, err := s.myers(a, b)
+	found, err := s.align(a, b, len(table))
 	if err != nil {
 		return nil, err
 	}
@@ -259,9 +185,6 @@ func (s *search) matches(left, right []string) ([]run, error) {
 			if n := len(out); n != 0 && out[n-1].left+out[n-1].count == l && out[n-1].right+out[n-1].count == r {
 				out[n-1].count++
 				continue
-			}
-			if err := s.alloc(runBytes); err != nil {
-				return nil, err
 			}
 			out = append(out, run{op: Equal, left: l, right: r, count: 1})
 		}
@@ -279,18 +202,8 @@ func (s *search) checkpoint(i int) error {
 }
 
 // keep returns the identifiers that pass the filter and their region indexes.
-func (s *search) keep(ids []int32, ok func(int32) bool) ([]int32, []int32, error) {
-	n := 0
-	for _, id := range ids {
-		if ok(id) {
-			n++
-		}
-	}
-	if err := s.alloc(keptLineBytes * n); err != nil {
-		return nil, nil, err
-	}
-
-	kept, index := make([]int32, 0, n), make([]int32, 0, n)
+func keep(ids []int32, ok func(int32) bool) ([]int32, []int32) {
+	var kept, index []int32
 	for i, id := range ids {
 		if ok(id) {
 			kept = append(kept, id)
@@ -298,125 +211,358 @@ func (s *search) keep(ids []int32, ok func(int32) bool) ([]int32, []int32, error
 		}
 	}
 
-	return kept, index, nil
+	return kept, index
 }
 
-// myers runs the forward greedy search from Myers' "An O(ND) Difference
-// Algorithm and Its Variations" (1986). Round d stores the furthest valid x on
-// each diagonal k in [-d, d]; the stored rounds let backtracking recover the
-// path without a second search. Work grows with the square of the edit
-// distance, so the step and workspace budgets bound it.
-func (s *search) myers(a, b []int32) ([]run, error) {
-	n, m := len(a), len(b)
-	if n == 0 || m == 0 {
+// task is a pending region of the alignment, [a0, a1) against [b0, b1), or a
+// match of a1-a0 lines starting at a0 and b0.
+type task struct {
+	a0, a1, b0, b1 int
+	match          bool
+}
+
+// align returns the matched runs between a and b in order. It works through
+// regions with an explicit stack rather than recursion, so no input can
+// exhaust the goroutine stack. Each region is trimmed and then split by the
+// exact search, split at anchors, or left as a plain change, depending on the
+// effort spent so far. Every split leaves strictly smaller regions, so the
+// loop ends.
+func (s *search) align(a, b []int32, ids int) ([]run, error) {
+	if len(a) == 0 || len(b) == 0 {
 		return nil, nil
 	}
 
-	var trace [][]int32
-	for d := 0; d <= n+m; d++ {
+	s.forward = make([]int32, len(a)+len(b)+2)
+	s.backward = make([]int32, len(a)+len(b)+2)
+	s.leftCount = make([]int32, ids)
+	s.rightCount = make([]int32, ids)
+	s.rightAt = make([]int32, ids)
+
+	var out []run
+	emit := func(a0, b0, count int) {
+		if n := len(out); n != 0 && out[n-1].left+out[n-1].count == a0 && out[n-1].right+out[n-1].count == b0 {
+			out[n-1].count += count
+			return
+		}
+		out = append(out, run{op: Equal, left: a0, right: b0, count: count})
+	}
+
+	stack := []task{{a1: len(a), b1: len(b)}}
+	for len(stack) != 0 {
+		t := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+
+		if t.match {
+			emit(t.a0, t.b0, t.a1-t.a0)
+			continue
+		}
 		if err := s.ctx.Err(); err != nil {
 			return nil, err
 		}
-		if err := s.alloc(idBytes * (2*d + 1)); err != nil {
+
+		prefix := 0
+		for t.a0+prefix < t.a1 && t.b0+prefix < t.b1 && a[t.a0+prefix] == b[t.b0+prefix] {
+			prefix++
+		}
+		if prefix != 0 {
+			emit(t.a0, t.b0, prefix)
+			t.a0, t.b0 = t.a0+prefix, t.b0+prefix
+		}
+
+		suffix := 0
+		for t.a0 < t.a1-suffix && t.b0 < t.b1-suffix && a[t.a1-1-suffix] == b[t.b1-1-suffix] {
+			suffix++
+		}
+		if suffix != 0 {
+			t.a1, t.b1 = t.a1-suffix, t.b1-suffix
+			// Pushed before the region's parts, so it is emitted after them.
+			stack = append(stack, task{a0: t.a1, a1: t.a1 + suffix, b0: t.b1, b1: t.b1 + suffix, match: true})
+		}
+
+		parts, err := s.split(a, b, t)
+		if err != nil {
 			return nil, err
 		}
+		for i := len(parts) - 1; i >= 0; i-- {
+			stack = append(stack, parts[i])
+		}
+	}
 
-		round := make([]int32, 2*d+1)
-		for k := -d; k <= d; k += 2 {
-			if err := s.step(1); err != nil {
-				return nil, err
+	return out, nil
+}
+
+// split divides one trimmed region into ordered parts. It returns none when
+// the region is a plain change: one side is empty, or the effort is spent.
+func (s *search) split(a, b []int32, t task) ([]task, error) {
+	x, y := a[t.a0:t.a1], b[t.b0:t.b1]
+	n, m := len(x), len(y)
+
+	switch {
+	case n == 0 || m == 0:
+		return nil, nil
+
+	case n == 1 || m == 1:
+		// One line on a side matches its first copy on the other, if any. That
+		// is a longest common subsequence for this region.
+		if n == 1 {
+			if j := indexOf(y, x[0]); j >= 0 {
+				return []task{{a0: t.a0, a1: t.a0 + 1, b0: t.b0 + j, match: true}}, nil
 			}
+			return nil, nil
+		}
+		if i := indexOf(x, y[0]); i >= 0 {
+			return []task{{a0: t.a0 + i, a1: t.a0 + i + 1, b0: t.b0, match: true}}, nil
+		}
+		return nil, nil
+	}
 
-			x, _ := furthest(trace, d, k, n, m)
-			if x < 0 {
-				round[k+d] = -1
-				continue
+	exact := s.effort < s.exactEffort
+	small := n+m <= smallRegion && s.effort < s.totalEffort
+	if exact || small {
+		limit := s.exactEffort
+		if !exact {
+			limit = s.totalEffort
+		}
+
+		sx, sy, result, err := s.bisect(x, y, limit)
+		switch {
+		case err != nil:
+			return nil, err
+		case result == noCommonLine:
+			return nil, nil
+		case result == splitFound:
+			return []task{
+				{a0: t.a0, a1: t.a0 + sx, b0: t.b0, b1: t.b0 + sy},
+				{a0: t.a0 + sx, a1: t.a1, b0: t.b0 + sy, b1: t.b1},
+			}, nil
+		}
+	}
+
+	if s.effort < s.totalEffort {
+		return s.anchor(x, y, t), nil
+	}
+
+	return nil, nil
+}
+
+func indexOf(ids []int32, id int32) int {
+	for i, v := range ids {
+		if v == id {
+			return i
+		}
+	}
+
+	return -1
+}
+
+// bisectResult says what the exact search found for one region.
+type bisectResult uint8
+
+const (
+	splitFound   bisectResult = iota // a point on a shortest edit path
+	noCommonLine                     // the region is a plain change
+	outOfEffort                      // the search gave up; nothing is known
+)
+
+// bisect finds a point on a shortest edit path through x and y by running
+// Myers' search from both corners until the paths meet ("An O(ND) Difference
+// Algorithm and Its Variations", 1986, section 4b). It keeps two frontiers of
+// len(x)+len(y) entries instead of every round, so memory stays linear. The
+// caller has trimmed the region and gives both sides at least two lines.
+//
+// It gives up once the comparison's effort reaches limit.
+func (s *search) bisect(x, y []int32, limit int) (int, int, bisectResult, error) {
+	n, m := len(x), len(y)
+	maxD := (n + m + 1) / 2
+	offset := maxD
+	size := 2 * maxD
+
+	forward, backward := s.forward[:size], s.backward[:size]
+	for i := range size {
+		forward[i], backward[i] = -1, -1
+	}
+	forward[offset+1], backward[offset+1] = 0, 0
+	s.effort += size
+
+	delta := n - m
+	// With an odd difference in length, the forward path meets the reverse
+	// path; with an even one, the reverse path meets the forward path.
+	front := delta%2 != 0
+
+	// Diagonals that ran off an edge of the grid need no further visits.
+	forwardStart, forwardEnd, backwardStart, backwardEnd := 0, 0, 0, 0
+
+	for d := range maxD {
+		if err := s.ctx.Err(); err != nil {
+			return 0, 0, outOfEffort, err
+		}
+		if s.effort >= limit {
+			return 0, 0, outOfEffort, nil
+		}
+
+		for k := -d + forwardStart; k <= d-forwardEnd; k += 2 {
+			s.effort++
+			i := offset + k
+
+			var px int
+			if k == -d || (k != d && forward[i-1] < forward[i+1]) {
+				px = int(forward[i+1])
+			} else {
+				px = int(forward[i-1]) + 1
 			}
+			py := px - k
+			for px < n && py < m && x[px] == y[py] {
+				px++
+				py++
+				s.effort++
+			}
+			forward[i] = int32(px)
 
-			for y := x - k; x < n && y < m && a[x] == b[y]; y++ {
-				if err := s.step(1); err != nil {
-					return nil, err
+			switch {
+			case px > n:
+				forwardEnd += 2
+			case py > m:
+				forwardStart += 2
+			case front:
+				j := offset + delta - k
+				if j >= 0 && j < size && backward[j] != -1 && px >= n-int(backward[j]) {
+					return s.checkSplit(px, py, n, m)
 				}
-				x++
-			}
-			round[k+d] = int32(x)
-
-			if x == n && x-k == m {
-				trace = append(trace, round)
-				return backtrack(trace, n, m), nil
 			}
 		}
-		trace = append(trace, round)
+
+		for k := -d + backwardStart; k <= d-backwardEnd; k += 2 {
+			s.effort++
+			i := offset + k
+
+			var qx int
+			if k == -d || (k != d && backward[i-1] < backward[i+1]) {
+				qx = int(backward[i+1])
+			} else {
+				qx = int(backward[i-1]) + 1
+			}
+			qy := qx - k
+			for qx < n && qy < m && x[n-qx-1] == y[m-qy-1] {
+				qx++
+				qy++
+				s.effort++
+			}
+			backward[i] = int32(qx)
+
+			switch {
+			case qx > n:
+				backwardEnd += 2
+			case qy > m:
+				backwardStart += 2
+			case !front:
+				j := offset + delta - k
+				if j >= 0 && j < size && forward[j] != -1 {
+					px := int(forward[j])
+					py := offset + px - j
+					if px >= n-qx {
+						return s.checkSplit(px, py, n, m)
+					}
+				}
+			}
+		}
 	}
 
-	// A path of n deletions and m insertions always reaches the corner.
-	panic("diff search ended without reaching the final corner")
+	// A shortest path of D edits meets within ceil(D/2) rounds. Only a region
+	// with no line in common, where D = n+m, can use up every round.
+	return 0, 0, noCommonLine, nil
 }
 
-// furthest picks the start of round d's path on diagonal k, before its snake,
-// and the diagonal it came from. It returns -1 when no valid path of d edits
-// reaches the diagonal. On a tie the insertion wins, as in Myers' paper.
-func furthest(trace [][]int32, d, k, n, m int) (int, int) {
-	if d == 0 {
-		return 0, 0
+// checkSplit enforces the progress invariant: the split point lies inside the
+// region and differs from both corners, so both parts are smaller.
+func (s *search) checkSplit(px, py, n, m int) (int, int, bisectResult, error) {
+	if px < 0 || px > n || py < 0 || py > m || px+py == 0 || px+py == n+m {
+		panic(fmt.Sprintf("diff bisect split (%d, %d) of a %d by %d region", px, py, n, m))
 	}
 
-	previous := trace[d-1]
-	down, right := -1, -1
-	if k < d {
-		// An insertion from diagonal k+1 keeps x and advances y.
-		if x := int(previous[k+1+d-1]); x >= 0 && x-k <= m {
-			down = x
-		}
-	}
-	if k > -d {
-		// A deletion from diagonal k-1 advances x.
-		if x := int(previous[k-1+d-1]); x >= 0 && x+1 <= n {
-			right = x + 1
-		}
-	}
-
-	if down >= 0 && down >= right {
-		return down, k + 1
-	}
-	if right >= 0 {
-		return right, k - 1
-	}
-
-	return -1, 0
+	return px, py, splitFound, nil
 }
 
-// backtrack walks the stored rounds from the final corner to the origin and
-// returns the diagonal runs of the path in order.
-func backtrack(trace [][]int32, n, m int) []run {
-	var out []run
-	x, y := n, m
+// pair is one anchor: a line at index a on the left and index b on the right.
+type pair struct {
+	a, b int
+}
 
-	for d := len(trace) - 1; d > 0; d-- {
-		k := x - y
-		if int(trace[d][k+d]) != x {
-			panic(fmt.Sprintf("diff backtrack left the stored path at round %d", d))
-		}
-
-		start, from := furthest(trace, d, k, n, m)
-		if start < 0 {
-			panic(fmt.Sprintf("diff backtrack found no predecessor at round %d", d))
-		}
-		if x > start {
-			out = append(out, run{op: Equal, left: start, right: start - k, count: x - start})
-		}
-
-		x = int(trace[d-1][from+d-1])
-		y = x - from
+// anchor splits a region at lines that occur exactly once on each side, the
+// idea behind patience diff. Among those lines it keeps the longest chain
+// that is in order on both sides, then returns the gaps between anchors as
+// regions and the anchors as matches. A region without such lines stays a
+// plain change.
+func (s *search) anchor(x, y []int32, t task) []task {
+	s.effort += 3 * (len(x) + len(y))
+	for _, id := range x {
+		s.leftCount[id]++
+	}
+	for j, id := range y {
+		s.rightCount[id]++
+		s.rightAt[id] = int32(j)
 	}
 
-	if x != y {
-		panic("diff backtrack did not return to the main diagonal")
+	var pairs []pair
+	for i, id := range x {
+		if s.leftCount[id] == 1 && s.rightCount[id] == 1 {
+			pairs = append(pairs, pair{a: i, b: int(s.rightAt[id])})
+		}
 	}
-	if x > 0 {
-		out = append(out, run{op: Equal, count: x})
+	for _, id := range x {
+		s.leftCount[id] = 0
+	}
+	for _, id := range y {
+		s.rightCount[id] = 0
 	}
 
-	slices.Reverse(out)
-	return out
+	chain := longestIncreasing(pairs)
+	s.effort += 16 * len(pairs) // a binary search per pair
+
+	var parts []task
+	a0, b0 := 0, 0
+	for _, p := range chain {
+		if p.a > a0 || p.b > b0 {
+			parts = append(parts, task{a0: t.a0 + a0, a1: t.a0 + p.a, b0: t.b0 + b0, b1: t.b0 + p.b})
+		}
+		parts = append(parts, task{a0: t.a0 + p.a, a1: t.a0 + p.a + 1, b0: t.b0 + p.b, match: true})
+		a0, b0 = p.a+1, p.b+1
+	}
+	if len(chain) != 0 && (a0 < len(x) || b0 < len(y)) {
+		parts = append(parts, task{a0: t.a0 + a0, a1: t.a1, b0: t.b0 + b0, b1: t.b1})
+	}
+
+	return parts
+}
+
+// longestIncreasing returns the longest chain of pairs, already ordered by a,
+// whose b indexes also increase. Patience sorting with binary search makes it
+// O(k log k) for k pairs.
+func longestIncreasing(pairs []pair) []pair {
+	if len(pairs) == 0 {
+		return nil
+	}
+
+	// tails[k] is the pair ending the best chain of length k+1 found so far:
+	// the one with the smallest b.
+	var tails []int
+	previous := make([]int, len(pairs))
+	for i, p := range pairs {
+		k := sort.Search(len(tails), func(j int) bool { return pairs[tails[j]].b >= p.b })
+		previous[i] = -1
+		if k > 0 {
+			previous[i] = tails[k-1]
+		}
+		if k == len(tails) {
+			tails = append(tails, i)
+		} else {
+			tails[k] = i
+		}
+	}
+
+	chain := make([]pair, len(tails))
+	for i, k := tails[len(tails)-1], len(tails)-1; k >= 0; i, k = previous[i], k-1 {
+		chain[k] = pairs[i]
+	}
+
+	return chain
 }

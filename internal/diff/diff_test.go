@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"slices"
@@ -121,7 +122,7 @@ func TestKnownHunks(t *testing.T) {
 			if got := render(hunks); got != tt.want {
 				t.Fatalf("hunks =\n%s\nwant\n%s", got, tt.want)
 			}
-			checkDiff(t, tt.left, tt.right, hunks)
+			checkDiff(t, tt.left, tt.right, hunks, true)
 		})
 	}
 }
@@ -163,7 +164,7 @@ func TestSmallInputsExhaustively(t *testing.T) {
 					if err != nil {
 						t.Fatalf("%q -> %q: %v", left, right, err)
 					}
-					checkDiff(t, left, right, hunks)
+					checkDiff(t, left, right, hunks, true)
 				}
 			}
 		})
@@ -171,10 +172,10 @@ func TestSmallInputsExhaustively(t *testing.T) {
 }
 
 // checkDiff verifies the hunk contract without trusting the implementation:
-// applying the hunks to left yields right, the edit count equals the one
-// implied by an independent longest-common-subsequence computation, and the
-// context and ordering rules hold.
-func checkDiff(t *testing.T, left, right []string, hunks []diff.Hunk) {
+// applying the hunks to left yields right, and the context and ordering rules
+// hold. With minimal set, the edit count must also equal the one implied by an
+// independent longest-common-subsequence computation.
+func checkDiff(t *testing.T, left, right []string, hunks []diff.Hunk, minimal bool) {
 	t.Helper()
 
 	var result []string
@@ -226,6 +227,9 @@ func checkDiff(t *testing.T, left, right []string, hunks []diff.Hunk) {
 	result = append(result, left[cursor:]...)
 	if !slices.Equal(result, right) {
 		t.Fatalf("%q -> %q: applying hunks gave %q", left, right, result)
+	}
+	if !minimal {
+		return
 	}
 	if want := len(left) + len(right) - 2*lcs(left, right); edits != want {
 		t.Fatalf("%q -> %q: %d edits, minimal is %d", left, right, edits, want)
@@ -288,29 +292,15 @@ func lcs(left, right []string) int {
 	return row[len(right)]
 }
 
-func TestBudgets(t *testing.T) {
+func TestStateLineLimit(t *testing.T) {
 	t.Parallel()
 
-	// "a b" to "b a" runs a two-round search. Steps: round 0 visits one
-	// diagonal; round 1 visits two and follows one matched line on each; round
-	// 2 reaches the corner on its second diagonal. That is 1 + 4 + 2 = 7.
-	swap := [2][]string{{"a", "b"}, {"b", "a"}}
-	// Identical three-byte lines cost three compared bytes, found by the
-	// common-prefix scan.
-	same := [2][]string{{"abc"}, {"abc"}}
-
 	tests := []struct {
-		name   string
-		input  [2][]string
-		set    func(*limits.Limits)
-		budget string
+		name        string
+		left, right []string
+		maxLines    int
 	}{
-		{name: "steps at limit", input: swap, set: func(l *limits.Limits) { l.DiffSteps = 7 }},
-		{name: "steps above limit", input: swap, set: func(l *limits.Limits) { l.DiffSteps = 6 }, budget: "diff steps"},
-		{name: "compared bytes at limit", input: same, set: func(l *limits.Limits) { l.DiffCompareBytes = 3 }},
-		{name: "compared bytes above limit", input: same, set: func(l *limits.Limits) { l.DiffCompareBytes = 2 }, budget: "diff compared bytes"},
-		{name: "workspace", input: swap, set: func(l *limits.Limits) { l.DiffWorkspaceBytes = 16 }, budget: "diff workspace bytes"},
-		{name: "state lines", input: swap, set: func(l *limits.Limits) { l.StateLines = 1 }, budget: "state lines"},
+		{name: "right side above the limit", left: []string{"a"}, right: []string{"a", "b"}, maxLines: 1},
 	}
 
 	for _, tt := range tests {
@@ -318,23 +308,65 @@ func TestBudgets(t *testing.T) {
 			t.Parallel()
 
 			lim := limits.Default()
-			tt.set(&lim)
+			lim.StateLines = tt.maxLines
 
-			hunks, err := diff.Lines(t.Context(), tt.input[0], tt.input[1], lim)
-			if tt.budget == "" {
-				if err != nil {
-					t.Fatalf("within budget: %v", err)
-				}
-				checkDiff(t, tt.input[0], tt.input[1], hunks)
-				return
-			}
-
+			hunks, err := diff.Lines(t.Context(), tt.left, tt.right, lim)
 			var problem *diff.LimitError
-			if hunks != nil || !errors.As(err, &problem) || problem.Budget != tt.budget {
-				t.Fatalf("hunks = %v, error = %v; want the %s budget", hunks, err, tt.budget)
+			if hunks != nil || !errors.As(err, &problem) || problem.Budget != "state lines" {
+				t.Fatalf("hunks = %v, error = %v; want the state line limit", hunks, err)
 			}
 		})
 	}
+}
+
+// TestSearchStages sends one input through each stage by lowering the effort
+// thresholds. After the common "{" and "}" are trimmed, the regions are
+// "one } { two" and "two } { one". The exact search finds the minimal four
+// edits. Anchoring matches the unique lines "}" and "{", which also gives
+// four. The plain stage matches nothing inside the region: eight edits.
+func TestSearchStages(t *testing.T) {
+	t.Parallel()
+
+	left := []string{"{", "one", "}", "{", "two", "}"}
+	right := []string{"{", "two", "}", "{", "one", "}"}
+
+	tests := []struct {
+		name         string
+		exact, total int
+		edits        int
+	}{
+		{name: "exact search", exact: 1 << 30, total: 1 << 30, edits: 4},
+		{name: "anchored after the exact effort", exact: 0, total: 1 << 30, edits: 4},
+		{name: "plain after all effort", exact: 0, total: 0, edits: 8},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			hunks, err := diff.LinesWithEffort(t.Context(), left, right, tt.exact, tt.total)
+			if err != nil {
+				t.Fatal(err)
+			}
+			checkDiff(t, left, right, hunks, false)
+			if got := edits(hunks); got != tt.edits {
+				t.Fatalf("%d edits, want %d:\n%s", got, tt.edits, render(hunks))
+			}
+		})
+	}
+}
+
+func edits(hunks []diff.Hunk) int {
+	count := 0
+	for _, h := range hunks {
+		for line := range h.Lines() {
+			if line.Op != diff.Equal {
+				count++
+			}
+		}
+	}
+
+	return count
 }
 
 func TestLargeChanges(t *testing.T) {
@@ -349,7 +381,8 @@ func TestLargeChanges(t *testing.T) {
 		return left, right
 	}
 	// A shared line between every pair of moved lines forces about 3,000
-	// edits, past the stored-round ceiling of the workspace budget.
+	// edits. A search that kept every round ran out of memory budget here;
+	// the linear-space search finds the minimal diff.
 	shuffle := func() ([]string, []string) {
 		var left, right []string
 		for i := range 1500 {
@@ -360,12 +393,11 @@ func TestLargeChanges(t *testing.T) {
 	}
 
 	tests := []struct {
-		name   string
-		input  func() ([]string, []string)
-		budget string
+		name  string
+		input func() ([]string, []string)
 	}{
 		{name: "complete rewrite", input: rewrite},
-		{name: "edit distance above the ceiling", input: shuffle, budget: "diff workspace bytes"},
+		{name: "thousands of interleaved moves", input: shuffle},
 	}
 
 	for _, tt := range tests {
@@ -374,17 +406,10 @@ func TestLargeChanges(t *testing.T) {
 
 			left, right := tt.input()
 			first, err := diff.Lines(t.Context(), left, right, limits.Default())
-			if tt.budget != "" {
-				var problem *diff.LimitError
-				if first != nil || !errors.As(err, &problem) || problem.Budget != tt.budget {
-					t.Fatalf("hunks = %d, error = %v; want the %s budget", len(first), err, tt.budget)
-				}
-				return
-			}
 			if err != nil {
 				t.Fatal(err)
 			}
-			checkDiff(t, left, right, first)
+			checkDiff(t, left, right, first, true)
 
 			second, err := diff.Lines(t.Context(), left, right, limits.Default())
 			if err != nil || render(second) != render(first) {
@@ -539,8 +564,19 @@ func FuzzLines(f *testing.F) {
 	f.Add([]byte(""), []byte("aaaa"))
 	f.Add([]byte("abababababab"), []byte("babababababa"))
 
-	// Each byte picks one of four lines, so repeats are common. Inputs are
-	// capped at 64 lines to keep the LCS check and each run small.
+	// The default thresholds keep these inputs exact, so the diff must be
+	// minimal. Lowered thresholds give up mid-search or skip straight to
+	// anchoring or plain changes; those diffs must still be complete.
+	stages := []struct {
+		exact, total int
+	}{
+		{exact: 0, total: 1 << 30},
+		{exact: 7, total: 60},
+		{exact: 0, total: 0},
+	}
+
+	// Each byte picks one of eight lines, so both repeated and unique lines
+	// are common. Inputs are capped at 64 lines to keep the LCS check small.
 	f.Fuzz(func(t *testing.T, a, b []byte) {
 		if len(a) > 64 || len(b) > 64 {
 			t.Skip()
@@ -549,7 +585,7 @@ func FuzzLines(f *testing.F) {
 		toLines := func(data []byte) []string {
 			lines := make([]string, len(data))
 			for i, c := range data {
-				lines[i] = string(rune('a' + c%4))
+				lines[i] = string(rune('a' + c%8))
 			}
 			return lines
 		}
@@ -559,6 +595,65 @@ func FuzzLines(f *testing.F) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		checkDiff(t, left, right, hunks)
+		checkDiff(t, left, right, hunks, true)
+
+		for _, stage := range stages {
+			hunks, err := diff.LinesWithEffort(t.Context(), left, right, stage.exact, stage.total)
+			if err != nil {
+				t.Fatal(err)
+			}
+			checkDiff(t, left, right, hunks, false)
+		}
 	})
+}
+
+// BenchmarkCompare covers the stages: a small change in a long state (trim),
+// thousands of moves (exact), and states far enough apart to exhaust the
+// exact effort, with and without unique lines to anchor on.
+func BenchmarkCompare(b *testing.B) {
+	interleaved := func(pairs int) ([]string, []string) {
+		var left, right []string
+		for i := range pairs {
+			left = append(left, "shared", fmt.Sprint("moved ", i))
+			right = append(right, fmt.Sprint("moved ", pairs-1-i), "shared")
+		}
+		return left, right
+	}
+
+	cases := []struct {
+		name  string
+		input func() ([]string, []string)
+	}{
+		{name: "one change in 1000000 lines", input: func() ([]string, []string) {
+			left := numbered(1_000_000)
+			return left, replaced(left, map[int]string{500_000: "changed"})
+		}},
+		{name: "3000 interleaved moves", input: func() ([]string, []string) { return interleaved(1500) }},
+		{name: "100000 interleaved moves", input: func() ([]string, []string) { return interleaved(50_000) }},
+		{name: "200000 unique lines shuffled", input: func() ([]string, []string) {
+			left := numbered(200_000)
+			right := slices.Clone(left)
+			shuffle := rand.New(rand.NewPCG(1, 2))
+			shuffle.Shuffle(len(right), func(i, j int) { right[i], right[j] = right[j], right[i] })
+			return left, right
+		}},
+		{name: "200000 lines of four repeated values", input: func() ([]string, []string) {
+			left, right := make([]string, 200_000), make([]string, 200_000)
+			for i := range left {
+				left[i], right[i] = fmt.Sprint(i%4), fmt.Sprint(i*7%11%4)
+			}
+			return left, right
+		}},
+	}
+
+	for _, c := range cases {
+		b.Run(c.name, func(b *testing.B) {
+			left, right := c.input()
+			for b.Loop() {
+				if _, err := diff.Lines(b.Context(), left, right, limits.Default()); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
 }

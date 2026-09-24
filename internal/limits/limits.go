@@ -18,14 +18,6 @@ type Limits struct {
 	OptionalBytes int
 	TextBytes     int
 	OutputBytes   int
-
-	// Diff budgets count the units defined in docs/diff.md: workspace bytes for
-	// identifiers, lookup-table entries, and stored search rounds; steps for
-	// diagonals visited and matched lines followed; compared bytes for line
-	// bytes read while trimming and identifying.
-	DiffWorkspaceBytes int
-	DiffSteps          int
-	DiffCompareBytes   int
 }
 
 // Default returns the command budgets documented in docs/undo-format.md.
@@ -42,10 +34,6 @@ func Default() Limits {
 		OptionalBytes: 1 << 20,
 		TextBytes:     128 << 20,
 		OutputBytes:   16 << 20,
-
-		DiffWorkspaceBytes: 32 << 20,
-		DiffSteps:          10_000_000,
-		DiffCompareBytes:   256 << 20,
 	}
 }
 
@@ -68,9 +56,6 @@ func (l Limits) Validate() error {
 		{"optional-field bytes", int64(l.OptionalBytes), int64(ceiling.OptionalBytes)},
 		{"decoded text bytes", int64(l.TextBytes), int64(ceiling.TextBytes)},
 		{"output bytes", int64(l.OutputBytes), int64(ceiling.OutputBytes)},
-		{"diff workspace bytes", int64(l.DiffWorkspaceBytes), int64(ceiling.DiffWorkspaceBytes)},
-		{"diff steps", int64(l.DiffSteps), int64(ceiling.DiffSteps)},
-		{"diff compared bytes", int64(l.DiffCompareBytes), int64(ceiling.DiffCompareBytes)},
 	}
 
 	for _, bound := range bounds {

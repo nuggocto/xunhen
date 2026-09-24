@@ -31,8 +31,10 @@ invalid bytes the same way show does. The undo file records neither state's
 final newline, so the diff never reports one. An empty buffer is one empty
 line.
 
-A comparison that exceeds its step or workspace budget fails with the name of
-the budget; it never prints a partial diff. Inputs are never modified.
+The diff is minimal unless the states are very far apart. Past a fixed amount
+of search work, the rest is aligned at lines that occur once on each side, and
+then shown as plain deletions and insertions. Either way the diff is complete.
+Inputs are never modified.
 Exit status: 0 success, 1 input/output failure, 2 invalid arguments, 130 interrupt.
 `
 

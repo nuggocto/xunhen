@@ -105,9 +105,12 @@ func (d *Diff) Hunks() []Hunk {
 	return slices.Clone(d.hunks)
 }
 
-// Compare finds a minimal line diff between two states of one history. It
-// charges every budget before the work happens and returns a *LimitError
-// naming the exhausted one. Cancellation is checked between bounded units.
+// Compare finds a line diff between two states of one history. The diff is
+// minimal unless the states are so far apart that the exact search runs out
+// of effort; the rest is then aligned at lines unique to each side, and past
+// that shown as plain deletions and insertions. Every diff is complete:
+// applying its hunks to the left state gives the right one. Compare fails only
+// when cancelled or when a state exceeds the line limit.
 func Compare(ctx context.Context, from, to *history.Snapshot, lim limits.Limits) (*Diff, error) {
 	if from == nil || to == nil {
 		return nil, errors.New("diff requires two snapshots")
@@ -117,7 +120,7 @@ func Compare(ctx context.Context, from, to *history.Snapshot, lim limits.Limits)
 	}
 
 	// Snapshot.Lines returns copies, so the hunks can own them directly.
-	hunks, err := compare(ctx, from.Lines(), to.Lines(), lim)
+	hunks, err := compare(ctx, from.Lines(), to.Lines(), lim, defaultEffort)
 	if err != nil {
 		return nil, err
 	}
@@ -125,8 +128,15 @@ func Compare(ctx context.Context, from, to *history.Snapshot, lim limits.Limits)
 	return &Diff{from: from.Node(), to: to.Node(), hunks: hunks}, nil
 }
 
+// effort holds the thresholds that choose a search stage; see search.go.
+type effort struct {
+	exact, total int
+}
+
+var defaultEffort = effort{exact: defaultExactEffort, total: defaultTotalEffort}
+
 // compare owns left and right; the hunks keep references to them.
-func compare(ctx context.Context, left, right []string, lim limits.Limits) ([]Hunk, error) {
+func compare(ctx context.Context, left, right []string, lim limits.Limits, e effort) ([]Hunk, error) {
 	if err := lim.Validate(); err != nil {
 		return nil, err
 	}
@@ -137,7 +147,7 @@ func compare(ctx context.Context, left, right []string, lim limits.Limits) ([]Hu
 		return nil, err
 	}
 
-	s := &search{ctx: ctx, limits: lim}
+	s := &search{ctx: ctx, exactEffort: e.exact, totalEffort: e.total}
 	runs, err := s.script(left, right)
 	if err != nil {
 		return nil, err

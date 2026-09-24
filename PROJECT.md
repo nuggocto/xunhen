@@ -265,8 +265,10 @@ This is a declared serialization policy, not a claim of historically exact
 source-file bytes. xunhen does not overwrite the source.
 
 `diff` produces a unified, line-based comparison of two reconstructed states.
-It compares the underlying text before terminal escaping. Exceeding a work or
-output limit returns a clear error rather than an apparently complete diff.
+It compares the underlying text before terminal escaping. Far-apart states
+still get a complete diff, possibly longer than the minimal one, rather than an
+error. Exceeding the output limit returns a clear error rather than an
+apparently complete diff.
 
 The TUI starts with a branch list, a selected-state preview, and a comparison
 view. Selecting a second node sets the comparison target. Tree relationships
@@ -427,7 +429,7 @@ follow the format study; the type names are not claims about Neovim structs.
 | `VerifiedBase` | Immutable logical buffer lines checked against one decoded file's reference hash and line count. The source label is used for diagnostics; historical file options remain unknown. |
 | `Reconstructor` | A validated history bound to matching base text and its reference state. Owns the state limits and gives each request a fresh workspace. |
 | `Snapshot` | Successfully reconstructed buffer lines and their history/node identity. Historical encoding/newline settings stay unknown; a chosen export policy is separate. Never uses empty text to stand for failed reconstruction. |
-| `Diff` | A completed comparison with ordered, valid hunks and identified inputs. Cancellation or exhausted limits do not produce an ordinary completed diff. |
+| `Diff` | A completed comparison with ordered, valid hunks and identified inputs. Cancellation does not produce an ordinary completed diff; far-apart states produce a complete one that may not be minimal. |
 | `Limits` | Validated input, allocation, replay, and output budgets. Reject zero/negative or overflowing settings instead of interpreting them as unlimited. |
 | `InputError` | An operational failure with a category, source label, and byte offset or node context when known. Examples include truncation, unsupported format, broken reference, and base mismatch. |
 
@@ -471,10 +473,14 @@ of a 100,000-line file replay in about 4 ms instead of 54 ms, and 250,000 in
 one 1,000,000-line state in 0.43 s instead of 101 s. A rope or piece table would
 add balancing machinery that these numbers do not call for.
 
-The initial diff should use a documented Myers-style line algorithm. Its
-worst-case work and trace storage can be large, so impose explicit budgets and
-return a limit error when exhausted. Choosing an internal implementation means
-owning that algorithm's correctness; it is not free merely because it avoids a
+The diff uses Myers' linear-space line algorithm, documented in
+[docs/diff.md](docs/diff.md). Its worst-case work grows with both the state
+size and the edit distance, so the comparison counts its search work. Past a
+fixed amount it aligns the rest at lines unique to each side, and past a
+second amount it shows the rest as plain deletions and insertions. The result
+is always a complete diff; only minimality is given up, and search time stays
+under half a second. Choosing an internal implementation means owning that
+algorithm's correctness; it is not free merely because it avoids a
 dependency.
 
 ## Failure handling and resource bounds
@@ -503,9 +509,6 @@ Starting engineering budgets for the ordinary-source-file target:
 | Individual line, including the saved `U` line | 1 MiB |
 | Optional fields including framing | 1 MiB per file |
 | Total decoded text payload | 128 MiB |
-| Diff workspace | 32 MiB |
-| Diff frontier/comparison steps | 10,000,000 per request |
-| Diff bytes compared | 256 MiB per request |
 | Rendered CLI output after escaping | 16 MiB per command |
 
 These are project limits to validate with fixtures, not Neovim format limits or
@@ -615,7 +618,7 @@ cause a panic, unbounded allocation, or non-terminating traversal.
 
 For diffing, check that applying completed hunks to the left input produces
 the right input. Cover empty text, repeated lines, identical states, and
-budget exhaustion. For the TUI, verify node selection, stale-result rejection,
+states far enough apart to leave the exact search. For the TUI, verify node selection, stale-result rejection,
 cancellation, terminal restoration, and safe rendering of control bytes.
 Avoid tests tied to colors, spacing, or internal widget structure.
 

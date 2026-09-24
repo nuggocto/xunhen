@@ -1,7 +1,7 @@
 # Line diff
 
 `xunhen diff` compares two reconstructed states of one history. This page
-describes the algorithm in `internal/diff`, what its budgets count, and the
+describes the algorithm in `internal/diff`, how it bounds its work, and the
 output format. The replay that produces each state is described in
 [the format notes](undo-format.md).
 
@@ -20,10 +20,10 @@ deletes the empty line and inserts `a`.
 
 ## Algorithm
 
-The search is the greedy forward algorithm from Eugene W. Myers, "An O(ND)
-Difference Algorithm and Its Variations", *Algorithmica* 1 (1986). It finds
-an edit script with the fewest deletions plus insertions. Five steps run in
-order:
+The exact search is the linear-space variant from Eugene W. Myers, "An O(ND)
+Difference Algorithm and Its Variations", *Algorithmica* 1 (1986), section 4b.
+It finds an edit script with the fewest deletions plus insertions. The
+comparison runs in these steps:
 
 1. **Trim.** Drop the common prefix and suffix. Most comparisons between
    branches of one file differ in a small region, and this step leaves only
@@ -33,56 +33,64 @@ order:
 3. **Filter.** Remove lines that occur on only one side. They cannot belong to
    any common subsequence, so removing them does not change the result, and a
    rewrite that introduces fresh text costs almost nothing.
-4. **Search.** Round `d` records the furthest point each diagonal `k` in
-   `[-d, d]` reaches with `d` edits. Only points inside the edit grid count.
-   When two moves reach the same point, the insertion wins, as in the paper.
-   The search ends when the diagonal `n - m` reaches the corner.
-5. **Backtrack.** The stored rounds give the path back from the corner without
-   a second search. Matched lines map back to their original positions.
+4. **Search.** Take a region, trim it again, and split it. The exact search
+   runs Myers' search from both corners at once until the two paths meet, which
+   gives a point on a shortest edit path; the parts on either side of that
+   point become new regions. Two frontiers of `n + m` entries replace the
+   stored rounds of the textbook version, so memory stays linear in the region
+   size. Regions wait on an explicit stack rather than in recursive calls, so
+   no input can exhaust the stack.
+5. **Map back.** Matched lines map back to their original positions.
 
 Within each stretch of changes, every deleted line comes before every
 inserted line, whichever order the search took. Equal inputs always produce
 the same script.
 
-The search keeps every round, so its memory grows with the square of the edit
-distance `D`: round `d` stores `2d + 1` four-byte entries, `4(D + 1)²` bytes in
-all. The workspace budget therefore stops the search at about 2,900 edits,
-counted after the trim and filter steps. The step budget, about `D²/2`
-diagonal visits, would allow about 4,400. Myers' linear-space variant would
-drop the stored rounds and reach that higher ceiling, at the cost of a
-recursive middle-snake search that is harder to verify. Two branches of one
-source file rarely differ by thousands of lines, so the simpler version comes
-first. Revisit it if measured histories hit the workspace budget.
+### When states are far apart
 
-The lookup table sets a second ceiling. At 64 bytes per distinct left-hand
-line, a changed region with more than about 450,000 distinct lines exceeds the
-workspace budget, even when the filter would leave nothing to search. A small
-change inside a large state is unaffected, because trimming removes the
-unchanged lines before the table is built. On the development machine, a
-2,800-edit comparison took 12 ms and one change in a million-line state took
-3 ms.
+The exact search costs about `(n + m) × D` for a region of `n + m` lines that
+differs by `D` edits, so two very different states could keep it busy for
+minutes. Instead of failing, the comparison counts its search work as effort
+and changes strategy as the effort grows:
 
-## Budgets
+| Effort spent | Each region is |
+| --- | --- |
+| Under 64,000,000 | Split by the exact search. |
+| Under 256,000,000 | Split at anchors: lines that occur exactly once on each side, keeping the longest chain that stays in order on both sides, as patience diff does. Regions of at most 512 lines, both sides together, still get the exact search. |
+| After that | Left as a plain change: every line deleted, then every line inserted. |
 
-Every budget is charged before its work, and an exhausted budget returns an
-error naming it. No partial diff is ever returned.
+A unit of effort is one diagonal visited, one matched line followed, or one
+frontier entry reset by the exact search. Anchoring charges three units per
+line it counts and sixteen per candidate anchor, which makes a unit cost 1 to
+1.5 ns on the development machine either way. The search therefore stops after
+about 0.4 s, however far apart the states are.
 
-| Budget | Default | What it counts |
-| --- | --- | --- |
-| `diff steps` | 10,000,000 | Diagonals visited plus matched lines followed during the search |
-| `diff workspace bytes` | 32 MiB | Line identifiers, kept-line indexes, stored rounds, script runs, and an estimated 64 bytes per distinct line for the lookup table |
-| `diff compared bytes` | 256 MiB | Line bytes read by prefix and suffix comparisons and by identification |
-| `state lines` | 1,000,000 | Lines on either side |
+Every diff is complete: applying its hunks to the left state gives the right
+one. Only minimality is given up, and only after the exact effort runs out.
 
-Each line is identified once, and trimming reads each line at most once, so
-two 16 MiB states read at most about 64 MiB. The compared-bytes budget only
-binds when a caller lowers it.
+Measured on the development machine (AMD Ryzen AI Max+ 395, Go 1.27.1, five
+runs each; the runs agreed within 3%):
 
-Cancellation is checked before each search round and every 1,024 lines while
-identifying.
+| Comparison | Time |
+| --- | --- |
+| One changed line in a 1,000,000-line state | 6.4 ms |
+| 3,000 interleaved moves, minimal diff | 11 ms |
+| 100,000 interleaved moves | 143 ms |
+| 200,000 unique lines in shuffled order | 186 ms |
+| 200,000 lines drawn from four repeated values | 130 ms |
 
-The workspace budget does not cap process memory. Go's map, slice, and
-garbage-collector overhead come on top of it.
+`go test ./internal/diff -bench BenchmarkCompare` reproduces these cases.
+
+## Limits
+
+A comparison fails only when it is cancelled or when either state has more
+lines than the state line limit (1,000,000). Search work is bounded by effort,
+and every other cost is linear in the size of the two states: trimming and
+identifying read each line at most once, and the frontiers, identifiers,
+anchoring counts, and script all hold one entry per line or less.
+
+Cancellation is checked before each round of the exact search, before each
+region, and every 1,024 lines while trimming and identifying.
 
 ## Output
 
