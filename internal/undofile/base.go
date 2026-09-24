@@ -21,7 +21,8 @@ type VerifiedBase struct {
 	bytes int
 }
 
-// VerifyBase checks the producer's line count and buffer hash. The source is
+// VerifyBase checks the producer's line count and buffer hash. Lines use buffer
+// bytes, so an embedded NUL is NUL and no line may contain LF. The source is
 // only a diagnostic label. Strings are immutable; the line slice is copied.
 func VerifyBase(ctx context.Context, file *DecodedFile, source string, lines []string, lim limits.Limits) (*VerifiedBase, error) {
 	if err := lim.Validate(); err != nil {
@@ -53,6 +54,11 @@ func VerifyBase(ctx context.Context, file *DecodedFile, source string, lines []s
 		}
 		if len(line) > lim.LineBytes || len(line)+1 > lim.StateBytes-stateBytes {
 			return nil, fail(Limit, "base state exceeds line or state byte budget")
+		}
+		// A buffer line never holds LF. Rejecting it here also keeps "a\nb"
+		// from verifying as "a\x00b", which hashes the same way.
+		if strings.Contains(line, "\n") {
+			return nil, fail(Invalid, "line contains LF")
 		}
 		stateBytes += len(line) + 1
 

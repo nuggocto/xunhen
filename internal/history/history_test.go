@@ -206,13 +206,21 @@ func oracleOrder(entries []oracleEntry, parent, previous history.NodeID) []histo
 	return append(out, oracleOrder(entry.Alt, parent, n.ID)...)
 }
 
+type wireEntry struct {
+	top, bottom int32
+	lines       []string
+}
+
 type wireNode struct {
 	id, parent, child, next, previous int32
 	time                              int64
+	entries                           []wireEntry
 }
 
 // Author raw records independently of the decoder to isolate graph invariants.
-// These synthetic metadata-only changes have no text or extmark entries.
+// Changes carry only the text entries a case gives them and no extmarks. The
+// envelope names a one-line reference with a zero hash; withReference replaces
+// it when a case needs to bind a base.
 func graphBytes(nodes []wireNode, oldest, newest, redo, last, timeline int32) []byte {
 	b := append([]byte("Vim\x9fUnDo\xe5\x00\x03"), make([]byte, 32)...)
 	for _, n := range []int32{1, 0, 0, 0, oldest, newest, redo, int32(len(nodes)), last, timeline} {
@@ -231,7 +239,19 @@ func graphBytes(nodes []wireNode, oldest, newest, redo, last, timeline int32) []
 		b = binary.BigEndian.AppendUint32(b, ^uint32(0)) // cursor virtual column -1
 		b = append(b, make([]byte, 2+26*12+32)...)
 		b = binary.BigEndian.AppendUint64(b, uint64(n.time))
-		b = append(b, 0, 0x35, 0x81, 0x35, 0x81)
+		b = append(b, 0) // absent optional change metadata
+
+		for _, e := range n.entries {
+			b = binary.BigEndian.AppendUint16(b, 0xf518)
+			for _, value := range []int32{e.top, e.bottom, 0, int32(len(e.lines))} {
+				b = binary.BigEndian.AppendUint32(b, uint32(value))
+			}
+			for _, line := range e.lines {
+				b = binary.BigEndian.AppendUint32(b, uint32(len(line)))
+				b = append(b, line...)
+			}
+		}
+		b = append(b, 0x35, 0x81, 0x35, 0x81) // ends of the text and extmark lists
 	}
 
 	return append(b, 0xe7, 0xaa)

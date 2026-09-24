@@ -10,6 +10,16 @@ GOTOOLCHAIN = "local"
 description = "Format Go code"
 run = "go fmt ./..."
 
+[tasks.fmt-check]
+description = "Fail if any Go file needs gofmt"
+run = '''
+unformatted=$(gofmt -l .)
+if [ -n "$unformatted" ]; then
+  printf 'Format these files with gofmt:\n%s\n' "$unformatted" >&2
+  exit 1
+fi
+'''
+
 [tasks.test]
 description = "Run tests"
 run = "go test -count=1 -timeout=3m ./..."
@@ -37,5 +47,5 @@ env = { CGO_ENABLED = "0" }
 run = "go build -trimpath -o bin/xunhen ./cmd/xunhen"
 
 [tasks.check]
-description = "Run tests, vet, and build"
-depends = ["test", "vet", "build"]
+description = "Check formatting and run tests, vet, and build"
+depends = ["fmt-check", "test", "vet", "build"]

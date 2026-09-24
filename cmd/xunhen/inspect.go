@@ -64,9 +64,6 @@ func inspect(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return operationError(stderr, err)
 	}
-	if err := ctx.Err(); err != nil {
-		return operationError(stderr, err)
-	}
 
 	return writeOutput(stdout, stderr, text)
 }

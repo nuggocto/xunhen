@@ -26,8 +26,8 @@ Reconstruct a retained buffer state using a matching base file.
   -h, --help              Show this help
 
 Base files must be UTF-8/LF text without a BOM, NUL, or CRLF. Raw export also
-rejects a selected state with invalid UTF-8, NUL, or an embedded LF in a line.
-A lone CR is literal line content. Historical encoding and final-newline
+rejects a selected state with invalid UTF-8 or NUL, which retained edits can
+hold. A lone CR is literal line content. Historical encoding and final-newline
 settings are unknown; the chosen policy does not restore original file bytes.
 An empty buffer is one empty line, so include writes a single LF and omit
 writes nothing.
@@ -177,14 +177,14 @@ func showText(ctx context.Context, snapshot *history.Snapshot, options showOptio
 }
 
 // checkRawLine rejects text that UTF-8/LF export cannot represent faithfully.
+// Lines never hold LF: the decoder stores a serialized LF as NUL, and base
+// verification rejects LF.
 func checkRawLine(line string) error {
 	switch {
 	case !utf8.ValidString(line):
 		return errors.New("selected state contains invalid UTF-8; raw export unsupported")
 	case strings.Contains(line, "\x00"):
 		return errors.New("selected state contains NUL; raw export unsupported")
-	case strings.Contains(line, "\n"):
-		return errors.New("selected state contains an embedded LF; raw export unsupported")
 	}
 
 	return nil

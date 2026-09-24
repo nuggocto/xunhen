@@ -83,7 +83,8 @@ mise run check
 mise run fuzz
 ```
 
-`check` runs tests, vet, and a build. `fuzz` runs short decoder, history, and
+`check` runs the same checks as CI: formatting, tests, vet, and a build.
+`mise run fmt` formats the files. `fuzz` runs short decoder, history, and
 diff checks. Fixture generation is separate; see [testdata](testdata/README.md).
 
 Licensed under [Apache-2.0](LICENSE).

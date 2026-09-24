@@ -209,30 +209,6 @@ func TestUndoInputTypes(t *testing.T) {
 	}
 }
 
-func TestCancelledCommand(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name string
-		args []string
-	}{
-		{"before input", []string{"inspect", "--undo", "not opened"}},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctx, cancel := context.WithCancel(t.Context())
-			cancel()
-
-			var out, diagnostic bytes.Buffer
-			status := run(ctx, tt.args, &out, &diagnostic)
-			if status != 130 || out.Len() != 0 {
-				t.Fatalf("cancelled invocation: status %d, output %q", status, out.String())
-			}
-		})
-	}
-}
-
 func TestInspectionOutputBudget(t *testing.T) {
 	t.Parallel()
 

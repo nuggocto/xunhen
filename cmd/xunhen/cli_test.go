@@ -83,32 +83,33 @@ func TestUnknownArgumentsCannotControlTerminal(t *testing.T) {
 func TestWriteFailures(t *testing.T) {
 	t.Parallel()
 
+	// One stream fails; the other must carry only the expected text.
 	tests := []struct {
 		name       string
 		args       []string
-		writer     io.Writer
 		failStderr bool
-		diagnostic string
+		other      string // stream that still works
+		want       string
 	}{
-		{name: "stdout error", args: []string{"--help"}, writer: failedWriter{}, diagnostic: "cannot write output"},
-		{name: "stderr error", args: []string{"unknown"}, writer: failedWriter{}, failStderr: true},
+		{name: "stdout error", args: []string{"--help"}, other: "stderr", want: "cannot write output"},
+		{name: "stderr error", args: []string{"unknown"}, failStderr: true, other: "stdout"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			var stderr bytes.Buffer
-			stdout, diagnostic := tt.writer, io.Writer(&stderr)
+			var working bytes.Buffer
+			stdout, stderr := io.Writer(failedWriter{}), io.Writer(&working)
 			if tt.failStderr {
-				stdout, diagnostic = io.Discard, tt.writer
+				stdout, stderr = &working, failedWriter{}
 			}
 
-			if status := run(t.Context(), tt.args, stdout, diagnostic); status != 1 {
+			if status := run(t.Context(), tt.args, stdout, stderr); status != 1 {
 				t.Fatalf("exit status = %d, want 1", status)
 			}
 
-			assertOutput(t, "stderr", stderr.String(), tt.diagnostic)
+			assertOutput(t, tt.other, working.String(), tt.want)
 		})
 	}
 }

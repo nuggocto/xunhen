@@ -176,15 +176,23 @@ func (w *replay) applyEntry(record undofile.Record, number int, entry undofile.E
 	end := bottom - 1
 	removed := w.lines[top:end]
 	added := entry.LineCount()
-	tail := len(w.lines) - end
 
 	size := len(w.lines) - len(removed) + added
 	if size > w.limits.StateLines {
 		return w.limit(record, "state lines")
 	}
 
-	// Visit the removed lines, copy the added ones, and shift the tail.
-	if err := w.charge(record, len(removed)+added+tail); err != nil {
+	// Visit the removed lines and copy the added ones. The tail moves only when
+	// the line count changes; a one-line edit leaves it in place, so charging
+	// it anyway would fail deep histories of long files for work never done.
+	// A capacity increase also copies the prefix, but append grows capacity by
+	// at least a quarter each time, so all such copies in one request add up to
+	// about five times the largest state rather than a cost per entry.
+	moves := len(removed) + added
+	if added != len(removed) {
+		moves += len(w.lines) - end
+	}
+	if err := w.charge(record, moves); err != nil {
 		return err
 	}
 

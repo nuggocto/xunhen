@@ -126,38 +126,37 @@ func TestKnownHunks(t *testing.T) {
 	}
 }
 
-// TestSmallInputsExhaustively compares every pair of sequences of up to four
-// lines over a three-line alphabet: 121 sequences, 14,641 pairs. Repeated
-// lines are common at this size, which is where alignment choices matter.
+// TestSmallInputsExhaustively compares every pair of short sequences over a
+// small alphabet. Three lines up to four long give 121 sequences and 14,641
+// pairs. Repeated lines are common at this size, which is where alignment
+// choices matter.
 func TestSmallInputsExhaustively(t *testing.T) {
 	t.Parallel()
 
-	sequences := [][]string{nil}
-	for length := 1; length <= 4; length++ {
-		for _, prefix := range sequences {
-			if len(prefix) != length-1 {
-				continue
-			}
-			for _, line := range []string{"a", "b", "c"} {
-				sequences = append(sequences, append(slices.Clone(prefix), line))
-			}
-		}
-	}
-
 	tests := []struct {
-		name  string
-		count int
+		name      string
+		alphabet  []string
+		maxLength int
 	}{
-		{name: "alphabet of three, up to four lines", count: 121},
+		{name: "alphabet of three, up to four lines", alphabet: []string{"a", "b", "c"}, maxLength: 4},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			if len(sequences) != tt.count {
-				t.Fatalf("generated %d sequences, want %d", len(sequences), tt.count)
+			sequences := [][]string{nil}
+			for length := 1; length <= tt.maxLength; length++ {
+				for _, prefix := range sequences {
+					if len(prefix) != length-1 {
+						continue
+					}
+					for _, line := range tt.alphabet {
+						sequences = append(sequences, append(slices.Clone(prefix), line))
+					}
+				}
 			}
+
 			for _, left := range sequences {
 				for _, right := range sequences {
 					hunks, err := diff.Lines(t.Context(), left, right, limits.Default())
@@ -287,44 +286,6 @@ func lcs(left, right []string) int {
 	}
 
 	return row[len(right)]
-}
-
-func TestMyersPaperExample(t *testing.T) {
-	t.Parallel()
-
-	// Myers (1986), figure 1: ABCABBA to CBABAC needs five edits.
-	tests := []struct {
-		name        string
-		left, right string
-		edits       int
-	}{
-		{name: "figure 1", left: "ABCABBA", right: "CBABAC", edits: 5},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			left, right := strings.Split(tt.left, ""), strings.Split(tt.right, "")
-			hunks, err := diff.Lines(t.Context(), left, right, limits.Default())
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			edits := 0
-			for _, h := range hunks {
-				for line := range h.Lines() {
-					if line.Op != diff.Equal {
-						edits++
-					}
-				}
-			}
-			if edits != tt.edits {
-				t.Fatalf("edits = %d, want %d", edits, tt.edits)
-			}
-			checkDiff(t, left, right, hunks)
-		})
-	}
 }
 
 func TestBudgets(t *testing.T) {
@@ -572,6 +533,8 @@ func TestCompareStates(t *testing.T) {
 }
 
 func FuzzLines(f *testing.F) {
+	// Myers (1986), figure 1, with its letters shifted: five edits. Seeds run
+	// under plain go test, and checkDiff checks that count against the LCS.
 	f.Add([]byte("abcabba"), []byte("cbabac"))
 	f.Add([]byte(""), []byte("aaaa"))
 	f.Add([]byte("abababababab"), []byte("babababababa"))

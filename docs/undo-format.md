@@ -293,9 +293,10 @@ final-newline state remains unknown. Raw export serializes recovered lines as
 UTF-8/LF and requires an explicit `--final-newline=include|omit` policy. Describe
 that policy in help; do not call it restoration of the original file bytes.
 Preview/diff operate on lines and escape terminal controls for display. Raw
-export checks the selected state too: invalid UTF-8, NUL, and embedded LF
-within a logical line are unsupported. A lone CR is preserved as literal data
-in redirected raw output.
+export checks the selected state too, because retained edits can hold invalid
+UTF-8 or NUL even when the base does not; both are unsupported. No line can
+hold LF: the decoder maps a serialized LF to NUL, and base verification rejects
+LF. A lone CR is preserved as literal data in redirected raw output.
 
 The corpus classifies CRLF, Latin-1, invalid UTF-8, and NUL cases separately.
 They establish behavior and future regression inputs, not initial support

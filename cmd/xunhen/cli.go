@@ -14,11 +14,12 @@ import (
 	"github.com/nuggocto/xunhen/internal/termtext"
 )
 
+// An interrupt keeps its default disposition, so the kernel ends the process
+// and the shell reports status 130 without a code path here.
 const (
-	exitSuccess     = 0
-	exitFailure     = 1
-	exitUsage       = 2
-	exitInterrupted = 130
+	exitSuccess = 0
+	exitFailure = 1
+	exitUsage   = 2
 )
 
 const helpText = `xunhen - seek traces in Neovim's saved undo history
@@ -57,9 +58,6 @@ var commandHelp = map[string]string{
 }
 
 func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	if err := ctx.Err(); err != nil {
-		return operationError(stderr, err)
-	}
 	if len(args) == 0 {
 		return writeOutput(stdout, stderr, helpText)
 	}
@@ -134,13 +132,8 @@ func diagnostic(stderr io.Writer, status int, message string) int {
 	return status
 }
 
-// operationError maps cancellation to the interrupt status and everything else
-// to an operational failure.
+// operationError reports a failed input, budget, or output operation.
 func operationError(stderr io.Writer, err error) int {
-	if errors.Is(err, context.Canceled) {
-		return diagnostic(stderr, exitInterrupted, "interrupted")
-	}
-
 	return diagnostic(stderr, exitFailure, err.Error())
 }
 

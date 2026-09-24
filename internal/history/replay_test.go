@@ -3,6 +3,7 @@ package history_test
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
@@ -10,6 +11,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/nuggocto/xunhen/internal/history"
@@ -147,6 +149,79 @@ func TestReplayRejectsInvalidWork(t *testing.T) {
 	}
 }
 
+// A one-line edit replaces one line with one line, so the lines below it never
+// move. Deep chains of such edits at the top of a long file must replay within
+// the default budgets instead of paying for the whole file on every edit.
+func TestReplayOfOneLineEdits(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		lines, edits int
+	}{
+		// Neovim keeps 1,000 undo levels by default.
+		{name: "default undo depth in a 10,000-line file", lines: 10_000, edits: 1_000},
+		{name: "short history in a 100,000-line file", lines: 100_000, edits: 100},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			base := make([]string, tt.lines)
+			for i := range base {
+				base[i] = "unchanged"
+			}
+			base[0] = fmt.Sprint("version ", tt.edits)
+
+			// Every change is on the reference path, so its entry faces undo:
+			// undoing change id restores version id-1 on line 1.
+			nodes := make([]wireNode, tt.edits)
+			for i := range nodes {
+				id := int32(i + 1)
+				nodes[i] = wireNode{
+					id: id, parent: id - 1, child: id + 1,
+					entries: []wireEntry{{top: 0, bottom: 2, lines: []string{fmt.Sprint("version ", i)}}},
+				}
+			}
+			nodes[tt.edits-1].child = 0
+
+			last := int32(tt.edits)
+			data := withReference(graphBytes(nodes, 1, last, 0, last, last), base)
+			h, r := reconstructor(t, data, base, limits.Default())
+
+			root, err := h.Lookup(0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			snapshot, err := r.Reconstruct(t.Context(), root)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			got := snapshot.Lines()
+			if len(got) != tt.lines || got[0] != "version 0" || got[len(got)-1] != "unchanged" {
+				t.Fatalf("root has %d lines, first %q, last %q", len(got), got[0], got[len(got)-1])
+			}
+		})
+	}
+}
+
+// withReference stores the reference hash and line count for lines in the
+// envelope, at offsets 11 and 43 as docs/undo-format.md lays them out. The
+// lines must not contain NUL, which the hash would store as LF.
+func withReference(data []byte, lines []string) []byte {
+	hash := sha256.New()
+	for _, line := range lines {
+		hash.Write([]byte(line))
+		hash.Write([]byte{0})
+	}
+
+	copy(data[11:43], hash.Sum(nil))
+	binary.BigEndian.PutUint32(data[43:47], uint32(len(lines)))
+	return data
+}
+
 func TestReplayCancellation(t *testing.T) {
 	t.Parallel()
 
@@ -205,16 +280,28 @@ func TestBaseBindingRejectsWrongInput(t *testing.T) {
 	changed := slices.Clone(lines)
 	changed[0] += "x"
 
-	// A mismatch fails verification. A foreign file verifies on its own but
+	// The hash stores a buffer NUL as LF, so LF in place of NUL would match
+	// the reference if verification did not reject it.
+	var nulOracle oracleFile
+	if err := json.Unmarshal(readFixture(t, "embedded-nul", "oracle.json"), &nulOracle); err != nil {
+		t.Fatal(err)
+	}
+	withLF := oracleLines(t, nulOracle.Loaded.Anchor.LinesHex)
+	for i, line := range withLF {
+		withLF[i] = strings.ReplaceAll(line, "\x00", "\n")
+	}
+
+	// Wrong text fails verification. A foreign file verifies on its own but
 	// must not bind to a history decoded from different bytes in memory.
 	tests := []struct {
-		name     string
-		file     *undofile.DecodedFile
-		lines    []string
-		mismatch bool
+		name  string
+		file  *undofile.DecodedFile
+		lines []string
+		kind  undofile.ErrorKind // empty when verification succeeds
 	}{
-		{name: "changed text", file: file, lines: changed, mismatch: true},
-		{name: "extra line", file: file, lines: append(slices.Clone(lines), ""), mismatch: true},
+		{name: "changed text", file: file, lines: changed, kind: undofile.Mismatch},
+		{name: "extra line", file: file, lines: append(slices.Clone(lines), ""), kind: undofile.Mismatch},
+		{name: "LF standing in for NUL", file: decoded(t, readFixture(t, "embedded-nul", "history.undo")), lines: withLF, kind: undofile.Invalid},
 		{name: "foreign decoded file", file: decoded(t, undo), lines: lines},
 	}
 
@@ -223,10 +310,10 @@ func TestBaseBindingRejectsWrongInput(t *testing.T) {
 			t.Parallel()
 
 			base, err := undofile.VerifyBase(t.Context(), tt.file, tt.name, tt.lines, limits.Default())
-			if tt.mismatch {
+			if tt.kind != "" {
 				var problem *undofile.InputError
-				if base != nil || !errors.As(err, &problem) || problem.Kind != undofile.Mismatch {
-					t.Fatalf("base = %v, error = %v; want a base mismatch", base, err)
+				if base != nil || !errors.As(err, &problem) || problem.Kind != tt.kind {
+					t.Fatalf("base = %v, error = %v; want %s", base, err, tt.kind)
 				}
 				return
 			}
