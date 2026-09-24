@@ -83,6 +83,9 @@ func TestUnknownArgumentsCannotControlTerminal(t *testing.T) {
 func TestWriteFailures(t *testing.T) {
 	t.Parallel()
 
+	const fixture = "../../testdata/undo/abandoned-branch/"
+	undo, base := fixture+"history.undo", fixture+"base.bin"
+
 	// One stream fails; the other must carry only the expected text.
 	tests := []struct {
 		name       string
@@ -91,8 +94,11 @@ func TestWriteFailures(t *testing.T) {
 		other      string // stream that still works
 		want       string
 	}{
-		{name: "stdout error", args: []string{"--help"}, other: "stderr", want: "cannot write output"},
-		{name: "stderr error", args: []string{"unknown"}, failStderr: true, other: "stdout"},
+		{name: "help to failing stdout", args: []string{"--help"}, other: "stderr", want: "cannot write output"},
+		{name: "inspection to failing stdout", args: []string{"inspect", "--undo", undo}, other: "stderr", want: "cannot write output"},
+		{name: "state to failing stdout", args: []string{"show", "--undo", undo, "--base", base, "--node", "2"}, other: "stderr", want: "cannot write output"},
+		{name: "diff to failing stdout", args: []string{"diff", "--undo", undo, "--base", base, "--from", "2", "--to", "3"}, other: "stderr", want: "cannot write output"},
+		{name: "diagnostic to failing stderr", args: []string{"unknown"}, failStderr: true, other: "stdout"},
 	}
 
 	for _, tt := range tests {

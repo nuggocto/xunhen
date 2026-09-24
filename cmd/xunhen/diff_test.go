@@ -2,13 +2,8 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"path/filepath"
 	"testing"
-
-	"github.com/nuggocto/xunhen/internal/diff"
-	"github.com/nuggocto/xunhen/internal/history"
-	"github.com/nuggocto/xunhen/internal/limits"
 )
 
 const experimentAgainstChoice = "--- node 2\n+++ node 3\n@@ -1,3 +1,3 @@\n package sample\n \n" +
@@ -74,55 +69,6 @@ func TestDiffRecovery(t *testing.T) {
 			assertOutput(t, "stderr", diagnostic.String(), tt.diagnostic)
 			assertUnchanged(t, undoPath, undo)
 			assertUnchanged(t, filepath.Join(dir, "base.bin"), base)
-		})
-	}
-}
-
-func TestDiffOutputBudget(t *testing.T) {
-	t.Parallel()
-
-	dir := "../../testdata/undo/abandoned-branch"
-	lim := limits.Default()
-	states, err := recoverStates(t.Context(), filepath.Join(dir, "history.undo"), filepath.Join(dir, "base.bin"), []history.NodeID{2, 3}, lim)
-	if err != nil {
-		t.Fatal(err)
-	}
-	result, err := diff.Compare(t.Context(), states[0], states[1], lim)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	tests := []struct {
-		name    string
-		budget  int
-		cancel  bool
-		wantErr bool
-	}{
-		{name: "exact output budget", budget: len(experimentAgainstChoice)},
-		{name: "one byte short", budget: len(experimentAgainstChoice) - 1, wantErr: true},
-		{name: "cancelled rendering", budget: len(experimentAgainstChoice), cancel: true, wantErr: true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			ctx, cancel := context.WithCancel(t.Context())
-			defer cancel()
-			if tt.cancel {
-				cancel()
-			}
-
-			text, err := diffText(ctx, result, 2, 3, tt.budget)
-			if tt.wantErr {
-				if err == nil || text != "" {
-					t.Fatalf("incomplete diff exposed as success: %q, %v", text, err)
-				}
-				return
-			}
-			if err != nil || text != experimentAgainstChoice {
-				t.Fatalf("text = %q, error = %v", text, err)
-			}
 		})
 	}
 }

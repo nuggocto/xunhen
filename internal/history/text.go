@@ -29,15 +29,16 @@ type chunk struct {
 	bytes int
 }
 
-// newText copies lines into chunks of at most maxLines lines. A buffer always
-// has at least one line.
+// newText divides lines into chunks of at most maxLines lines. It takes
+// ownership of the slice, which it never writes to. A buffer always has at
+// least one line.
 func newText(lines []string, maxLines int) *text {
 	if len(lines) == 0 || maxLines < 2 {
 		panic("replay text needs at least one line and a chunk size of two")
 	}
 
 	t := &text{maxLines: maxLines, lines: len(lines)}
-	t.chunks = split(slices.Clone(lines), maxLines)
+	t.chunks = split(lines, maxLines)
 	for _, c := range t.chunks {
 		t.bytes += c.bytes
 	}
@@ -45,43 +46,83 @@ func newText(lines []string, maxLines int) *text {
 	return t
 }
 
-// bytesBetween counts the bytes of lines [top, end). It reads whole chunks by
-// their totals and only the lines of the two partial chunks at the edges.
-func (t *text) bytesBetween(top, end int) int {
-	total := 0
+// span is a range of lines [top, end), located once so that replay can
+// measure it and then replace it without scanning the chunk list twice.
+// first holds line top, or the insertion point when the range is empty; last
+// holds line end-1, or is first when the range is empty.
+type span struct {
+	top, end          int
+	first, firstStart int
+	last, lastStart   int
+}
+
+// find locates [top, end) in one pass over the chunk list. The position one
+// past the last line belongs to the last chunk.
+func (t *text) find(top, end int) span {
+	if top < 0 || top > end || end > t.lines {
+		panic(fmt.Sprintf("replay text range [%d, %d) of %d lines", top, end, t.lines))
+	}
+
+	s := span{top: top, end: end, first: -1}
+	final := max(top, end-1)
 	start := 0
-	for _, c := range t.chunks {
+	for i, c := range t.chunks {
 		next := start + len(c.lines)
-		switch {
-		case next <= top || start >= end:
-		case start >= top && next <= end:
-			total += c.bytes
-		default:
-			total += textBytes(c.lines[max(top, start)-start : min(end, next)-start])
+		lastChunk := i == len(t.chunks)-1
+		if s.first < 0 && (top < next || lastChunk) {
+			s.first, s.firstStart = i, start
+		}
+		if s.first >= 0 && (final < next || lastChunk) {
+			s.last, s.lastStart = i, start
+			return s
 		}
 		start = next
+	}
+
+	panic("replay text has no chunks")
+}
+
+// bytesIn counts the bytes of the span's lines. It reads the chunks between
+// the two ends by their totals.
+func (t *text) bytesIn(s span) int {
+	if s.top == s.end {
+		return 0
+	}
+
+	first, last := t.chunks[s.first].lines, t.chunks[s.last].lines
+	if s.first == s.last {
+		return textBytes(first[s.top-s.firstStart : s.end-s.firstStart])
+	}
+
+	total := textBytes(first[s.top-s.firstStart:]) + textBytes(last[:s.end-s.lastStart])
+	for _, c := range t.chunks[s.first+1 : s.last] {
+		total += c.bytes
 	}
 
 	return total
 }
 
-// replace swaps lines [top, end) for added. The caller has checked the range
+// replace swaps the span's lines for added. The caller has checked the range
 // against the current line count and keeps the result at one line or more.
-func (t *text) replace(top, end int, added []string) {
-	size := t.lines - (end - top) + len(added)
-	if top < 0 || top > end || end > t.lines || size < 1 {
-		panic(fmt.Sprintf("replay text replace [%d, %d) with %d lines in %d", top, end, len(added), t.lines))
+func (t *text) replace(s span, added []string) {
+	size := t.lines - (s.end - s.top) + len(added)
+	if size < 1 {
+		panic(fmt.Sprintf("replay text replace [%d, %d) with %d lines in %d", s.top, s.end, len(added), t.lines))
 	}
 
-	first, firstStart := t.locate(top)
-	last, lastStart := t.locate(end)
+	if t.replaceWithin(s, added, size) {
+		return
+	}
 
 	// Rebuild the touched chunks: the kept head of the first, the new lines,
 	// and the kept tail of the last.
-	region := make([]string, 0, top-firstStart+len(added)+lastStart+len(t.chunks[last].lines)-end)
-	region = append(region, t.chunks[first].lines[:top-firstStart]...)
+	first, last := s.first, s.last
+	head := t.chunks[first].lines[:s.top-s.firstStart]
+	tail := t.chunks[last].lines[s.end-s.lastStart:]
+	region := make([]string, 0, len(head)+len(added)+len(tail))
+	region = append(region, head...)
 	region = append(region, added...)
-	region = append(region, t.chunks[last].lines[end-lastStart:]...)
+	region = append(region, tail...)
 
 	// A short region borrows a neighbour, which holds at least maxLines/2
 	// lines, so no chunk falls below half full.
@@ -118,18 +159,38 @@ func (t *text) replace(top, end int, added []string) {
 	}
 }
 
-// locate returns the chunk holding line pos and that chunk's first line. The
-// position one past the last line belongs to the last chunk.
-func (t *text) locate(pos int) (int, int) {
-	start := 0
-	for i, c := range t.chunks {
-		if pos < start+len(c.lines) || i == len(t.chunks)-1 {
-			return i, start
-		}
-		start += len(c.lines)
+// replaceWithin edits one chunk in place when the span lies inside it and the
+// chunk stays within its size bounds, which is the usual case. It reports
+// false, changing nothing, otherwise. A chunk that grows gets room for
+// maxLines lines, so later insertions into it allocate nothing. The text owns
+// every chunk's backing array, and a chunk never writes past its capacity,
+// so the edit cannot reach another chunk or a snapshot.
+func (t *text) replaceWithin(s span, added []string, size int) bool {
+	if s.first != s.last {
+		return false
 	}
 
-	panic("replay text has no chunks")
+	c := &t.chunks[s.first]
+	from, to := s.top-s.firstStart, s.end-s.firstStart
+	length := len(c.lines) - (to - from) + len(added)
+	if length > t.maxLines || length < 1 || (len(t.chunks) > 1 && length < t.maxLines/2) {
+		return false
+	}
+
+	delta := textBytes(added) - textBytes(c.lines[from:to])
+	if length <= cap(c.lines) {
+		c.lines = slices.Replace(c.lines, from, to, added...)
+	} else {
+		grown := make([]string, 0, t.maxLines)
+		grown = append(grown, c.lines[:from]...)
+		grown = append(grown, added...)
+		c.lines = append(grown, c.lines[to:]...)
+	}
+
+	c.bytes += delta
+	t.bytes += delta
+	t.lines = size
+	return true
 }
 
 // all returns every line in order, in a new slice.

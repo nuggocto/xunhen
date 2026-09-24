@@ -65,12 +65,9 @@ func compareStates(ctx context.Context, args []string, stdout, stderr io.Writer)
 		return operationError(stderr, err)
 	}
 
-	text, err := diffText(ctx, result, options.from, options.to, lim.OutputBytes)
-	if err != nil {
-		return operationError(stderr, err)
-	}
-
-	return writeOutput(stdout, stderr, text)
+	out := newOutput(stdout)
+	writeDiff(out, result, options.from, options.to)
+	return out.finish(stderr)
 }
 
 func parseDiffArgs(args []string) (diffOptions, error) {
@@ -92,34 +89,24 @@ func parseDiffArgs(args []string) (diffOptions, error) {
 	return options, nil
 }
 
-// diffText renders a completed diff in unified format. Escaping happens here,
-// after the comparison, and cannot produce a newline, so recovered text cannot
-// forge hunk structure.
-func diffText(ctx context.Context, d *diff.Diff, from, to history.NodeID, maxBytes int) (string, error) {
+// writeDiff streams a completed diff in unified format. Escaping happens
+// here, after the comparison, and cannot produce a newline, so recovered text
+// cannot forge hunk structure.
+func writeDiff(out *output, d *diff.Diff, from, to history.NodeID) {
 	hunks := d.Hunks()
-	out := boundedOutput{ctx: ctx, maxBytes: maxBytes}
 	if len(hunks) == 0 {
-		return out.result()
+		return
 	}
 
-	out.line("--- node %d\n+++ node %d\n", from, to)
+	out.printf("--- node %d\n+++ node %d\n", from, to)
 	for _, h := range hunks {
-		out.line("@@ -%s +%s @@\n", hunkRange(h.LeftStart, h.LeftCount), hunkRange(h.RightStart, h.RightCount))
-
+		out.printf("@@ -%s +%s @@\n", hunkRange(h.LeftStart, h.LeftCount), hunkRange(h.RightStart, h.RightCount))
 		for line := range h.Lines() {
-			if out.err != nil {
-				break
-			}
-
-			escaped, err := termtext.EscapeDisplay(ctx, line.Text, maxBytes)
-			if err != nil {
-				return "", err
-			}
-			out.line("%c%s\n", " -+"[line.Op], escaped)
+			out.text(" -+"[line.Op : line.Op+1])
+			out.text(termtext.EscapeDisplay(line.Text))
+			out.text("\n")
 		}
 	}
-
-	return out.result()
 }
 
 // hunkRange follows GNU unified headers: a one-line range omits its count, and

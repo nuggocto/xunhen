@@ -1,16 +1,15 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"strconv"
-	"strings"
 
 	"github.com/nuggocto/xunhen/internal/history"
-	"github.com/nuggocto/xunhen/internal/limits"
 	"github.com/nuggocto/xunhen/internal/termtext"
 )
 
@@ -118,14 +117,7 @@ func writeOutput(stdout, stderr io.Writer, text string) int {
 }
 
 func diagnostic(stderr io.Writer, status int, message string) int {
-	const prefix = "xunhen: "
-	safe, err := termtext.Escape(context.Background(), message, limits.Default().OutputBytes-len(prefix+"\n"))
-	if err != nil {
-		safe = "diagnostic exceeds output byte budget"
-		status = exitFailure
-	}
-
-	if _, err := io.WriteString(stderr, prefix+safe+"\n"); err != nil {
+	if _, err := io.WriteString(stderr, "xunhen: "+termtext.Escape(message)+"\n"); err != nil {
 		return exitFailure
 	}
 
@@ -161,44 +153,43 @@ func parseFlags(flags *flag.FlagSet, args []string) error {
 	return err
 }
 
-// boundedOutput collects a command's whole result before anything is written,
-// so a budget or cancellation failure never leaves output that looks complete.
-type boundedOutput struct {
-	ctx      context.Context
-	text     strings.Builder
-	maxBytes int
-	err      error
+// output streams a command's result through a buffer and keeps the first
+// write error, so rendering runs straight through and a failure is reported
+// once. Commands finish everything that can fail for another reason, such as
+// reading, replaying, validating, or comparing, before the first write, so
+// only an output failure can leave partial output behind.
+type output struct {
+	w   *bufio.Writer
+	err error
 }
 
-// line appends formatted text. Callers pass bounded scalars or text that is
-// already escaped and bounded.
-func (o *boundedOutput) line(format string, args ...any) {
-	if o.err != nil {
-		return
-	}
-	if o.err = o.ctx.Err(); o.err != nil {
-		return
-	}
-
-	line := fmt.Sprintf(format, args...)
-	if len(line) > o.maxBytes-o.text.Len() {
-		o.err = errors.New("output exceeds its byte budget")
-		return
-	}
-
-	o.text.WriteString(line)
+func newOutput(w io.Writer) *output {
+	return &output{w: bufio.NewWriterSize(w, 64<<10)}
 }
 
-// result returns the collected text, or the first failure.
-func (o *boundedOutput) result() (string, error) {
-	if o.err != nil {
-		return "", o.err
+func (o *output) printf(format string, args ...any) {
+	if o.err == nil {
+		_, o.err = fmt.Fprintf(o.w, format, args...)
 	}
-	if err := o.ctx.Err(); err != nil {
-		return "", err
+}
+
+func (o *output) text(s string) {
+	if o.err == nil {
+		_, o.err = o.w.WriteString(s)
+	}
+}
+
+// finish flushes the buffer and reports any write failure as the command's
+// status.
+func (o *output) finish(stderr io.Writer) int {
+	if o.err == nil {
+		o.err = o.w.Flush()
+	}
+	if o.err != nil {
+		return diagnostic(stderr, exitFailure, "cannot write output")
 	}
 
-	return o.text.String(), nil
+	return exitSuccess
 }
 
 // pathFlag registers a path flag that may be given once.

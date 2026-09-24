@@ -267,8 +267,7 @@ source-file bytes. xunhen does not overwrite the source.
 `diff` produces a unified, line-based comparison of two reconstructed states.
 It compares the underlying text before terminal escaping. Far-apart states
 still get a complete diff, possibly longer than the minimal one, rather than an
-error. Exceeding the output limit returns a clear error rather than an
-apparently complete diff.
+error.
 
 The TUI starts with a branch list, a selected-state preview, and a comparison
 view. Selecting a second node sets the comparison target. Tree relationships
@@ -430,7 +429,7 @@ follow the format study; the type names are not claims about Neovim structs.
 | `Reconstructor` | A validated history bound to matching base text and its reference state. Owns the state limits and gives each request a fresh workspace. |
 | `Snapshot` | Successfully reconstructed buffer lines and their history/node identity. Historical encoding/newline settings stay unknown; a chosen export policy is separate. Never uses empty text to stand for failed reconstruction. |
 | `Diff` | A completed comparison with ordered, valid hunks and identified inputs. Cancellation does not produce an ordinary completed diff; far-apart states produce a complete one that may not be minimal. |
-| `Limits` | Validated input, allocation, replay, and output budgets. Reject zero/negative or overflowing settings instead of interpreting them as unlimited. |
+| `Limits` | Validated input and state ceilings. Reject zero/negative or overflowing settings instead of interpreting them as unlimited. |
 | `InputError` | An operational failure with a category, source label, and byte offset or node context when known. Examples include truncation, unsupported format, broken reference, and base mismatch. |
 
 Use private fields and checked constructors for `History`, `Reconstructor`,
@@ -469,8 +468,9 @@ hold non-UTF-8 bytes; terminal rendering must not assume valid UTF-8. During
 replay the working state keeps those lines in chunks of at most 1,024, the way
 Neovim's memline keeps blocks. An edit that changes the line count then moves
 the chunks it touches instead of every later line: 1,000 insertions at the top
-of a 100,000-line file replay in about 4 ms instead of 54 ms, and 250,000 in
-one 1,000,000-line state in 0.43 s instead of 101 s. A rope or piece table would
+of a 100,000-line file replay in about 1 ms instead of 54 ms, and 250,000 in
+one 1,000,000-line state in 41 ms instead of 101 s. An edit that stays inside
+one chunk changes it in place and allocates nothing. A rope or piece table would
 add balancing machinery that these numbers do not call for.
 
 The diff uses Myers' linear-space line algorithm, documented in
@@ -496,24 +496,36 @@ stack. Reject lengths and integer conversions that overflow the destination
 type. File-size checks alone are insufficient: small inputs can claim enormous
 counts or cause repeated reconstruction and diff work.
 
-Starting engineering budgets for the ordinary-source-file target:
+Ceilings, each far above what ordinary source files and histories need:
 
-| Resource | Initial bound |
+| Resource | Ceiling |
 | --- | --- |
-| Undo input | 64 MiB |
-| Supplied base text | 8 MiB |
-| Any reconstructed state | 16 MiB |
-| History nodes | 100,000 |
-| Text and extmark entries combined | 250,000 per file |
-| Stored lines across entries / lines in one state | 1,000,000 each |
-| Individual line, including the saved `U` line | 1 MiB |
-| Optional fields including framing | 1 MiB per file |
-| Total decoded text payload | 128 MiB |
-| Rendered CLI output after escaping | 16 MiB per command |
+| Undo input | 256 MiB |
+| Supplied base text | 64 MiB |
+| Any reconstructed state | 64 MiB |
+| History nodes | 1,000,000 |
+| Text and extmark entries combined | 1,000,000 per file |
+| Stored lines across entries / lines in one state | 4,000,000 each |
+| Individual line, including the saved `U` line | 16 MiB |
 
-These are project limits to validate with fixtures, not Neovim format limits or
-measured capacity claims. They are not a hard process-RSS guarantee: Go object,
-map, slice, allocator, and runtime overhead must also be accounted for.
+These are project limits, not Neovim format limits. Decoded text cannot
+outgrow the undo input, and a list of optional fields holds at most one
+field, so neither needs a limit of its own. Output streams as it is rendered,
+so it has none either.
+
+The memory target is 1 GiB per command. Synthetic inputs at these ceilings
+reached, as the highest peak resident memory of three runs on the development
+machine: 302 MiB to inspect 600,000 changes in a 240 MiB undo file, in 1.1 s;
+403 MiB to inspect, show, or compare states built from 192 MiB of 16 MiB
+lines; 445 MiB to replay 1,000,000 entries on a 4,000,000-line state, in
+0.4 s; 744 MiB to show a 4,000,000-line state; and 797 MiB, in 2.1 s, to
+compare two 4,000,000-line, 57 MiB states holding the same lines in shuffled
+order. The
+command sets a 768 MiB soft limit for the Go heap unless `GOMEMLIMIT` is set,
+so the collector keeps the heap near its live size on inputs this large.
+These figures cover the Go heap and runtime overhead as the operating system
+reports them; they are measurements of these inputs, not a guarantee for
+every input.
 
 Each limit is a safety ceiling sized so that no real file reaches it. Oversized
 or corrupt input then gets a named error instead of a hang or an out-of-memory
@@ -522,8 +534,9 @@ of its own; make it cheap instead. Replay, for example, touches a few chunks
 per edit, and the decoder's entry and stored-line limits bound a whole request,
 so replay has no work budget. Check cancellation between bounded units of
 work, such as a line, replay entry, or history header, so no unit runs for
-more than a few milliseconds at these limits. TUI rendering stays viewport-bounded. The format specification defines the
-units and the distinction between text work and comparison-step counts.
+more than a few milliseconds at these limits. The diff counts its search
+work as effort and changes strategy instead of failing, as
+[docs/diff.md](docs/diff.md) describes. TUI rendering stays viewport-bounded.
 
 Keep limits in one validated configuration passed explicitly into the core.
 Any later user override must retain finite ceilings and compatible arithmetic.

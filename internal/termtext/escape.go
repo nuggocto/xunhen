@@ -1,40 +1,33 @@
-// Package termtext renders untrusted bytes as bounded, terminal-safe text.
+// Package termtext renders untrusted bytes as terminal-safe text.
 package termtext
 
 import (
-	"context"
-	"errors"
 	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
-
-	"github.com/nuggocto/xunhen/internal/limits"
 )
 
 // Escape renders controls, non-ASCII runes, invalid UTF-8, quotes, and
 // backslashes as Go-style escapes, so the result is printable ASCII and
-// unambiguous. maxBytes applies after escaping, so an input cannot evade the
-// output budget.
-func Escape(ctx context.Context, text string, maxBytes int) (string, error) {
-	return escape(ctx, text, maxBytes, false)
+// unambiguous. The result is at most four times as long as text: a single
+// invalid byte or ASCII control is the largest expansion, as in \x1b.
+func Escape(text string) string {
+	return escape(text, false)
 }
 
 // EscapeDisplay keeps source text readable. Tabs, quotes, backslashes, and
 // printable Unicode pass through; controls, format characters, and invalid
 // bytes become Go-style escapes. Because backslashes are literal, a source
 // line containing `\x1b` looks the same as an escaped ESC. Use raw export when
-// the exact bytes matter.
-func EscapeDisplay(ctx context.Context, text string, maxBytes int) (string, error) {
-	return escape(ctx, text, maxBytes, true)
+// the exact bytes matter. The result is at most four times as long as text.
+func EscapeDisplay(text string) string {
+	return escape(text, true)
 }
 
-func escape(ctx context.Context, text string, maxBytes int, display bool) (string, error) {
-	if maxBytes <= 0 || maxBytes > limits.Default().OutputBytes {
-		return "", errors.New("invalid terminal-text byte budget")
-	}
-	if err := ctx.Err(); err != nil {
-		return "", err
+func escape(text string, display bool) string {
+	if plain(text, display) {
+		return text
 	}
 
 	var out strings.Builder
@@ -45,23 +38,34 @@ func escape(ctx context.Context, text string, maxBytes int, display bool) (strin
 		raw := text[offset : offset+size]
 		offset += size
 
-		part := append(scratch[:0], raw...)
-		if !display || !readable(r, size) {
-			part = strconv.AppendQuoteToASCII(scratch[:0], raw)
-			part = part[1 : len(part)-1]
+		if display && readable(r, size) {
+			out.WriteString(raw)
+			continue
 		}
 
-		if len(part) > maxBytes-out.Len() {
-			return "", errors.New("terminal text exceeds output byte budget")
+		part := strconv.AppendQuoteToASCII(scratch[:0], raw)
+		out.Write(part[1 : len(part)-1])
+	}
+
+	return out.String()
+}
+
+// plain reports whether every byte already renders as itself: printable
+// ASCII, plus tab for display, and no quote or backslash for Escape. Most
+// source lines pass, and they need no copy.
+func plain(text string, display bool) bool {
+	for i := range len(text) {
+		b := text[i]
+		switch {
+		case b == '\t' && display:
+		case b < 0x20 || b > 0x7e:
+			return false
+		case (b == '"' || b == '\\') && !display:
+			return false
 		}
-		out.Write(part)
 	}
 
-	if err := ctx.Err(); err != nil {
-		return "", err
-	}
-
-	return out.String(), nil
+	return true
 }
 
 // readable reports whether display text can show a rune as itself. A tab

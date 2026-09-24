@@ -304,21 +304,24 @@ claims. Reject unsupported base normalization or export cases clearly. Format
 2, unknown format versions, other native ABIs, encrypted Vim variants, and
 unknown extmark record types are outside this initial profile.
 
-## Bounds for the first implementation
+## Bounds
 
-These are xunhen policy limits, not claims about Neovim's maximum capacity.
+These are xunhen safety ceilings, not claims about Neovim's maximum capacity.
+Each sits far above what ordinary source files and histories need, so that
+only oversized or corrupt input reaches one.
 
-| Resource | Bound |
+| Resource | Ceiling |
 | --- | --- |
-| Undo input / base input | 64 MiB / 8 MiB |
-| Reconstructed state, including logical line terminators | 16 MiB |
-| Headers | 100,000 |
-| Text entries and extmark entries combined | 250,000 per file |
-| Stored lines across entries, and lines in one state | 1,000,000 each |
-| One stored/base/reconstructed line or saved `U` line | 1 MiB |
-| Optional-field payload per file, including framing | 1 MiB |
-| Decoded text | 128 MiB |
-| Rendered CLI output, after escaping | 16 MiB per command |
+| Undo input / base input | 256 MiB / 64 MiB |
+| Reconstructed state, including logical line terminators | 64 MiB |
+| Headers | 1,000,000 |
+| Text entries and extmark entries combined | 1,000,000 per file |
+| Stored lines across entries, and lines in one state | 4,000,000 each |
+| One stored/base/reconstructed line or saved `U` line | 16 MiB |
+
+Decoded text cannot outgrow the undo input, and an optional-field list holds
+at most one field, so neither has a limit of its own. Command output streams
+as it is rendered and has none either.
 
 Replay has no work budget of its own. A request applies each header on its
 path once, and its working state keeps lines in chunks of at most 1,024, so an
@@ -332,13 +335,14 @@ walks and checked arithmetic before allocation, conversion, and range edits.
 
 Check cumulative counts even when every individual record is small. Reject a
 limit breach with its name and context rather than an incomplete normal
-snapshot or diff. TUI rendering is viewport-bounded; the output limit is not
-permission to build a whole huge tree into a string for every key press.
+snapshot or diff. TUI rendering is viewport-bounded: streaming command output
+is not permission to build a whole huge tree into a string on every key press.
 
-These byte budgets do not cap total Go RSS: indexes, string/slice headers,
-retained backing storage, allocator behavior, and GC overhead need accounting
-and measurement before release. Capacity claims beyond this profile require
-their own producer fixtures and workload measurements.
+These byte limits do not cap total Go RSS by themselves. Indexes,
+string/slice headers, retained backing storage, allocator behavior, and GC
+overhead come on top. The worst synthetic inputs measured at these ceilings
+peaked at 797 MiB; `PROJECT.md` lists the cases. Capacity claims beyond this
+profile require their own producer fixtures and workload measurements.
 
 [revision]: https://github.com/neovim/neovim/tree/5885a30e1e1225349079e7a1c4a3848aa8e43e42
 [package]: https://gitlab.archlinux.org/archlinux/packaging/packages/neovim/-/blob/583b707757678d79349f2f6d7497a288aec5e61e/PKGBUILD

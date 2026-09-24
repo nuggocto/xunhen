@@ -3,6 +3,7 @@ package diff
 import (
 	"context"
 	"fmt"
+	"hash/maphash"
 	"sort"
 )
 
@@ -136,33 +137,25 @@ func (s *search) matches(left, right []string) ([]run, error) {
 		return nil, nil
 	}
 
-	table := make(map[string]int32)
+	table := newLineTable(left)
 	leftIDs := make([]int32, len(left))
-	for i, line := range left {
+	for i := range left {
 		if err := s.checkpoint(i); err != nil {
 			return nil, err
 		}
-
-		id, ok := table[line]
-		if !ok {
-			id = int32(len(table))
-			table[line] = id
-		}
-		leftIDs[i] = id
+		leftIDs[i] = table.add(i)
 	}
 
 	// A right-hand line missing from the table gets -1 and can never match.
-	shared := make([]bool, len(table))
+	shared := make([]bool, table.count())
 	rightIDs := make([]int32, len(right))
 	for i, line := range right {
 		if err := s.checkpoint(i); err != nil {
 			return nil, err
 		}
 
-		id, ok := table[line]
-		if !ok {
-			id = -1
-		} else {
+		id := table.find(line)
+		if id >= 0 {
 			shared[id] = true
 		}
 		rightIDs[i] = id
@@ -171,7 +164,7 @@ func (s *search) matches(left, right []string) ([]run, error) {
 	a, aIndex := keep(leftIDs, func(id int32) bool { return shared[id] })
 	b, bIndex := keep(rightIDs, func(id int32) bool { return id >= 0 })
 
-	found, err := s.align(a, b, len(table))
+	found, err := s.align(a, b, table.count())
 	if err != nil {
 		return nil, err
 	}
@@ -191,6 +184,70 @@ func (s *search) matches(left, right []string) ([]run, error) {
 	}
 
 	return out, nil
+}
+
+// lineTable gives each distinct left-hand line a dense identifier, in order
+// of first appearance. It is an open-addressed hash table whose slots hold
+// identifiers and whose identifiers point back to a left-hand line by index.
+// Holding no strings, it adds nothing for the garbage collector to scan, which
+// a map keyed by millions of lines would.
+type lineTable struct {
+	left  []string
+	seed  maphash.Seed
+	slots []uint64 // hash tag << 32 | identifier + 1; zero marks an empty slot
+	first []int32  // left-hand index of each identifier's first line
+}
+
+// newLineTable sizes the slots to at least twice the left-hand lines, so the
+// table is never more than half full and every probe finds an empty slot.
+func newLineTable(left []string) *lineTable {
+	size := 1
+	for size < 2*len(left) {
+		size <<= 1
+	}
+
+	return &lineTable{left: left, seed: maphash.MakeSeed(), slots: make([]uint64, size)}
+}
+
+// slot returns the slot holding line's identifier, or the empty slot where
+// it belongs, along with the line's hash tag. A probe compares the tag stored
+// in the slot before the line itself, so a slot taken by another line almost
+// never costs a read of that line.
+func (t *lineTable) slot(line string) (int, uint64) {
+	hash := maphash.String(t.seed, line)
+	tag := hash >> 32 << 32
+	mask := len(t.slots) - 1
+	for i := int(hash) & mask; ; i = (i + 1) & mask {
+		entry := t.slots[i]
+		if entry == 0 {
+			return i, tag
+		}
+		if entry&^0xffffffff == tag && t.left[t.first[uint32(entry)-1]] == line {
+			return i, tag
+		}
+	}
+}
+
+// add returns the identifier of left-hand line i, assigning the next one to
+// a line not seen before.
+func (t *lineTable) add(i int) int32 {
+	slot, tag := t.slot(t.left[i])
+	if t.slots[slot] == 0 {
+		t.first = append(t.first, int32(i))
+		t.slots[slot] = tag | uint64(len(t.first))
+	}
+
+	return int32(uint32(t.slots[slot])) - 1
+}
+
+// find returns line's identifier, or -1 when no left-hand line equals it.
+func (t *lineTable) find(line string) int32 {
+	slot, _ := t.slot(line)
+	return int32(uint32(t.slots[slot])) - 1
+}
+
+func (t *lineTable) count() int {
+	return len(t.first)
 }
 
 func (s *search) checkpoint(i int) error {

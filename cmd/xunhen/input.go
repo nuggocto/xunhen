@@ -45,7 +45,7 @@ func loadBase(ctx context.Context, path string, lim limits.Limits) ([]string, er
 			return fmt.Errorf("read base file: %w", err)
 		}
 		if int64(len(data)) > lim.BaseBytes {
-			return inputError(undofile.Limit, path, "base input bytes", "input exceeds its budget")
+			return inputError(undofile.Limit, path, "base input bytes", "input exceeds its limit")
 		}
 		return nil
 	})
@@ -74,17 +74,17 @@ func splitBase(path string, data []byte, lim limits.Limits) ([]string, error) {
 		return nil, inputError(undofile.Unsupported, path, "base text", problem)
 	}
 
-	// Count before splitting. Eight MiB of LF bytes would otherwise build eight
-	// million string headers, about 128 MiB, before the line budget rejects them.
+	// Count before splitting. A 64 MiB base of LF bytes would otherwise build 64
+	// million string headers, about 1 GiB, before the line limit rejects them.
 	text := strings.TrimSuffix(string(data), "\n")
 	if strings.Count(text, "\n") >= lim.StateLines {
-		return nil, inputError(undofile.Limit, path, "base lines", "logical line count exceeds its budget")
+		return nil, inputError(undofile.Limit, path, "base lines", "logical line count exceeds its limit")
 	}
 
 	lines := strings.Split(text, "\n")
 	for _, line := range lines {
 		if len(line) > lim.LineBytes {
-			return nil, inputError(undofile.Limit, path, "base line bytes", "line exceeds its budget")
+			return nil, inputError(undofile.Limit, path, "base line bytes", "line exceeds its limit")
 		}
 	}
 

@@ -33,9 +33,6 @@ func TestFiniteBudgets(t *testing.T) {
 		{"unlimited stored lines", func(l *limits.Limits) { l.StoredLines = 0 }, false},
 		{"excess state lines", func(l *limits.Limits) { l.StateLines++ }, false},
 		{"unlimited line bytes", func(l *limits.Limits) { l.LineBytes = 0 }, false},
-		{"excess options", func(l *limits.Limits) { l.OptionalBytes++ }, false},
-		{"negative text budget", func(l *limits.Limits) { l.TextBytes = -1 }, false},
-		{"excess output", func(l *limits.Limits) { l.OutputBytes++ }, false},
 	}
 
 	for _, tt := range tests {

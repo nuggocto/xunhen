@@ -119,13 +119,18 @@ func Compare(ctx context.Context, from, to *history.Snapshot, lim limits.Limits)
 		return nil, errors.New("snapshots belong to different histories")
 	}
 
-	// Snapshot.Lines returns copies, so the hunks can own them directly.
-	hunks, err := compare(ctx, from.Lines(), to.Lines(), lim, defaultEffort)
+	// Snapshot.Lines returns copies, so the hunks can own them directly. The
+	// snapshots are not used after this, so a caller that drops them lets the
+	// collector reclaim them while the comparison runs.
+	fromNode, toNode := from.Node(), to.Node()
+	left, right := from.Lines(), to.Lines()
+
+	hunks, err := compare(ctx, left, right, lim, defaultEffort)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Diff{from: from.Node(), to: to.Node(), hunks: hunks}, nil
+	return &Diff{from: fromNode, to: toNode, hunks: hunks}, nil
 }
 
 // effort holds the thresholds that choose a search stage; see search.go.

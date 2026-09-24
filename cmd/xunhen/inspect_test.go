@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"encoding/binary"
 	"os"
 	"path/filepath"
@@ -10,7 +9,6 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/nuggocto/xunhen/internal/history"
 	"github.com/nuggocto/xunhen/internal/limits"
 	"github.com/nuggocto/xunhen/internal/undofile"
 )
@@ -204,56 +202,6 @@ func TestUndoInputTypes(t *testing.T) {
 				}
 			} else if err == nil || file != nil {
 				t.Fatal("invalid file type or excessive input accepted")
-			}
-		})
-	}
-}
-
-func TestInspectionOutputBudget(t *testing.T) {
-	t.Parallel()
-
-	lim := limits.Default()
-	file, err := loadUndo(t.Context(), "../../testdata/undo/linear/history.undo", lim)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	h, err := history.New(t.Context(), file, lim)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	complete, err := inspectionText(t.Context(), "fixture", h, lim.OutputBytes)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	tests := []struct {
-		name    string
-		budget  int
-		cancel  bool
-		wantErr bool
-	}{
-		{name: "cancel rendering", budget: len(complete), cancel: true, wantErr: true},
-		{name: "bounded rendering", budget: len(complete) - 1, wantErr: true},
-		{name: "exact rendering limit", budget: len(complete)},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctx, cancel := context.WithCancel(t.Context())
-			defer cancel()
-			if tt.cancel {
-				cancel()
-			}
-
-			text, err := inspectionText(ctx, "fixture", h, tt.budget)
-			if tt.wantErr {
-				if err == nil || text != "" {
-					t.Fatalf("incomplete output exposed as success: %q, %v", text, err)
-				}
-			} else if err != nil || text != complete {
-				t.Fatalf("exact output limit failed: %v", err)
 			}
 		})
 	}

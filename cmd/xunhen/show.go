@@ -71,14 +71,21 @@ func show(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return operationError(stderr, err)
 	}
-	snapshot := states[0]
+	lines := states[0].Lines()
 
-	text, err := showText(ctx, snapshot, options, lim.OutputBytes)
-	if err != nil {
-		return operationError(stderr, err)
+	// Check the whole state before the first write, so an unsupported raw
+	// export never leaves partial output.
+	if options.raw {
+		for _, line := range lines {
+			if err := checkRawLine(line); err != nil {
+				return operationError(stderr, err)
+			}
+		}
 	}
 
-	return writeOutput(stdout, stderr, text)
+	out := newOutput(stdout)
+	writeState(out, lines, options)
+	return out.finish(stderr)
 }
 
 func parseShowArgs(args []string) (showOptions, error) {
@@ -133,47 +140,20 @@ func outputIsTerminal(output io.Writer) (bool, error) {
 	}
 }
 
-// showText renders the whole state before anything is written, so a failure
-// never leaves a partial result that looks complete.
-func showText(ctx context.Context, snapshot *history.Snapshot, options showOptions, maxBytes int) (string, error) {
-	lines := snapshot.Lines()
-	var out strings.Builder
-
+// writeState streams a reconstructed state. Raw lines have already passed
+// checkRawLine, so nothing but the write itself can fail here.
+func writeState(out *output, lines []string, options showOptions) {
 	for i, line := range lines {
-		if err := ctx.Err(); err != nil {
-			return "", err
+		if !options.raw {
+			line = termtext.EscapeDisplay(line)
 		}
-
-		if options.raw {
-			if err := checkRawLine(line); err != nil {
-				return "", err
-			}
-		} else {
-			escaped, err := termtext.EscapeDisplay(ctx, line, maxBytes)
-			if err != nil {
-				return "", err
-			}
-			line = escaped
-		}
+		out.text(line)
 
 		last := i == len(lines)-1
-		newline := !last || !options.raw || options.finalNewline == "include"
-
-		size := len(line)
-		if newline {
-			size++
-		}
-		if size > maxBytes-out.Len() {
-			return "", errors.New("show output exceeds output byte budget")
-		}
-
-		out.WriteString(line)
-		if newline {
-			out.WriteByte('\n')
+		if !last || !options.raw || options.finalNewline == "include" {
+			out.text("\n")
 		}
 	}
-
-	return out.String(), nil
 }
 
 // checkRawLine rejects text that UTF-8/LF export cannot represent faithfully.

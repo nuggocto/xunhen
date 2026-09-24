@@ -32,15 +32,15 @@ func TestTextMatchesFlatLines(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			text := newText(tt.start, 4)
-			text.replace(tt.top, tt.end, tt.added)
+			text := newText(slices.Clone(tt.start), 4)
+			text.replace(text.find(tt.top, tt.end), tt.added)
 
 			want := slices.Replace(slices.Clone(tt.start), tt.top, tt.end, tt.added...)
 			if got := text.all(); !slices.Equal(got, want) {
 				t.Fatalf("lines = %q, want %q", got, want)
 			}
-			if text.lines != len(want) || text.bytesBetween(0, text.lines) != textBytes(want) {
-				t.Fatalf("counts %d lines and %d bytes, want %d and %d", text.lines, text.bytesBetween(0, text.lines), len(want), textBytes(want))
+			if text.lines != len(want) || text.bytes != textBytes(want) {
+				t.Fatalf("counts %d lines and %d bytes, want %d and %d", text.lines, text.bytes, len(want), textBytes(want))
 			}
 		})
 	}
@@ -60,7 +60,7 @@ func FuzzText(f *testing.F) {
 
 		maxLines := 2 + int(chunk%15)
 		want := []string{"seed"}
-		text := newText(want, maxLines)
+		text := newText(slices.Clone(want), maxLines)
 
 		for i := 0; i+2 < len(ops); i += 3 {
 			top := int(ops[i]) % (len(want) + 1)
@@ -70,13 +70,14 @@ func FuzzText(f *testing.F) {
 				added = []string{""} // A buffer keeps one line, as replay does.
 			}
 
-			// Check a range before the edit changes it.
-			if got, expect := text.bytesBetween(top, end), textBytes(want[top:end]); got != expect {
+			// Measure the range before the edit changes it.
+			span := text.find(top, end)
+			if got, expect := text.bytesIn(span), textBytes(want[top:end]); got != expect {
 				t.Fatalf("edit %d: bytes in [%d, %d) = %d, want %d", i/3, top, end, got, expect)
 			}
 
 			want = slices.Replace(want, top, end, added...)
-			text.replace(top, end, added)
+			text.replace(span, added)
 
 			if !slices.Equal(text.all(), want) || text.lines != len(want) || text.bytes != textBytes(want) {
 				t.Fatalf("edit %d: chunked text differs from the flat lines", i/3)

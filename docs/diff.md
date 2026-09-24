@@ -76,18 +76,22 @@ runs each; the runs agreed within 3%):
 | One changed line in a 1,000,000-line state | 6.4 ms |
 | 3,000 interleaved moves, minimal diff | 11 ms |
 | 100,000 interleaved moves | 143 ms |
-| 200,000 unique lines in shuffled order | 186 ms |
-| 200,000 lines drawn from four repeated values | 130 ms |
+| 200,000 unique lines in shuffled order | 182 ms |
+| 200,000 lines drawn from four repeated values | 132 ms |
 
 `go test ./internal/diff -bench BenchmarkCompare` reproduces these cases.
 
 ## Limits
 
 A comparison fails only when it is cancelled or when either state has more
-lines than the state line limit (1,000,000). Search work is bounded by effort,
+lines than the state line limit (4,000,000). Search work is bounded by effort,
 and every other cost is linear in the size of the two states: trimming and
 identifying read each line at most once, and the frontiers, identifiers,
-anchoring counts, and script all hold one entry per line or less.
+anchoring counts, and script all hold one entry per line or less. The line
+lookup table is an open-addressed array of line indexes rather than a map of
+strings, so it gives the garbage collector nothing to scan. Two 4,000,000-line
+states with the same lines in shuffled order compare in 2.1 s, with a peak of
+797 MiB for the whole command.
 
 Cancellation is checked before each round of the exact search, before each
 region, and every 1,024 lines while trimming and identifying.
@@ -117,7 +121,7 @@ The command prints a unified diff with three lines of context:
   Escaping never produces a newline, so recovered text cannot forge hunk
   structure.
 
-The whole diff is rendered before anything is written, within the 16 MiB
-output budget. Output is terminal-safe rather than byte-exact, so it is not
-meant as input for `patch`. For exact bytes, export each state with
-`show --raw`.
+The comparison finishes before anything is written, and the diff then
+streams to stdout as it is rendered. Output is terminal-safe rather than
+byte-exact, so it is not meant as input for `patch`. For exact bytes, export
+each state with `show --raw`.

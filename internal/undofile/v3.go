@@ -18,7 +18,7 @@ func (d *decoder) decodeV3() *DecodedFile {
 		d.fail(Invalid, 43, "base lines", "a Neovim buffer has at least one logical line")
 	}
 
-	meta.SavedLine = d.text("saved U line")
+	meta.SavedLine = d.text("saved U line", "saved U line length")
 	meta.SavedLineNumber = d.nonnegative("saved U line number")
 	meta.SavedColumn = d.nonnegative("saved U column")
 
@@ -47,18 +47,19 @@ func (d *decoder) decodeV3() *DecodedFile {
 	return file
 }
 
+// optional reads a list of optional fields. Only ID 1 is supported and a
+// duplicate is rejected, so a list holds at most one four-byte field and needs
+// no size limit of its own.
 func (d *decoder) optional() SaveNumber {
 	var save SaveNumber
 
 	for d.err == nil {
 		offset := d.offset
-		d.chargeOptional(1)
 		size := d.u8("optional-field length")
 		if size == 0 || d.err != nil {
 			break
 		}
 
-		d.chargeOptional(1 + int(size))
 		id := d.u8("optional-field id")
 		if id != 1 {
 			d.fail(Unsupported, offset+1, "optional field", fmt.Sprintf("field ID %d is not supported", id))
@@ -76,15 +77,6 @@ func (d *decoder) optional() SaveNumber {
 	}
 
 	return save
-}
-
-func (d *decoder) chargeOptional(n int) {
-	if n > d.limits.OptionalBytes-d.optionalBytes {
-		d.fail(Limit, d.offset, "optional-field bytes", "fields exceed remaining budget")
-		return
-	}
-
-	d.optionalBytes += n
 }
 
 func (d *decoder) recordV3() Record {
@@ -105,7 +97,7 @@ func (d *decoder) recordV3() Record {
 		d.fail(Invalid, d.offset-4, "sequence", "zero is reserved for absent links")
 	}
 
-	info.Cursor = d.position("cursor")
+	info.Cursor = d.position(cursorFields)
 	info.CursorVirtualColumn = d.i32("cursor virtual column")
 	if info.CursorVirtualColumn < -1 {
 		d.fail(Invalid, d.offset-4, "cursor virtual column", "value below -1")
@@ -116,16 +108,14 @@ func (d *decoder) recordV3() Record {
 		d.fail(Unsupported, d.offset-2, "flags", fmt.Sprintf("flags 0x%04x include unsupported bits", info.Flags))
 	}
 
-	for mark := range info.Marks {
-		info.Marks[mark] = d.position("named mark")
+	for range 26 {
+		d.position(markFields)
 	}
+	d.position(visualStartFields)
+	d.position(visualEndFields)
+	d.nonnegative("visual mode")
+	d.nonnegative("visual desired column")
 
-	info.Visual = Visual{
-		Start:         d.position("visual start"),
-		End:           d.position("visual end"),
-		Mode:          d.nonnegative("visual mode"),
-		DesiredColumn: d.nonnegative("visual desired column"),
-	}
 	info.Time = d.i64("event time")
 	info.Save = d.optional()
 
@@ -164,7 +154,7 @@ func (d *decoder) entryV3() Entry {
 			break
 		}
 
-		line := d.text("entry line")
+		line := d.text("entry line", "entry line length")
 		if d.err == nil {
 			entry.lines = append(entry.lines, line)
 		}
@@ -173,11 +163,29 @@ func (d *decoder) entryV3() Entry {
 	return entry
 }
 
-func (d *decoder) position(field string) Position {
+// positionFields names a position's three scalars for diagnostics. The names
+// are built once here rather than on each of the 29 positions every record
+// holds.
+type positionFields struct {
+	line, column, extra string
+}
+
+func fieldsOf(name string) positionFields {
+	return positionFields{line: name + " line", column: name + " column", extra: name + " extra column"}
+}
+
+var (
+	cursorFields      = fieldsOf("cursor")
+	markFields        = fieldsOf("named mark")
+	visualStartFields = fieldsOf("visual start")
+	visualEndFields   = fieldsOf("visual end")
+)
+
+func (d *decoder) position(field positionFields) Position {
 	return Position{
-		Line:   d.nonnegative(field + " line"),
-		Column: d.nonnegative(field + " column"),
-		Extra:  d.nonnegative(field + " extra column"),
+		Line:   d.nonnegative(field.line),
+		Column: d.nonnegative(field.column),
+		Extra:  d.nonnegative(field.extra),
 	}
 }
 

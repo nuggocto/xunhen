@@ -76,6 +76,7 @@ func (r *Reconstructor) Reconstruct(ctx context.Context, target NodeRef) (*Snaps
 		return nil, err
 	}
 
+	// VerifiedBase.Lines returns a fresh copy, so the workspace can own it.
 	w := &replay{ctx: ctx, history: h, limits: r.limits, text: newText(r.base.Lines(), chunkLines)}
 	for _, index := range h.replayPath(target.index) {
 		if err := w.applyHeader(index); err != nil {
@@ -165,8 +166,9 @@ func (w *replay) applyEntry(record undofile.Record, number int, entry undofile.E
 		return w.limit(record, "state lines")
 	}
 
+	span := w.text.find(top, end)
 	lines := entry.Lines()
-	bytes := w.text.bytes - w.text.bytesBetween(top, end) + textBytes(lines)
+	bytes := w.text.bytes - w.text.bytesIn(span) + textBytes(lines)
 	if size == 0 {
 		lines, bytes = []string{""}, 1 // Neovim keeps one dummy empty line.
 	}
@@ -174,7 +176,7 @@ func (w *replay) applyEntry(record undofile.Record, number int, entry undofile.E
 		return w.limit(record, "state bytes")
 	}
 
-	w.text.replace(top, end, lines)
+	w.text.replace(span, lines)
 	return nil
 }
 

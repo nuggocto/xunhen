@@ -289,8 +289,6 @@ func TestDecodeBudgets(t *testing.T) {
 		{"cumulative lines", func(l *limits.Limits) { l.StoredLines = 1 }, "stored lines"},
 		{"reference lines", func(l *limits.Limits) { l.StateLines = 1 }, "base lines"},
 		{"saved line bytes", func(l *limits.Limits) { l.LineBytes = 1 }, "saved U line length"},
-		{"cumulative options", func(l *limits.Limits) { l.OptionalBytes = 10 }, "optional-field bytes"},
-		{"cumulative text", func(l *limits.Limits) { l.TextBytes = 5 }, "decoded text bytes"},
 	}
 
 	for _, tt := range tests {
@@ -427,13 +425,11 @@ func FuzzDecode(f *testing.F) {
 
 		lim := limits.Default()
 		lim.InputBytes = 64 << 10
-		lim.TextBytes = 64 << 10
 		lim.LineBytes = 4096
 		lim.Nodes = 128
 		lim.Entries = 512
 		lim.StoredLines = 2048
 		lim.StateLines = 2048
-		lim.OptionalBytes = 4096
 
 		before := bytes.Clone(data)
 		file, err := undofile.Decode(t.Context(), "fuzz", bytes.NewReader(data), lim)

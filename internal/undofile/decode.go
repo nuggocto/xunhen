@@ -84,18 +84,16 @@ func (d *decoder) end() error {
 // A sticky error keeps scalar reads explicit without allowing a failed count
 // read to drive allocation. Every variable-length loop also tests this error.
 type decoder struct {
-	ctx           context.Context
-	source        string
-	reader        *bufio.Reader
-	limits        limits.Limits
-	offset        int64
-	sequence      Sequence
-	err           error
-	entries       int
-	lines         int
-	optionalBytes int
-	textBytes     int
-	scratch       [64 << 10]byte
+	ctx      context.Context
+	source   string
+	reader   *bufio.Reader
+	limits   limits.Limits
+	offset   int64
+	sequence Sequence
+	err      error
+	entries  int
+	lines    int
+	scratch  [64 << 10]byte
 }
 
 func (d *decoder) fail(kind ErrorKind, offset int64, field, detail string) {
@@ -210,19 +208,16 @@ func (d *decoder) marker(want uint16, field string) {
 	}
 }
 
-func (d *decoder) text(field string) string {
-	n := d.count(field+" length", d.limits.LineBytes)
-	if n > d.limits.TextBytes-d.textBytes {
-		d.fail(Limit, d.offset-4, "decoded text bytes", "text exceeds remaining budget")
-	}
+func (d *decoder) text(field, lengthField string) string {
+	// Decoded text can never outgrow the input it came from, so the input
+	// limit also bounds all text together.
+	n := d.count(lengthField, d.limits.LineBytes)
 	if int64(n) > d.limits.InputBytes-d.offset {
 		d.fail(Limit, d.offset-4, "undo input bytes", "text exceeds remaining input budget")
 	}
 	if d.err != nil {
 		return ""
 	}
-
-	d.textBytes += n
 
 	var text strings.Builder
 	// Grow only as actual chunks arrive, rather than allocating a claimed length

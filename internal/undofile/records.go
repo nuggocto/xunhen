@@ -47,14 +47,10 @@ type Position struct {
 	Line, Column, Extra int32
 }
 
-// Visual contains persisted selection metadata, without interpreting a mode.
-type Visual struct {
-	Start, End          Position
-	Mode, DesiredColumn int32
-}
-
 // RecordInfo is a value copy of one change's metadata. Links describe logical
 // ancestry and the recorded sibling preference order, not chronological order.
+// The decoder validates the named marks and visual selection but does not keep
+// them: nothing reads them, and they took 344 of this struct's 408 bytes.
 type RecordInfo struct {
 	Offset          int64
 	Sequence        Sequence
@@ -66,8 +62,6 @@ type RecordInfo struct {
 	Cursor              Position
 	CursorVirtualColumn int32
 	Flags               uint16
-	Marks               [26]Position
-	Visual              Visual
 	Time                int64
 	Save                SaveNumber
 }
@@ -126,7 +120,7 @@ type Record struct {
 	extmarks []Extmark
 }
 
-// Info returns a value copy, including the fixed-size mark array.
+// Info returns a value copy.
 func (r Record) Info() RecordInfo { return r.info }
 
 // EntryCount is the length of the oriented text-entry list.

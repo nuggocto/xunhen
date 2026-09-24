@@ -31,12 +31,12 @@ need not identify a retained node.
 Inspection validates records and relationships, not replay. Reconstructing text
 requires a matching base. Historical encoding and newline options are not stored.
 No source text is printed. Paths and diagnostics use printable ASCII escapes.
-Inputs are opened read-only and must be regular files. Limits include 64 MiB of
-undo input, 100,000 changes, and 16 MiB of output after escaping.
+Inputs are opened read-only and must be regular files. Limits include 256 MiB
+of undo input and 1,000,000 changes.
 
 Exit status: 0 success, 1 input/output failure, 2 invalid arguments, 130 interrupt.
-Output is prepared before writing. Discard partial stdout after a write failure;
-closed pipes return status 1 without a panic trace.
+The history is fully validated before output starts. Discard partial stdout
+after a write failure; closed pipes return status 1 without a panic trace.
 `
 
 func inspect(ctx context.Context, args []string, stdout, stderr io.Writer) int {
@@ -60,12 +60,12 @@ func inspect(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return operationError(stderr, err)
 	}
 
-	text, err := inspectionText(ctx, path, h, lim.OutputBytes)
-	if err != nil {
+	out := newOutput(stdout)
+	if err := writeInspection(out, path, h); err != nil {
 		return operationError(stderr, err)
 	}
 
-	return writeOutput(stdout, stderr, text)
+	return out.finish(stderr)
 }
 
 func parseInspectArgs(args []string) (string, error) {
@@ -84,65 +84,62 @@ func parseInspectArgs(args []string) (string, error) {
 	return path, nil
 }
 
-func inspectionText(ctx context.Context, path string, h *history.History, maxBytes int) (string, error) {
+// writeInspection streams the report for a validated history. Its lookups
+// fail only for an uninitialized history, which New never returns, so they
+// cannot interrupt the report partway.
+func writeInspection(out *output, path string, h *history.History) error {
 	meta, err := h.Metadata()
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	ref, err := h.Reference()
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	anchor, err := h.Info(ref)
 	if err != nil {
-		return "", err
+		return err
 	}
 
-	label, err := termtext.Escape(ctx, path, maxBytes)
-	if err != nil {
-		return "", err
-	}
+	out.printf("History: \"%s\"\n", termtext.Escape(path))
+	out.printf("Format: Neovim undo %d\n", meta.Format.Version)
+	out.printf("Decode profile: %s (assumed; producer ABI is not recorded)\n", meta.Format.Profile)
+	out.printf("Validation: complete records and history relationships\n")
 
-	out := boundedOutput{ctx: ctx, maxBytes: maxBytes}
-	out.line("History: \"%s\"\n", label)
-	out.line("Format: Neovim undo %d\n", meta.Format.Version)
-	out.line("Decode profile: %s (assumed; producer ABI is not recorded)\n", meta.Format.Profile)
-	out.line("Validation: complete records and history relationships\n")
+	out.printf("Changes: %d\n", meta.HeaderCount)
+	out.printf("Retained states: %d (including node 0, the retained root)\n", h.Count())
+	out.printf("Reference node: %d\n", anchor.ID)
+	out.printf("Base: required for reconstruction; not supplied or verified\n")
+	out.printf("Base buffer SHA-256: %x\n", meta.BaseHash)
+	out.printf("Base logical lines: %d\n", meta.BaseLines)
 
-	out.line("Changes: %d\n", meta.HeaderCount)
-	out.line("Retained states: %d (including node 0, the retained root)\n", h.Count())
-	out.line("Reference node: %d\n", anchor.ID)
-	out.line("Base: required for reconstruction; not supplied or verified\n")
-	out.line("Base buffer SHA-256: %x\n", meta.BaseHash)
-	out.line("Base logical lines: %d\n", meta.BaseLines)
-
-	out.line("Recorded pointers: oldest-root=%d newest=%d next-redo=%d\n",
+	out.printf("Recorded pointers: oldest-root=%d newest=%d next-redo=%d\n",
 		meta.OldestRoot, meta.Newest, meta.NextRedo)
-	out.line("Last allocated sequence: %d\n", meta.LastSequence)
-	out.line("Timeline sequence: %d (metadata, not a node selector)\n", meta.TimelineSequence)
-	out.line("Current time: %d Unix seconds\n", meta.CurrentTime)
-	out.line("Last save number: %s\n", saveLabel(meta.LastSave))
-	out.line("Historical encoding, fileformat, and final newline: not recorded\n")
-	out.line("Reconstruction: not performed; replay ranges have not been checked against text\n")
+	out.printf("Last allocated sequence: %d\n", meta.LastSequence)
+	out.printf("Timeline sequence: %d (metadata, not a node selector)\n", meta.TimelineSequence)
+	out.printf("Current time: %d Unix seconds\n", meta.CurrentTime)
+	out.printf("Last save number: %s\n", saveLabel(meta.LastSave))
+	out.printf("Historical encoding, fileformat, and final newline: not recorded\n")
+	out.printf("Reconstruction: not performed; replay ranges have not been checked against text\n")
 
-	out.line("\nNodes in recorded branch order (zero child/sibling means absent):\n")
-	for i := 0; i < h.Count() && out.err == nil; i++ {
+	out.printf("\nNodes in recorded branch order (zero child/sibling means absent):\n")
+	for i := range h.Count() {
 		ref, err := h.At(i)
 		if err != nil {
-			return "", err
+			return err
 		}
 
 		info, err := h.Info(ref)
 		if err != nil {
-			return "", err
+			return err
 		}
 
-		out.node(info)
+		writeNode(out, info)
 	}
 
-	return out.result()
+	return nil
 }
 
 func saveLabel(save undofile.SaveNumber) string {
@@ -156,10 +153,10 @@ func saveLabel(save undofile.SaveNumber) string {
 	return strconv.Itoa(int(save.Value))
 }
 
-// node renders one validated node. Its fields are bounded scalars.
-func (o *boundedOutput) node(info history.NodeInfo) {
+// writeNode renders one validated node. Its fields are bounded scalars.
+func writeNode(out *output, info history.NodeInfo) {
 	if !info.HasEvent {
-		o.line("node 0: retained root; preferred-child=%d; time=unavailable; save=unavailable\n",
+		out.printf("node 0: retained root; preferred-child=%d; time=unavailable; save=unavailable\n",
 			info.PreferredChild)
 		return
 	}
@@ -167,7 +164,7 @@ func (o *boundedOutput) node(info history.NodeInfo) {
 	const format = "node %d: parent=%d preferred-child=%d next-sibling=%d previous-sibling=%d " +
 		"time=%d save=%s text-entries=%d extmarks=%d flags=0x%02x\n"
 
-	o.line(format,
+	out.printf(format,
 		info.ID, info.Parent, info.PreferredChild, info.NextSibling, info.PreviousSibling,
 		info.Time, saveLabel(info.Save), info.TextEntries, info.Extmarks, info.Flags)
 }
