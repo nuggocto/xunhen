@@ -35,18 +35,7 @@ func generate(ctx context.Context, nvim, out string) (err error) {
 		return fmt.Errorf("create new output directory: %w", err)
 	}
 
-	index := corpus{
-		Schema: 1,
-		Producer: producer{
-			Version:           producerVersion,
-			VersionOutput:     version,
-			BinarySHA256:      producerDigest,
-			SourceRevision:    sourceRevision,
-			PackagingRevision: packagingRevision,
-			Package:           "Arch neovim 0.12.5-1",
-			Profile:           "neovim-v3-linux-amd64-le-lp64",
-		},
-	}
+	index := corpus{Schema: 1, Producer: pinnedProducer(version)}
 
 	for _, fixture := range corpusCases() {
 		entry, err := generateCase(ctx, nvim, work, out, fixture)
@@ -56,6 +45,20 @@ func generate(ctx context.Context, nvim, out string) (err error) {
 		index.Fixtures = append(index.Fixtures, entry)
 	}
 	return writeJSON(filepath.Join(out, "corpus.json"), index)
+}
+
+// pinnedProducer describes the verified Neovim build, with the version text it
+// printed for this run.
+func pinnedProducer(version string) producer {
+	return producer{
+		Version:           producerVersion,
+		VersionOutput:     version,
+		BinarySHA256:      producerDigest,
+		SourceRevision:    sourceRevision,
+		PackagingRevision: packagingRevision,
+		Package:           "Arch neovim 0.12.5-1",
+		Profile:           "neovim-v3-linux-amd64-le-lp64",
+	}
 }
 
 func generateCase(ctx context.Context, nvim, work, out string, fixture fixtureCase) (fixtureDigest, error) {

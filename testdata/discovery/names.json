@@ -1,0 +1,439 @@
+{
+  "schema": 1,
+  "producer": {
+    "version": "v0.12.5",
+    "version_output": "NVIM v0.12.5\nBuild type: RelWithDebInfo\nLuaJIT 2.1.1788460057\nRun \"nvim -V1 -v\" for more info\n",
+    "binary_sha256": "5c2cd28eb9b608fff5ca07cd5ee0c31011a15b137b0e63513e253c2c3529bd7f",
+    "source_revision": "5885a30e1e1225349079e7a1c4a3848aa8e43e42",
+    "packaging_revision": "583b707757678d79349f2f6d7497a288aec5e61e",
+    "package": "Arch neovim 0.12.5-1",
+    "profile": "neovim-v3-linux-amd64-le-lp64"
+  },
+  "cases": [
+    {
+      "name": "absolute path",
+      "purpose": "An absolute source path in an ordinary undo directory.",
+      "dirs_hex": [
+        "737263",
+        "756e646f"
+      ],
+      "files_hex": [
+        "7372632f706c61696e2e676f"
+      ],
+      "links": null,
+      "cwd_hex": "",
+      "source_hex": "7b726f6f747d2f7372632f706c61696e2e676f",
+      "undodir_hex": "7b726f6f747d2f756e646f",
+      "neovim": {
+        "undofile_hex": "7b726f6f747d2f756e646f2f7b6d726f6f747d2573726325706c61696e2e676f",
+        "written_hex": [
+          "7b726f6f747d2f756e646f2f7b6d726f6f747d2573726325706c61696e2e676f"
+        ]
+      }
+    },
+    {
+      "name": "relative path",
+      "purpose": "A relative source path joins the working directory.",
+      "dirs_hex": [
+        "737263",
+        "756e646f"
+      ],
+      "files_hex": [
+        "7372632f706c61696e2e676f"
+      ],
+      "links": null,
+      "cwd_hex": "737263",
+      "source_hex": "706c61696e2e676f",
+      "undodir_hex": "7b726f6f747d2f756e646f",
+      "neovim": {
+        "undofile_hex": "7b726f6f747d2f756e646f2f7b6d726f6f747d2573726325706c61696e2e676f",
+        "written_hex": [
+          "7b726f6f747d2f756e646f2f7b6d726f6f747d2573726325706c61696e2e676f"
+        ]
+      }
+    },
+    {
+      "name": "parent component",
+      "purpose": "A .. component resolves before the name is encoded.",
+      "dirs_hex": [
+        "737263",
+        "7372632f737562",
+        "756e646f"
+      ],
+      "files_hex": [
+        "7372632f706c61696e2e676f"
+      ],
+      "links": null,
+      "cwd_hex": "7372632f737562",
+      "source_hex": "2e2e2f706c61696e2e676f",
+      "undodir_hex": "7b726f6f747d2f756e646f",
+      "neovim": {
+        "undofile_hex": "7b726f6f747d2f756e646f2f7b6d726f6f747d2573726325706c61696e2e676f",
+        "written_hex": [
+          "7b726f6f747d2f756e646f2f7b6d726f6f747d2573726325706c61696e2e676f"
+        ]
+      }
+    },
+    {
+      "name": "spaces",
+      "purpose": "Spaces pass through the encoding unchanged.",
+      "dirs_hex": [
+        "7372632f77697468207370616365",
+        "756e646f"
+      ],
+      "files_hex": [
+        "7372632f776974682073706163652f66696c65206e616d652e676f"
+      ],
+      "links": null,
+      "cwd_hex": "",
+      "source_hex": "7b726f6f747d2f7372632f776974682073706163652f66696c65206e616d652e676f",
+      "undodir_hex": "7b726f6f747d2f756e646f",
+      "neovim": {
+        "undofile_hex": "7b726f6f747d2f756e646f2f7b6d726f6f747d2573726325776974682073706163652566696c65206e616d652e676f",
+        "written_hex": [
+          "7b726f6f747d2f756e646f2f7b6d726f6f747d2573726325776974682073706163652566696c65206e616d652e676f"
+        ]
+      }
+    },
+    {
+      "name": "unicode",
+      "purpose": "Multibyte UTF-8 passes through the encoding unchanged.",
+      "dirs_hex": [
+        "7372632f636166c3a9",
+        "756e646f"
+      ],
+      "files_hex": [
+        "7372632f636166c3a92fe5b08be797952e676f"
+      ],
+      "links": null,
+      "cwd_hex": "",
+      "source_hex": "7b726f6f747d2f7372632f636166c3a92fe5b08be797952e676f",
+      "undodir_hex": "7b726f6f747d2f756e646f",
+      "neovim": {
+        "undofile_hex": "7b726f6f747d2f756e646f2f7b6d726f6f747d2573726325636166c3a925e5b08be797952e676f",
+        "written_hex": [
+          "7b726f6f747d2f756e646f2f7b6d726f6f747d2573726325636166c3a925e5b08be797952e676f"
+        ]
+      }
+    },
+    {
+      "name": "invalid UTF-8",
+      "purpose": "A byte that is not UTF-8 passes through the encoding unchanged.",
+      "dirs_hex": [
+        "737263",
+        "756e646f"
+      ],
+      "files_hex": [
+        "7372632f626164ff6e616d652e676f"
+      ],
+      "links": null,
+      "cwd_hex": "",
+      "source_hex": "7b726f6f747d2f7372632f626164ff6e616d652e676f",
+      "undodir_hex": "7b726f6f747d2f756e646f",
+      "neovim": {
+        "undofile_hex": "7b726f6f747d2f756e646f2f7b6d726f6f747d2573726325626164ff6e616d652e676f",
+        "written_hex": [
+          "7b726f6f747d2f756e646f2f7b6d726f6f747d2573726325626164ff6e616d652e676f"
+        ]
+      }
+    },
+    {
+      "name": "percent in a directory",
+      "purpose": "One side of a collision: /a%b/c.go encodes as %a%b%c.go.",
+      "dirs_hex": [
+        "612562",
+        "756e646f"
+      ],
+      "files_hex": [
+        "6125622f632e676f"
+      ],
+      "links": null,
+      "cwd_hex": "",
+      "source_hex": "7b726f6f747d2f6125622f632e676f",
+      "undodir_hex": "7b726f6f747d2f756e646f",
+      "neovim": {
+        "undofile_hex": "7b726f6f747d2f756e646f2f7b6d726f6f747d2561256225632e676f",
+        "written_hex": [
+          "7b726f6f747d2f756e646f2f7b6d726f6f747d2561256225632e676f"
+        ]
+      }
+    },
+    {
+      "name": "percent in a file name",
+      "purpose": "The other side of the collision: /a/b%c.go also encodes as %a%b%c.go.",
+      "dirs_hex": [
+        "61",
+        "756e646f"
+      ],
+      "files_hex": [
+        "612f6225632e676f"
+      ],
+      "links": null,
+      "cwd_hex": "",
+      "source_hex": "7b726f6f747d2f612f6225632e676f",
+      "undodir_hex": "7b726f6f747d2f756e646f",
+      "neovim": {
+        "undofile_hex": "7b726f6f747d2f756e646f2f7b6d726f6f747d2561256225632e676f",
+        "written_hex": [
+          "7b726f6f747d2f756e646f2f7b6d726f6f747d2561256225632e676f"
+        ]
+      }
+    },
+    {
+      "name": "dotfile",
+      "purpose": "A leading dot in the file name stays part of the encoded name.",
+      "dirs_hex": [
+        "737263",
+        "756e646f"
+      ],
+      "files_hex": [
+        "7372632f2e656e76"
+      ],
+      "links": null,
+      "cwd_hex": "",
+      "source_hex": "7b726f6f747d2f7372632f2e656e76",
+      "undodir_hex": "7b726f6f747d2f756e646f",
+      "neovim": {
+        "undofile_hex": "7b726f6f747d2f756e646f2f7b6d726f6f747d25737263252e656e76",
+        "written_hex": [
+          "7b726f6f747d2f756e646f2f7b6d726f6f747d25737263252e656e76"
+        ]
+      }
+    },
+    {
+      "name": "absolute file symlink",
+      "purpose": "A symlinked source is named after its target.",
+      "dirs_hex": [
+        "737263",
+        "756e646f",
+        "6c696e6b73"
+      ],
+      "files_hex": [
+        "7372632f706c61696e2e676f"
+      ],
+      "links": [
+        {
+          "path_hex": "6c696e6b732f6162732e676f",
+          "target_hex": "7b726f6f747d2f7372632f706c61696e2e676f"
+        }
+      ],
+      "cwd_hex": "",
+      "source_hex": "7b726f6f747d2f6c696e6b732f6162732e676f",
+      "undodir_hex": "7b726f6f747d2f756e646f",
+      "neovim": {
+        "undofile_hex": "7b726f6f747d2f756e646f2f7b6d726f6f747d2573726325706c61696e2e676f",
+        "written_hex": [
+          "7b726f6f747d2f756e646f2f7b6d726f6f747d2573726325706c61696e2e676f"
+        ]
+      }
+    },
+    {
+      "name": "relative symlink chain",
+      "purpose": "Each relative link resolves against the link's own directory.",
+      "dirs_hex": [
+        "737263",
+        "756e646f",
+        "6c696e6b73"
+      ],
+      "files_hex": [
+        "7372632f706c61696e2e676f"
+      ],
+      "links": [
+        {
+          "path_hex": "6c696e6b732f72656c2e676f",
+          "target_hex": "686f702e676f"
+        },
+        {
+          "path_hex": "6c696e6b732f686f702e676f",
+          "target_hex": "2e2e2f7372632f706c61696e2e676f"
+        }
+      ],
+      "cwd_hex": "",
+      "source_hex": "7b726f6f747d2f6c696e6b732f72656c2e676f",
+      "undodir_hex": "7b726f6f747d2f756e646f",
+      "neovim": {
+        "undofile_hex": "7b726f6f747d2f756e646f2f7b6d726f6f747d2573726325706c61696e2e676f",
+        "written_hex": [
+          "7b726f6f747d2f756e646f2f7b6d726f6f747d2573726325706c61696e2e676f"
+        ]
+      }
+    },
+    {
+      "name": "directory symlink",
+      "purpose": "A symlinked directory in the source path resolves to the real directory.",
+      "dirs_hex": [
+        "737263",
+        "756e646f"
+      ],
+      "files_hex": [
+        "7372632f706c61696e2e676f"
+      ],
+      "links": [
+        {
+          "path_hex": "6469726c696e6b",
+          "target_hex": "737263"
+        }
+      ],
+      "cwd_hex": "",
+      "source_hex": "7b726f6f747d2f6469726c696e6b2f706c61696e2e676f",
+      "undodir_hex": "7b726f6f747d2f756e646f",
+      "neovim": {
+        "undofile_hex": "7b726f6f747d2f756e646f2f7b6d726f6f747d2573726325706c61696e2e676f",
+        "written_hex": [
+          "7b726f6f747d2f756e646f2f7b6d726f6f747d2573726325706c61696e2e676f"
+        ]
+      }
+    },
+    {
+      "name": "working directory through a symlink",
+      "purpose": "A relative path joins the physical working directory.",
+      "dirs_hex": [
+        "737263",
+        "756e646f"
+      ],
+      "files_hex": [
+        "7372632f706c61696e2e676f"
+      ],
+      "links": [
+        {
+          "path_hex": "6469726c696e6b",
+          "target_hex": "737263"
+        }
+      ],
+      "cwd_hex": "6469726c696e6b",
+      "source_hex": "706c61696e2e676f",
+      "undodir_hex": "7b726f6f747d2f756e646f",
+      "neovim": {
+        "undofile_hex": "7b726f6f747d2f756e646f2f7b6d726f6f747d2573726325706c61696e2e676f",
+        "written_hex": [
+          "7b726f6f747d2f756e646f2f7b6d726f6f747d2573726325706c61696e2e676f"
+        ]
+      }
+    },
+    {
+      "name": "trailing separators",
+      "purpose": "Trailing slashes on the undo directory do not change the name.",
+      "dirs_hex": [
+        "737263",
+        "756e646f"
+      ],
+      "files_hex": [
+        "7372632f706c61696e2e676f"
+      ],
+      "links": null,
+      "cwd_hex": "",
+      "source_hex": "7b726f6f747d2f7372632f706c61696e2e676f",
+      "undodir_hex": "7b726f6f747d2f756e646f2f2f",
+      "neovim": {
+        "undofile_hex": "7b726f6f747d2f756e646f2f7b6d726f6f747d2573726325706c61696e2e676f",
+        "written_hex": [
+          "7b726f6f747d2f756e646f2f7b6d726f6f747d2573726325706c61696e2e676f"
+        ]
+      }
+    },
+    {
+      "name": "sidecar",
+      "purpose": "An 'undodir' entry of . puts .name.un~ beside the source.",
+      "dirs_hex": [
+        "737263",
+        "756e646f"
+      ],
+      "files_hex": [
+        "7372632f706c61696e2e676f"
+      ],
+      "links": null,
+      "cwd_hex": "",
+      "source_hex": "7b726f6f747d2f7372632f706c61696e2e676f",
+      "undodir_hex": "2e",
+      "neovim": {
+        "undofile_hex": "7b726f6f747d2f7372632f2e706c61696e2e676f2e756e7e",
+        "written_hex": [
+          "7b726f6f747d2f7372632f2e706c61696e2e676f2e756e7e"
+        ]
+      }
+    },
+    {
+      "name": "sidecar beside a symlink target",
+      "purpose": "The sidecar goes beside the target, not the link.",
+      "dirs_hex": [
+        "737263",
+        "756e646f",
+        "6c696e6b73"
+      ],
+      "files_hex": [
+        "7372632f706c61696e2e676f"
+      ],
+      "links": [
+        {
+          "path_hex": "6c696e6b732f6162732e676f",
+          "target_hex": "7b726f6f747d2f7372632f706c61696e2e676f"
+        }
+      ],
+      "cwd_hex": "",
+      "source_hex": "7b726f6f747d2f6c696e6b732f6162732e676f",
+      "undodir_hex": "2e",
+      "neovim": {
+        "undofile_hex": "7b726f6f747d2f7372632f2e706c61696e2e676f2e756e7e",
+        "written_hex": [
+          "7b726f6f747d2f7372632f2e706c61696e2e676f2e756e7e"
+        ]
+      }
+    },
+    {
+      "name": "missing source",
+      "purpose": "A deleted source still names its undo file from its directory.",
+      "dirs_hex": [
+        "737263",
+        "756e646f"
+      ],
+      "files_hex": [],
+      "links": null,
+      "cwd_hex": "",
+      "source_hex": "7b726f6f747d2f7372632f676f6e652e676f",
+      "undodir_hex": "7b726f6f747d2f756e646f",
+      "neovim": {
+        "undofile_hex": "7b726f6f747d2f756e646f2f7b6d726f6f747d2573726325676f6e652e676f",
+        "written_hex": []
+      }
+    },
+    {
+      "name": "missing directory",
+      "purpose": "Without a directory to resolve, an absolute path is used as written.",
+      "dirs_hex": [
+        "756e646f"
+      ],
+      "files_hex": [],
+      "links": null,
+      "cwd_hex": "",
+      "source_hex": "7b726f6f747d2f6e6f6469722f676f6e652e676f",
+      "undodir_hex": "7b726f6f747d2f756e646f",
+      "neovim": {
+        "undofile_hex": "7b726f6f747d2f756e646f2f7b6d726f6f747d256e6f64697225676f6e652e676f",
+        "written_hex": []
+      }
+    },
+    {
+      "name": "dangling symlink",
+      "purpose": "A link to a missing file is named after its target.",
+      "dirs_hex": [
+        "737263",
+        "756e646f",
+        "6c696e6b73"
+      ],
+      "files_hex": [],
+      "links": [
+        {
+          "path_hex": "6c696e6b732f64616e676c652e676f",
+          "target_hex": "2e2e2f7372632f676f6e652e676f"
+        }
+      ],
+      "cwd_hex": "",
+      "source_hex": "7b726f6f747d2f6c696e6b732f64616e676c652e676f",
+      "undodir_hex": "7b726f6f747d2f756e646f",
+      "neovim": {
+        "undofile_hex": "7b726f6f747d2f756e646f2f7b6d726f6f747d2573726325676f6e652e676f",
+        "written_hex": []
+      }
+    }
+  ]
+}

@@ -220,9 +220,46 @@ local function read_history(recipe)
   }))
 end
 
+-- Ask undofile() for each case's name, then write the source with 'undofile'
+-- set so the caller can compare the name with the file Neovim creates.
+local function record_names(recipe)
+  vim.o.modeline = false
+  vim.o.exrc = false
+  vim.o.swapfile = false
+  vim.o.backup = false
+  vim.o.writebackup = false
+  vim.o.shadafile = 'NONE'
+  vim.o.fixeol = false
+
+  local results = {}
+  for i, case in ipairs(recipe.cases) do
+    vim.cmd('cd ' .. vim.fn.fnameescape(unhex(case.cwd_hex)))
+    vim.o.undodir = unhex(case.undodir_hex)
+
+    local source = unhex(case.source_hex)
+    local name = vim.fn.undofile(source)
+
+    if case.write then
+      vim.cmd('silent edit ' .. vim.fn.fnameescape(source))
+      vim.bo.undofile = true
+      vim.api.nvim_buf_set_lines(0, 0, -1, true, { 'case ' .. i })
+      vim.cmd('silent write')
+      vim.cmd('bwipeout!')
+    end
+
+    results[i] = { undofile_hex = hex(name) }
+  end
+
+  write_bytes(recipe.output, vim.json.encode({ results = results }))
+end
+
 local function main()
   local recipe = vim.json.decode(read_bytes('request.json'))
   check_abi()
+  if recipe.mode == 'names' then
+    record_names(recipe)
+    return
+  end
   configure(recipe)
 
   if recipe.mode == 'create' then

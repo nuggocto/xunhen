@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -525,6 +526,82 @@ func TestProducerOutputLimit(t *testing.T) {
 			}
 			if !tt.wantErr && size != tt.size {
 				t.Fatal("producer output was silently truncated")
+			}
+		})
+	}
+}
+
+func TestNamingCorpus(t *testing.T) {
+	t.Parallel()
+
+	var index nameCorpus
+	if err := readJSON("../../testdata/discovery/names.json", &index); err != nil {
+		t.Fatal(err)
+	}
+	if index.Schema != 1 || index.Producer.BinarySHA256 != producerDigest || index.Producer.SourceRevision != sourceRevision {
+		t.Fatal("naming corpus does not come from the pinned producer")
+	}
+
+	cases := nameCases()
+	if len(index.Cases) != len(cases) {
+		t.Fatal("naming inventory does not match the authored cases")
+	}
+
+	for i, c := range cases {
+		t.Run(c.Name, func(t *testing.T) {
+			t.Parallel()
+
+			if err := checkNameRecord(c, index.Cases[i]); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestNameRecordRejectsDrift(t *testing.T) {
+	t.Parallel()
+
+	var index nameCorpus
+	if err := readJSON("../../testdata/discovery/names.json", &index); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name   string
+		change func(*nameRecord)
+		want   string
+	}{
+		{
+			name:   "different recorded name",
+			change: func(r *nameRecord) { r.Neovim.UndofileHex = hex.EncodeToString([]byte("{root}/undo/other")) },
+			want:   "undofile()",
+		},
+		{
+			name:   "different layout",
+			change: func(r *nameRecord) { r.FilesHex = nil },
+			want:   "layout",
+		},
+		{
+			name:   "different invocation",
+			change: func(r *nameRecord) { r.UndoDirHex = hex.EncodeToString([]byte(".")) },
+			want:   "invocation",
+		},
+		{
+			name:   "missing written file",
+			change: func(r *nameRecord) { r.Neovim.WrittenHex = nil },
+			want:   "written",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			record := index.Cases[0]
+			record.Neovim.WrittenHex = slices.Clone(record.Neovim.WrittenHex)
+			tt.change(&record)
+			if err := checkNameRecord(nameCases()[0], record); err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want %q", err, tt.want)
 			}
 		})
 	}

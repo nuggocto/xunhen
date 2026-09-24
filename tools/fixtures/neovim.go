@@ -59,7 +59,7 @@ func prepareWork(dir string) error {
 	return os.WriteFile(filepath.Join(dir, "driver.lua"), driver, 0600)
 }
 
-func runDriver(ctx context.Context, nvim, dir string, recipe request) error {
+func runDriver(ctx context.Context, nvim, dir string, recipe any) error {
 	if err := writeJSON(filepath.Join(dir, "request.json"), recipe); err != nil {
 		return err
 	}

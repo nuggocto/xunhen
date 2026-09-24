@@ -18,13 +18,14 @@ func main() {
 }
 
 func run() int {
-	const usage = "usage: go run ./tools/fixtures -nvim /path/to/nvim -out /new/directory\n"
+	const usage = "usage: go run ./tools/fixtures -nvim /path/to/nvim -out /new/directory [-names]\n"
 
 	flags := flag.NewFlagSet("fixtures", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 
 	nvim := flags.String("nvim", "", "absolute path to the pinned Neovim executable")
 	out := flags.String("out", "", "new output directory")
+	names := flags.Bool("names", false, "record undo filenames instead of histories")
 
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -49,12 +50,16 @@ func run() int {
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 	defer cancel()
 
-	if err := generate(ctx, *nvim, *out); err != nil {
+	generator, count, what := generate, len(corpusCases()), "synthetic histories"
+	if *names {
+		generator, count, what = generateNames, len(nameCases()), "undo filename cases"
+	}
+	if err := generator(ctx, *nvim, *out); err != nil {
 		fmt.Fprintf(os.Stderr, "fixtures: %q\n", err.Error())
 		return 1
 	}
 
-	_, err := fmt.Fprintf(os.Stdout, "generated %d synthetic histories in %q\n", len(corpusCases()), *out)
+	_, err := fmt.Fprintf(os.Stdout, "generated %d %s in %q\n", count, what, *out)
 	if err != nil {
 		return 1
 	}
