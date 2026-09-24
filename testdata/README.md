@@ -68,3 +68,20 @@ The corpus also covers empty buffers, repeated lines, save/reopen, line moves,
 CRLF, Latin-1, invalid UTF-8, NUL, and terminal controls. A fixture documents a
 case; it does not imply that xunhen already supports it. See the
 [format specification](../docs/undo-format.md) for decoding and export rules.
+
+## Undo filenames
+
+`discovery/names.json` records how Neovim names undo files. Each case builds a
+small directory tree, asks `undofile()` for a source path, and writes the
+source with `'undofile'` set. The generator fails unless Neovim's answer, the
+file it wrote, and the authored expectation in `tools/fixtures/names.go` agree.
+Paths are hex, because some cases use bytes that are not UTF-8. Recorded names
+replace the case directory with `{root}` and its encoded form with `{mroot}`,
+so tests can rebuild the same tree anywhere.
+
+```sh
+go run ./tools/fixtures -nvim /usr/bin/nvim -out /tmp/xunhen-names-new -names
+```
+
+Copy the new `names.json` into `discovery/` after reviewing it. The
+[discovery notes](../docs/discovery.md) explain the rules these cases cover.

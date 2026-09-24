@@ -2,10 +2,10 @@ package main
 
 import (
 	"context"
-	"errors"
 	"io"
 	"strconv"
 
+	"github.com/nuggocto/xunhen/internal/discover"
 	"github.com/nuggocto/xunhen/internal/history"
 	"github.com/nuggocto/xunhen/internal/limits"
 	"github.com/nuggocto/xunhen/internal/termtext"
@@ -13,10 +13,20 @@ import (
 )
 
 const inspectHelp = `Usage: xunhen inspect --undo PATH
+       xunhen inspect --source PATH --undo-dir DIR...
 
 Describe a persisted Neovim undo history without source text or Neovim.
-  --undo PATH    Explicit undo-file path (required once; symlinks are followed)
-  -h, --help     Show this help
+  --undo PATH      Explicit undo-file path (symlinks are followed)
+  --source PATH    Find the history by this source file's path instead
+  --undo-dir DIR   Undo directory to search; repeat for more (at most 32)
+  -h, --help       Show this help
+
+With --source, the history must sit at the name Neovim gives it in one of the
+directories, as docs/discovery.md describes; subdirectories are not searched.
+When the source text matches the history, the association is verified. When
+the source is missing, unsupported, or different, a single valid history is
+still shown with the association marked unverified. Two or more candidates
+are reported as ambiguous rather than chosen.
 
 This build interprets format 3 using the Linux/amd64 little-endian LP64 profile.
 The file does not record its producer release or ABI. Other profiles are unverified.
@@ -44,50 +54,47 @@ func inspect(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return writeOutput(stdout, stderr, inspectHelp)
 	}
 
-	path, err := parseInspectArgs(args)
+	lim := limits.Default()
+	in, err := parseInspectArgs(args, lim)
 	if err != nil {
 		return diagnostic(stderr, exitUsage, err.Error())
 	}
 
-	lim := limits.Default()
-	file, err := loadUndo(ctx, path, lim)
-	if err != nil {
-		return operationError(stderr, err)
-	}
-
-	h, err := history.New(ctx, file, lim)
+	l, err := load(ctx, in, needs{}, lim, discover.Search)
 	if err != nil {
 		return operationError(stderr, err)
 	}
 
 	out := newOutput(stdout)
-	if err := writeInspection(out, path, h); err != nil {
+	if err := writeInspection(out, l); err != nil {
 		return operationError(stderr, err)
 	}
 
 	return out.finish(stderr)
 }
 
-func parseInspectArgs(args []string) (string, error) {
+func parseInspectArgs(args []string, lim limits.Limits) (*inputs, error) {
 	flags := newFlags("inspect")
-
-	var path string
-	pathFlag(flags, "undo", &path)
+	in := registerInputs(flags, false)
 
 	if err := parseFlags(flags, args); err != nil {
-		return "", err
+		return nil, err
 	}
-	if path == "" || flags.NArg() != 0 {
-		return "", errors.New("expected inspect --undo PATH; see 'xunhen inspect --help'")
+	if flags.NArg() != 0 {
+		return nil, usage("inspect", false)
+	}
+	if err := in.check("inspect", false, lim); err != nil {
+		return nil, err
 	}
 
-	return path, nil
+	return in, nil
 }
 
 // writeInspection streams the report for a validated history. Its lookups
 // fail only for an uninitialized history, which New never returns, so they
 // cannot interrupt the report partway.
-func writeInspection(out *output, path string, h *history.History) error {
+func writeInspection(out *output, l *loaded) error {
+	h := l.history
 	meta, err := h.Metadata()
 	if err != nil {
 		return err
@@ -103,7 +110,14 @@ func writeInspection(out *output, path string, h *history.History) error {
 		return err
 	}
 
-	out.printf("History: \"%s\"\n", termtext.Escape(path))
+	out.printf("History: \"%s\"\n", termtext.Escape(l.undoPath))
+	switch {
+	case l.source == "":
+	case l.base != nil:
+		out.printf("Found for source: \"%s\" (verified: its text matches the reference)\n", termtext.Escape(l.source))
+	default:
+		out.printf("Found for source: \"%s\" (unverified: %s)\n", termtext.Escape(l.source), termtext.Escape(l.baseErr.Error()))
+	}
 	out.printf("Format: Neovim undo %d\n", meta.Format.Version)
 	out.printf("Decode profile: %s (assumed; producer ABI is not recorded)\n", meta.Format.Profile)
 	out.printf("Validation: complete records and history relationships\n")
@@ -111,7 +125,11 @@ func writeInspection(out *output, path string, h *history.History) error {
 	out.printf("Changes: %d\n", meta.HeaderCount)
 	out.printf("Retained states: %d (including node 0, the retained root)\n", h.Count())
 	out.printf("Reference node: %d\n", anchor.ID)
-	out.printf("Base: required for reconstruction; not supplied or verified\n")
+	if l.base != nil {
+		out.printf("Base: the source text verifies as this history's reference\n")
+	} else {
+		out.printf("Base: required for reconstruction; not supplied or verified\n")
+	}
 	out.printf("Base buffer SHA-256: %x\n", meta.BaseHash)
 	out.printf("Base logical lines: %d\n", meta.BaseLines)
 

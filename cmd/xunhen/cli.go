@@ -31,6 +31,11 @@ Usage:
   xunhen show --undo PATH --base PATH --node ID [--raw --final-newline=include|omit]
   xunhen diff --undo PATH --base PATH --from ID --to ID
 
+Each command can also find the history from the source file instead:
+  xunhen inspect --source PATH --undo-dir DIR...
+  xunhen show --source PATH --undo-dir DIR... --node ID
+  xunhen diff --source PATH --undo-dir DIR... --from ID --to ID
+
 Available commands:
   help       Show help
   version    Show version and build information
@@ -124,11 +129,6 @@ func diagnostic(stderr io.Writer, status int, message string) int {
 	return status
 }
 
-// operationError reports a failed input, limit, or output operation.
-func operationError(stderr io.Writer, err error) int {
-	return diagnostic(stderr, exitFailure, err.Error())
-}
-
 // helpRequested reports whether a command's only argument asks for its help.
 func helpRequested(args []string) bool {
 	return len(args) == 1 && (args[0] == "--help" || args[0] == "-h")
@@ -192,9 +192,12 @@ func (o *output) finish(stderr io.Writer) int {
 	return exitSuccess
 }
 
-// pathFlag registers a path flag that may be given once.
+// pathFlag registers a path flag that may be given once and not empty.
 func pathFlag(flags *flag.FlagSet, name string, path *string) {
 	flags.Func(name, name+" path", once(name, func(value string) error {
+		if value == "" {
+			return fmt.Errorf("--%s requires a path", name)
+		}
 		*path = value
 		return nil
 	}))

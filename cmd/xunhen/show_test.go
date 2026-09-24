@@ -203,7 +203,7 @@ func TestBaseTextProfile(t *testing.T) {
 		{name: "at line limit without final LF", text: "a\nb", want: []string{"a", "b"}, maxLines: 2},
 		{name: "above line limit", text: "a\nb\nc\n", errorText: "base lines", maxLines: 2},
 		{name: "blank line above line limit", text: "a\n\n", errorText: "base lines", maxLines: 1},
-		{name: "above byte limit", text: "abcd", errorText: "base input bytes", maxBytes: 3},
+		{name: "above byte limit", text: "abcd", errorText: "3-byte limit", maxBytes: 3},
 	}
 
 	for _, tt := range tests {
@@ -223,7 +223,7 @@ func TestBaseTextProfile(t *testing.T) {
 				lim.BaseBytes = tt.maxBytes
 			}
 
-			got, err := loadBase(t.Context(), path, lim)
+			got, _, err := readText(t.Context(), path, "base", lim)
 			if tt.errorText != "" {
 				if err == nil || got != nil || !strings.Contains(err.Error(), tt.errorText) {
 					t.Fatalf("lines = %q, error = %v; want %q", got, err, tt.errorText)

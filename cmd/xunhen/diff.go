@@ -14,13 +14,20 @@ import (
 )
 
 const diffHelp = `Usage: xunhen diff --undo PATH --base PATH --from ID --to ID
+       xunhen diff --source PATH --undo-dir DIR... --from ID --to ID
 
 Compare two retained buffer states line by line using a matching base file.
-  --undo PATH    Undo-file path (required)
-  --base PATH    Matching source text (required; read-only)
-  --from ID      Left-hand retained sequence number; 0 is the root (required)
-  --to ID        Right-hand retained sequence number (required)
-  -h, --help     Show this help
+  --undo PATH      Undo-file path
+  --base PATH      Matching source text (read-only)
+  --source PATH    Find the history by this source file's path; the file is
+                   also the base
+  --undo-dir DIR   Undo directory to search; repeat for more (at most 32)
+  --from ID        Left-hand retained sequence number; 0 is the root (required)
+  --to ID          Right-hand retained sequence number (required)
+  -h, --help       Show this help
+
+With --source, exactly one history in the supplied directories must match the
+source text, as for show.
 
 Output is a unified diff with three lines of context and one-based line
 numbers. Identical states print nothing, and the exit status is 0 whether or
@@ -39,7 +46,7 @@ Exit status: 0 success, 1 input/output failure, 2 invalid arguments, 130 interru
 `
 
 type diffOptions struct {
-	undo, base     string
+	in             *inputs
 	from, to       history.NodeID
 	hasFrom, hasTo bool
 }
@@ -49,13 +56,13 @@ func compareStates(ctx context.Context, args []string, stdout, stderr io.Writer)
 		return writeOutput(stdout, stderr, diffHelp)
 	}
 
-	options, err := parseDiffArgs(args)
+	lim := limits.Default()
+	options, err := parseDiffArgs(args, lim)
 	if err != nil {
 		return diagnostic(stderr, exitUsage, err.Error())
 	}
 
-	lim := limits.Default()
-	states, err := recoverStates(ctx, options.undo, options.base, []history.NodeID{options.from, options.to}, lim)
+	states, err := recoverStates(ctx, options.in, []history.NodeID{options.from, options.to}, lim)
 	if err != nil {
 		return operationError(stderr, err)
 	}
@@ -70,20 +77,25 @@ func compareStates(ctx context.Context, args []string, stdout, stderr io.Writer)
 	return out.finish(stderr)
 }
 
-func parseDiffArgs(args []string) (diffOptions, error) {
+func parseDiffArgs(args []string, lim limits.Limits) (diffOptions, error) {
 	var options diffOptions
 
 	flags := newFlags("diff")
-	pathFlag(flags, "undo", &options.undo)
-	pathFlag(flags, "base", &options.base)
+	options.in = registerInputs(flags, true)
 	nodeFlag(flags, "from", &options.from, &options.hasFrom)
 	nodeFlag(flags, "to", &options.to, &options.hasTo)
 
 	if err := parseFlags(flags, args); err != nil {
 		return diffOptions{}, err
 	}
-	if options.undo == "" || options.base == "" || !options.hasFrom || !options.hasTo || flags.NArg() != 0 {
-		return diffOptions{}, errors.New("expected diff --undo PATH --base PATH --from ID --to ID; see 'xunhen diff --help'")
+	if flags.NArg() != 0 {
+		return diffOptions{}, usage("diff", true)
+	}
+	if err := options.in.check("diff", true, lim); err != nil {
+		return diffOptions{}, err
+	}
+	if !options.hasFrom || !options.hasTo {
+		return diffOptions{}, errors.New("diff requires --from ID and --to ID; see 'xunhen diff --help'")
 	}
 
 	return options, nil

@@ -16,14 +16,23 @@ import (
 )
 
 const showHelp = `Usage: xunhen show --undo PATH --base PATH --node ID [--raw --final-newline=include|omit]
+       xunhen show --source PATH --undo-dir DIR... --node ID [--raw ...]
 
 Reconstruct a retained buffer state using a matching base file.
-  --undo PATH             Undo-file path (required)
-  --base PATH             Matching source text (required; read-only)
+  --undo PATH             Undo-file path
+  --base PATH             Matching source text (read-only)
+  --source PATH           Find the history by this source file's path; the
+                          file is also the base
+  --undo-dir DIR          Undo directory to search; repeat for more (at most 32)
   --node ID               Retained sequence number; 0 is the root (required)
   --raw                   Write UTF-8/LF bytes to redirected stdout
   --final-newline POLICY  Required with --raw: include or omit
   -h, --help              Show this help
+
+With --source, exactly one history in the supplied directories must match the
+source text; docs/discovery.md describes the names searched. Otherwise nothing
+is reconstructed, and the diagnostic lists every candidate and the explicit
+--undo and --base form to use instead.
 
 Base files must be UTF-8/LF text without a BOM, NUL, or CRLF. Raw export also
 rejects a selected state with invalid UTF-8 or NUL, which retained edits can
@@ -39,7 +48,7 @@ Exit status: 0 success, 1 input/output failure, 2 invalid arguments, 130 interru
 `
 
 type showOptions struct {
-	undo, base   string
+	in           *inputs
 	node         history.NodeID
 	hasNode      bool
 	raw          bool
@@ -51,7 +60,8 @@ func show(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return writeOutput(stdout, stderr, showHelp)
 	}
 
-	options, err := parseShowArgs(args)
+	lim := limits.Default()
+	options, err := parseShowArgs(args, lim)
 	if err != nil {
 		return diagnostic(stderr, exitUsage, err.Error())
 	}
@@ -66,8 +76,7 @@ func show(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		}
 	}
 
-	lim := limits.Default()
-	states, err := recoverStates(ctx, options.undo, options.base, []history.NodeID{options.node}, lim)
+	states, err := recoverStates(ctx, options.in, []history.NodeID{options.node}, lim)
 	if err != nil {
 		return operationError(stderr, err)
 	}
@@ -88,14 +97,13 @@ func show(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	return out.finish(stderr)
 }
 
-func parseShowArgs(args []string) (showOptions, error) {
+func parseShowArgs(args []string, lim limits.Limits) (showOptions, error) {
 	var options showOptions
 
 	flags := newFlags("show")
 	flags.BoolVar(&options.raw, "raw", false, "raw export")
 
-	pathFlag(flags, "undo", &options.undo)
-	pathFlag(flags, "base", &options.base)
+	options.in = registerInputs(flags, true)
 	nodeFlag(flags, "node", &options.node, &options.hasNode)
 	flags.Func("final-newline", "include or omit", once("final-newline", func(value string) error {
 		if value != "include" && value != "omit" {
@@ -109,9 +117,16 @@ func parseShowArgs(args []string) (showOptions, error) {
 		return showOptions{}, err
 	}
 
+	if flags.NArg() != 0 {
+		return showOptions{}, usage("show", true)
+	}
+	if err := options.in.check("show", true, lim); err != nil {
+		return showOptions{}, err
+	}
+
 	switch {
-	case options.undo == "" || options.base == "" || !options.hasNode || flags.NArg() != 0:
-		return showOptions{}, errors.New("expected show --undo PATH --base PATH --node ID; see 'xunhen show --help'")
+	case !options.hasNode:
+		return showOptions{}, errors.New("show requires --node ID; see 'xunhen show --help'")
 	case options.raw && options.finalNewline == "":
 		return showOptions{}, errors.New("--raw requires --final-newline=include|omit")
 	case !options.raw && options.finalNewline != "":

@@ -195,7 +195,7 @@ func TestUndoInputTypes(t *testing.T) {
 				lim.InputBytes = tt.inputLimit
 			}
 
-			file, err := loadUndo(t.Context(), path, lim)
+			file, _, err := loadUndo(t.Context(), path, lim)
 			if tt.good {
 				if err != nil || file == nil {
 					t.Fatalf("regular input rejected: %v", err)

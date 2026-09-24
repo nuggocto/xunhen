@@ -5,13 +5,16 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
 
+	"github.com/nuggocto/xunhen/internal/discover"
 	"github.com/nuggocto/xunhen/internal/limits"
 	"github.com/nuggocto/xunhen/internal/undofile"
 )
@@ -63,6 +66,26 @@ func TestExecutable(t *testing.T) {
 	if err := os.WriteFile(corruptPath, undo[:len(undo)-1], 0444); err != nil {
 		t.Fatal(err)
 	}
+
+	// A source tree and undo directory for source-based lookup through
+	// relative paths from the command's working directory.
+	physical, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, sub := range []string{"src", "undo", "empty"} {
+		if err := os.Mkdir(filepath.Join(dir, sub), 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(dir, "src", "retry.go"), base, 0444); err != nil {
+		t.Fatal(err)
+	}
+	undoName := discover.Resolve(filepath.Join(physical, "src", "retry.go"), physical).UndoName()
+	if err := os.WriteFile(filepath.Join(dir, "undo", undoName), undo, 0444); err != nil {
+		t.Fatal(err)
+	}
+	searched := treeState(t, dir, "src", "undo", "empty")
 
 	tests := []struct {
 		name         string
@@ -130,6 +153,24 @@ func TestExecutable(t *testing.T) {
 			args:   []string{"inspect", "--undo", corruptPath},
 			status: 1,
 			err:    "truncated input",
+		},
+		{
+			name:  "recover through the source path",
+			args:  []string{"show", "--source", "src/retry.go", "--undo-dir", "undo", "--node", "2", "--raw", "--final-newline=include"},
+			out:   "package sample\n\nfunc experiment() int { return 42 }\n",
+			exact: true,
+		},
+		{
+			name:  "compare through the source path",
+			args:  []string{"diff", "--source", "./src/retry.go", "--undo-dir", "empty", "--undo-dir", "undo/", "--from", "2", "--to", "3"},
+			out:   experimentAgainstChoice,
+			exact: true,
+		},
+		{
+			name:   "search that finds nothing",
+			args:   []string{"inspect", "--source", "src/retry.go", "--undo-dir", "empty"},
+			status: 1,
+			err:    "no undo history",
 		},
 	}
 
@@ -207,6 +248,9 @@ func TestExecutable(t *testing.T) {
 	if err != nil || !bytes.Equal(undo, after) {
 		t.Fatalf("executable changed undo input: %v", err)
 	}
+	if now := treeState(t, dir, "src", "undo", "empty"); now != searched {
+		t.Fatalf("source-based runs changed the searched locations:\n%s\n---\n%s", searched, now)
+	}
 	after, err = os.ReadFile(basePath)
 	if err != nil || !bytes.Equal(base, after) {
 		t.Fatalf("executable changed base input: %v", err)
@@ -215,6 +259,28 @@ func TestExecutable(t *testing.T) {
 	t.Run("interrupt while stdout is blocked", func(t *testing.T) {
 		checkBlockedOutputInterrupt(t, binary, dir)
 	})
+}
+
+// treeState lists every entry under the named subdirectories of dir with its
+// mode, size, and modification time, so a comparison shows any write.
+func treeState(t *testing.T, dir string, subdirs ...string) string {
+	t.Helper()
+
+	var out strings.Builder
+	for _, sub := range subdirs {
+		err := filepath.Walk(filepath.Join(dir, sub), func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(&out, "%s %s %d %s\n", path, info.Mode(), info.Size(), info.ModTime())
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	return out.String()
 }
 
 // checkLocaleIndependence runs each command under two environments and

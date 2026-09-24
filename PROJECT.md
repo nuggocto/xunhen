@@ -306,7 +306,8 @@ Keep the first packages small and internal to the application:
 
 | Package | Owns | Boundary |
 | --- | --- | --- |
-| `cmd/xunhen` | Argument parsing, read-only file opens, command dispatch, limits, cancellation, exit status. | Coordinates packages; contains no binary-layout knowledge. |
+| `cmd/xunhen` | Argument parsing, the load coordinator for explicit and source-based inputs, command dispatch, limits, cancellation, exit status. | Coordinates packages; contains no binary-layout knowledge. |
+| `internal/input` | Read-only, nonblocking opens of regular files and held directories, file identity, and change detection during a load. | Knows nothing about the undo format; callers pass the function that consumes an open file. |
 | `internal/discover` | Bounded lookup in supplied undo directories, source-path matching, and candidate reporting. | Uses verified filename rules and decoder metadata; never treats a filename guess as proof of a matching base. |
 | `internal/undofile` | Header recognition, format/ABI-profile dispatch, bounded binary decoding, normalized records, and base-matching rules. | Only package that knows on-disk layout and record encoding. |
 | `internal/history` | Graph validation, node identity, traversal, base association, and reconstruction. The later TUI owns any state cache. | Consumes normalized decoder output; never switches on an undo-format version. |
@@ -507,6 +508,8 @@ Ceilings, each far above what ordinary source files and histories need:
 | Text and extmark entries combined | 1,000,000 per file |
 | Stored lines across entries / lines in one state | 4,000,000 each |
 | Individual line, including the saved `U` line | 16 MiB |
+| Undo directories per source-based search | 32 |
+| Undo bytes read per search, rejected candidates included | 512 MiB |
 
 These are project limits, not Neovim format limits. Decoded text cannot
 outgrow the undo input, and a list of optional fields holds at most one
@@ -811,22 +814,22 @@ undo directories while retaining the explicit-file workflow.
 
 #### 5.1 Resolve candidates
 
-- [ ] Implement verified Linux undo-filename/path rules in `internal/discover` rather than assuming that every separator encoding is reversible.
-- [ ] Add the mutually exclusive `--source` convenience mode and repeatable `--undo-dir` inputs to relevant commands.
-- [ ] Search only supplied directories with limits on directory count, entries examined, candidate count, and total decode work; report incomplete searches as such.
-- [ ] Define symlink handling explicitly, require opened inputs to be regular files, and avoid blocking on FIFOs, devices, or recursive directory traversal.
-- [ ] Treat encoded paths as hints; verify candidate metadata and base association before reconstruction.
-- [ ] Report no matches, ambiguity, permission failures, missing sources, and renamed files without silently guessing or opening paths obtained solely from undo contents.
+- [x] Implement verified Linux undo-filename/path rules in `internal/discover` rather than assuming that every separator encoding is reversible.
+- [x] Add the mutually exclusive `--source` convenience mode and repeatable `--undo-dir` inputs to relevant commands.
+- [x] Search only supplied directories with limits on directory count, entries examined, candidate count, and total decode work; report incomplete searches as such.
+- [x] Define symlink handling explicitly, require opened inputs to be regular files, and avoid blocking on FIFOs, devices, or recursive directory traversal.
+- [x] Treat encoded paths as hints; verify candidate metadata and base association before reconstruction.
+- [x] Report no matches, ambiguity, permission failures, missing sources, and renamed files without silently guessing or opening paths obtained solely from undo contents.
 
 #### 5.2 Handle input changes
 
-- [ ] Read each selected input into bounded owned storage and close handles on every path.
-- [ ] Detect observable changes during loading and give a clear retry/copy-inputs message instead of merging inconsistent reads.
-- [ ] Define reload as a new history/base load with fresh identity and cache ownership.
-- [ ] Test custom directories, conflicting candidates, symlinks, deleted sources, permission failures, and files changed during load in temporary fixtures.
-- [ ] Verify discovery never writes to source/undo locations and that explicit `--undo` still works when discovery cannot resolve a file.
+- [x] Read each selected input into bounded owned storage and close handles on every path.
+- [x] Detect observable changes during loading and give a clear retry/copy-inputs message instead of merging inconsistent reads.
+- [x] Define reload as a new history/base load with fresh identity and cache ownership.
+- [x] Test custom directories, conflicting candidates, symlinks, deleted sources, permission failures, and files changed during load in temporary fixtures.
+- [x] Verify discovery never writes to source/undo locations and that explicit `--undo` still works when discovery cannot resolve a file.
 
-- [ ] **Phase 5 complete:** source-based lookup succeeds for verified naming cases and explains ambiguity or inconsistency without weakening base validation.
+- [x] **Phase 5 complete:** source-based lookup succeeds for verified naming cases and explains ambiguity or inconsistency without weakening base validation.
 
 ### Phase 6 — Interactive terminal browser
 
