@@ -76,12 +76,7 @@ func (r *Reconstructor) Reconstruct(ctx context.Context, target NodeRef) (*Snaps
 		return nil, err
 	}
 
-	w := &replay{ctx: ctx, history: h, limits: r.limits}
-	if err := w.charge(undofile.Record{}, r.base.LineCount()); err != nil {
-		return nil, err
-	}
-	w.lines, w.bytes = r.base.Lines(), r.base.StateBytes()
-
+	w := &replay{ctx: ctx, history: h, limits: r.limits, text: newText(r.base.Lines(), chunkLines)}
 	for _, index := range h.replayPath(target.index) {
 		if err := w.applyHeader(index); err != nil {
 			return nil, err
@@ -92,7 +87,7 @@ func (r *Reconstructor) Reconstruct(ctx context.Context, target NodeRef) (*Snaps
 		return nil, err
 	}
 
-	return &Snapshot{node: target, lines: w.lines}, nil
+	return &Snapshot{node: target, lines: w.text.all()}, nil
 }
 
 // replayPath lists headers in application order: up from the reference to the
@@ -123,25 +118,19 @@ func (h *History) replayPath(target int) []int {
 	return append(path, down...)
 }
 
-// replay is one request's workspace. Every budget is charged before its work.
+// replay is one request's workspace. It needs no work budget of its own: a
+// request applies each header on its path once, the decoder bounds the file's
+// entries and stored lines, and one entry costs a few chunks plus a scan of
+// the chunk list. The state budgets bound memory; cancellation stops the rest.
 type replay struct {
 	ctx     context.Context
 	history *History
 	limits  limits.Limits
-
-	lines []string
-	bytes int // each line plus its logical terminator
-
-	headers, entries, moves int
+	text    *text
 }
 
 func (w *replay) applyHeader(index int) error {
 	record := w.history.record(w.history.nodes[index])
-	if w.headers == w.limits.ReplayHeaders {
-		return w.limit(record, "replay headers")
-	}
-	w.headers++
-
 	for i := range record.EntryCount() {
 		entry, _ := record.Entry(i)
 		if err := w.applyEntry(record, i+1, entry); err != nil {
@@ -159,45 +148,25 @@ func (w *replay) applyEntry(record undofile.Record, number int, entry undofile.E
 	if err := w.ctx.Err(); err != nil {
 		return err
 	}
-	if w.entries == w.limits.ReplayEntries {
-		return w.limit(record, "replay entries")
-	}
-	w.entries++
 
+	count := w.text.lines
 	top, bottom := int(entry.Top), int(entry.Bottom)
 	if bottom == 0 {
-		bottom = len(w.lines) + 1
+		bottom = count + 1
 	}
-	if top < 0 || top >= bottom || bottom > len(w.lines)+1 {
-		detail := fmt.Sprintf("entry %d spans lines %d-%d of a %d-line state", number, top, bottom, len(w.lines))
+	if top < 0 || top >= bottom || bottom > count+1 {
+		detail := fmt.Sprintf("entry %d spans lines %d-%d of a %d-line state", number, top, bottom, count)
 		return w.history.invalid(record, "entry range", detail)
 	}
 
 	end := bottom - 1
-	removed := w.lines[top:end]
-	added := entry.LineCount()
-
-	size := len(w.lines) - len(removed) + added
+	size := count - (end - top) + entry.LineCount()
 	if size > w.limits.StateLines {
 		return w.limit(record, "state lines")
 	}
 
-	// Visit the removed lines and copy the added ones. The tail moves only when
-	// the line count changes; a one-line edit leaves it in place, so charging
-	// it anyway would fail deep histories of long files for work never done.
-	// A capacity increase also copies the prefix, but append grows capacity by
-	// at least a quarter each time, so all such copies in one request add up to
-	// about five times the largest state rather than a cost per entry.
-	moves := len(removed) + added
-	if added != len(removed) {
-		moves += len(w.lines) - end
-	}
-	if err := w.charge(record, moves); err != nil {
-		return err
-	}
-
 	lines := entry.Lines()
-	bytes := w.bytes - textBytes(removed) + textBytes(lines)
+	bytes := w.text.bytes - w.text.bytesBetween(top, end) + textBytes(lines)
 	if size == 0 {
 		lines, bytes = []string{""}, 1 // Neovim keeps one dummy empty line.
 	}
@@ -205,29 +174,10 @@ func (w *replay) applyEntry(record undofile.Record, number int, entry undofile.E
 		return w.limit(record, "state bytes")
 	}
 
-	w.lines = slices.Replace(w.lines, top, end, lines...)
-	w.bytes = bytes
-	return nil
-}
-
-func (w *replay) charge(record undofile.Record, moves int) error {
-	if moves > w.limits.ReplayMoves-w.moves {
-		return w.limit(record, "replay line moves")
-	}
-
-	w.moves += moves
+	w.text.replace(top, end, lines)
 	return nil
 }
 
 func (w *replay) limit(record undofile.Record, field string) error {
 	return w.history.failure(undofile.Limit, record, field, "budget exceeded during replay")
-}
-
-func textBytes(lines []string) int {
-	total := 0
-	for _, line := range lines {
-		total += len(line) + 1
-	}
-
-	return total
 }

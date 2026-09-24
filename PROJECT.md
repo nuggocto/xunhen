@@ -425,7 +425,7 @@ follow the format study; the type names are not claims about Neovim structs.
 | `Node` | Event identity, logical relationships, available metadata, and references to replay data. A node is not itself a full-text snapshot. |
 | `EventTime` | A recorded timestamp when one is available. Missing time is explicit; equal or non-monotonic times do not invalidate otherwise valid ancestry. |
 | `VerifiedBase` | Immutable logical buffer lines checked against one decoded file's reference hash and line count. The source label is used for diagnostics; historical file options remain unknown. |
-| `Reconstructor` | A validated history bound to matching base text and its reference state. Owns replay limits and gives each request a fresh workspace. |
+| `Reconstructor` | A validated history bound to matching base text and its reference state. Owns the state limits and gives each request a fresh workspace. |
 | `Snapshot` | Successfully reconstructed buffer lines and their history/node identity. Historical encoding/newline settings stay unknown; a chosen export policy is separate. Never uses empty text to stand for failed reconstruction. |
 | `Diff` | A completed comparison with ordered, valid hunks and identified inputs. Cancellation or exhausted limits do not produce an ordinary completed diff. |
 | `Limits` | Validated input, allocation, replay, and output budgets. Reject zero/negative or overflowing settings instead of interpreting them as unlimited. |
@@ -461,11 +461,15 @@ must be rejected rather than interpreted against whichever history is open.
   states against independently produced Neovim results. A successful parse
   alone does not establish that the representation has the right semantics.
 
-For reconstructed text, begin with a private slice of byte-preserving line
-strings plus the supported normalization profile and separate export policy.
-Go strings can hold non-UTF-8 bytes; terminal rendering must not assume
-valid UTF-8. A rope or piece table adds balancing and ownership machinery that
-ordinary source-file workloads have not yet justified.
+Reconstructed text is a private slice of byte-preserving line strings plus
+the supported normalization profile and separate export policy. Go strings can
+hold non-UTF-8 bytes; terminal rendering must not assume valid UTF-8. During
+replay the working state keeps those lines in chunks of at most 1,024, the way
+Neovim's memline keeps blocks. An edit that changes the line count then moves
+the chunks it touches instead of every later line: 1,000 insertions at the top
+of a 100,000-line file replay in about 4 ms instead of 54 ms, and 250,000 in
+one 1,000,000-line state in 0.43 s instead of 101 s. A rope or piece table would
+add balancing machinery that these numbers do not call for.
 
 The initial diff should use a documented Myers-style line algorithm. Its
 worst-case work and trace storage can be large, so impose explicit budgets and
@@ -500,19 +504,22 @@ Starting engineering budgets for the ordinary-source-file target:
 | Optional fields including framing | 1 MiB per file |
 | Total decoded text payload | 128 MiB |
 | Diff workspace | 32 MiB |
-| Replay header crossings / entry applications | 200,000 / 1,000,000 per request |
-| Replay line-reference moves or visits | 8,000,000 per request |
 | Diff frontier/comparison steps | 10,000,000 per request |
 | Diff bytes compared | 256 MiB per request |
 | Rendered CLI output after escaping | 16 MiB per command |
 
 These are project limits to validate with fixtures, not Neovim format limits or
 measured capacity claims. They are not a hard process-RSS guarantee: Go object,
-map, slice, allocator, and runtime overhead must also be accounted for. Charge
-work before it occurs, including moving unchanged line references. Check
-cancellation between bounded units of work, such as a line, replay entry, or
-history header, so no unit runs for more than a few milliseconds at these
-limits. TUI rendering stays viewport-bounded. The format specification defines the
+map, slice, allocator, and runtime overhead must also be accounted for.
+
+Each limit is a safety ceiling sized so that no real file reaches it. Oversized
+or corrupt input then gets a named error instead of a hang or an out-of-memory
+kill. When the input limits already bound some work, that work gets no budget
+of its own; make it cheap instead. Replay, for example, touches a few chunks
+per edit, and the decoder's entry and stored-line limits bound a whole request,
+so replay has no work budget. Check cancellation between bounded units of
+work, such as a line, replay entry, or history header, so no unit runs for
+more than a few milliseconds at these limits. TUI rendering stays viewport-bounded. The format specification defines the
 units and the distinction between text work and comparison-step counts.
 
 Keep limits in one validated configuration passed explicitly into the core.

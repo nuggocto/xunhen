@@ -318,15 +318,15 @@ These are xunhen policy limits, not claims about Neovim's maximum capacity.
 | One stored/base/reconstructed line or saved `U` line | 1 MiB |
 | Optional-field payload per file, including framing | 1 MiB |
 | Decoded text / diff workspace | 128 MiB / 32 MiB |
-| Replay header crossings | 200,000 per request |
-| Replay entry applications | 1,000,000 per request |
-| Replay line-reference moves or visits | 8,000,000 per request |
 | Diff frontier/comparison steps | 10,000,000 per request |
 | Text bytes compared during diff | 256 MiB per request |
 | Rendered CLI output, after escaping | 16 MiB per command |
 
-Charge work before performing it, including copying unchanged line references
-when inserting into a slice. Byte comparisons need their own budget; one
+Replay has no work budget of its own. A request applies each header on its
+path once, and its working state keeps lines in chunks of at most 1,024, so an
+entry costs a scan of the chunk list plus the chunks it touches rather than a
+shift of every later line. The entry and stored-line limits above therefore
+bound the whole request. Byte comparisons need their own budget; one
 comparison of very long lines is not constant-cost work. Check cancellation
 between bounded units of work, such as a line, replay entry, or history header;
 at these limits no unit runs for more than a few milliseconds. Use iterative

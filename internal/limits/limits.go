@@ -18,9 +18,6 @@ type Limits struct {
 	OptionalBytes int
 	TextBytes     int
 	OutputBytes   int
-	ReplayHeaders int
-	ReplayEntries int
-	ReplayMoves   int
 
 	// Diff budgets count the units defined in docs/diff.md: workspace bytes for
 	// identifiers, lookup-table entries, and stored search rounds; steps for
@@ -45,9 +42,6 @@ func Default() Limits {
 		OptionalBytes: 1 << 20,
 		TextBytes:     128 << 20,
 		OutputBytes:   16 << 20,
-		ReplayHeaders: 200_000,
-		ReplayEntries: 1_000_000,
-		ReplayMoves:   8_000_000,
 
 		DiffWorkspaceBytes: 32 << 20,
 		DiffSteps:          10_000_000,
@@ -74,9 +68,6 @@ func (l Limits) Validate() error {
 		{"optional-field bytes", int64(l.OptionalBytes), int64(ceiling.OptionalBytes)},
 		{"decoded text bytes", int64(l.TextBytes), int64(ceiling.TextBytes)},
 		{"output bytes", int64(l.OutputBytes), int64(ceiling.OutputBytes)},
-		{"replay headers", int64(l.ReplayHeaders), int64(ceiling.ReplayHeaders)},
-		{"replay entries", int64(l.ReplayEntries), int64(ceiling.ReplayEntries)},
-		{"replay line moves", int64(l.ReplayMoves), int64(ceiling.ReplayMoves)},
 		{"diff workspace bytes", int64(l.DiffWorkspaceBytes), int64(ceiling.DiffWorkspaceBytes)},
 		{"diff steps", int64(l.DiffSteps), int64(ceiling.DiffSteps)},
 		{"diff compared bytes", int64(l.DiffCompareBytes), int64(ceiling.DiffCompareBytes)},

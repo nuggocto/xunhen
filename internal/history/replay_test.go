@@ -90,8 +90,7 @@ func TestReplayRejectsInvalidWork(t *testing.T) {
 		baseBytes += len(line) + 1
 	}
 
-	// Budget failures inside a header name its sequence. The initial base copy
-	// belongs to no header, so it reports sequence zero.
+	// Failures inside a header name its sequence.
 	tests := []struct {
 		name     string
 		limits   func(*limits.Limits)
@@ -101,10 +100,6 @@ func TestReplayRejectsInvalidWork(t *testing.T) {
 		field    string
 		sequence undofile.Sequence
 	}{
-		{name: "header budget", limits: func(l *limits.Limits) { l.ReplayHeaders = 1 }, kind: undofile.Limit, field: "replay headers", sequence: 1},
-		{name: "entry budget", limits: func(l *limits.Limits) { l.ReplayEntries = 1 }, kind: undofile.Limit, field: "replay entries", sequence: 1},
-		{name: "initial copy budget", limits: func(l *limits.Limits) { l.ReplayMoves = len(lines) - 1 }, kind: undofile.Limit, field: "replay line moves"},
-		{name: "line move budget", limits: func(l *limits.Limits) { l.ReplayMoves = len(lines) }, kind: undofile.Limit, field: "replay line moves", sequence: 3},
 		{name: "state byte budget", target: 2, limits: func(l *limits.Limits) { l.StateBytes = baseBytes }, kind: undofile.Limit, field: "state bytes", sequence: 2},
 		{name: "invalid range", mutate: func(t *testing.T, data []byte) {
 			at := bytes.Index(data, []byte{0xf5, 0x18})
@@ -149,59 +144,73 @@ func TestReplayRejectsInvalidWork(t *testing.T) {
 	}
 }
 
-// A one-line edit replaces one line with one line, so the lines below it never
-// move. Deep chains of such edits at the top of a long file must replay within
-// the default budgets instead of paying for the whole file on every edit.
-func TestReplayOfOneLineEdits(t *testing.T) {
+// Deep histories of long files must replay with the default limits. A
+// rewritten line moves no other line; an inserted line shifts every line below
+// it, which chunked replay keeps to the few chunks it touches.
+func TestReplayOfLongHistories(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name         string
 		lines, edits int
+		inserts      bool // each change inserts a line instead of rewriting line 1
 	}{
 		// Neovim keeps 1,000 undo levels by default.
-		{name: "default undo depth in a 10,000-line file", lines: 10_000, edits: 1_000},
-		{name: "short history in a 100,000-line file", lines: 100_000, edits: 100},
+		{name: "default undo depth of rewrites in 10,000 lines", lines: 10_000, edits: 1_000},
+		{name: "rewrites in 100,000 lines", lines: 100_000, edits: 100},
+		{name: "default undo depth of insertions in 100,000 lines", lines: 100_000, edits: 1_000, inserts: true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			base := make([]string, tt.lines)
-			for i := range base {
-				base[i] = "unchanged"
+			// state returns the buffer after change k. Rewrites keep one
+			// versioned line on top; insertions stack one line per change
+			// above the body.
+			state := func(k int) []string {
+				body := slices.Repeat([]string{"unchanged"}, tt.lines)
+				if !tt.inserts {
+					return append([]string{fmt.Sprint("version ", k)}, body[1:]...)
+				}
+
+				head := make([]string, 0, k)
+				for i := k; i >= 1; i-- {
+					head = append(head, fmt.Sprint("added ", i))
+				}
+				return append(head, body...)
 			}
-			base[0] = fmt.Sprint("version ", tt.edits)
 
 			// Every change is on the reference path, so its entry faces undo:
-			// undoing change id restores version id-1 on line 1.
+			// it removes line 1, and a rewrite puts the previous version back.
 			nodes := make([]wireNode, tt.edits)
 			for i := range nodes {
 				id := int32(i + 1)
-				nodes[i] = wireNode{
-					id: id, parent: id - 1, child: id + 1,
-					entries: []wireEntry{{top: 0, bottom: 2, lines: []string{fmt.Sprint("version ", i)}}},
+				undo := wireEntry{top: 0, bottom: 2}
+				if !tt.inserts {
+					undo.lines = []string{fmt.Sprint("version ", i)}
 				}
+				nodes[i] = wireNode{id: id, parent: id - 1, child: id + 1, entries: []wireEntry{undo}}
 			}
 			nodes[tt.edits-1].child = 0
 
 			last := int32(tt.edits)
+			base := state(tt.edits)
 			data := withReference(graphBytes(nodes, 1, last, 0, last, last), base)
 			h, r := reconstructor(t, data, base, limits.Default())
 
-			root, err := h.Lookup(0)
-			if err != nil {
-				t.Fatal(err)
-			}
-			snapshot, err := r.Reconstruct(t.Context(), root)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			got := snapshot.Lines()
-			if len(got) != tt.lines || got[0] != "version 0" || got[len(got)-1] != "unchanged" {
-				t.Fatalf("root has %d lines, first %q, last %q", len(got), got[0], got[len(got)-1])
+			for _, target := range []int{0, tt.edits / 2} {
+				ref, err := h.Lookup(history.NodeID(target))
+				if err != nil {
+					t.Fatal(err)
+				}
+				snapshot, err := r.Reconstruct(t.Context(), ref)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !slices.Equal(snapshot.Lines(), state(target)) {
+					t.Fatalf("node %d differs from its expected state", target)
+				}
 			}
 		})
 	}
@@ -328,7 +337,7 @@ func TestBaseBindingRejectsWrongInput(t *testing.T) {
 	}
 }
 
-func reconstructor(t *testing.T, undo []byte, base []string, lim limits.Limits) (*history.History, *history.Reconstructor) {
+func reconstructor(t testing.TB, undo []byte, base []string, lim limits.Limits) (*history.History, *history.Reconstructor) {
 	t.Helper()
 
 	file := decoded(t, undo)
@@ -348,4 +357,44 @@ func reconstructor(t *testing.T, undo []byte, base []string, lim limits.Limits) 
 	}
 
 	return h, r
+}
+
+// BenchmarkReconstruct replays line-count changes at the top of long files, so
+// each edit would shift every later line of a flat slice. The second case is
+// the most edits one change can hold under the default entry limit.
+func BenchmarkReconstruct(b *testing.B) {
+	cases := []struct {
+		name                    string
+		lines, changes, entries int
+	}{
+		{name: "1000 insertions in 100000 lines", lines: 100_000, changes: 1_000, entries: 1},
+		{name: "250000 insertions in 1000000 lines", lines: 1_000_000, changes: 1, entries: 250_000},
+	}
+
+	for _, c := range cases {
+		b.Run(c.name, func(b *testing.B) {
+			// Facing undo, each entry removes the line its insertion added.
+			nodes := make([]wireNode, c.changes)
+			for i := range nodes {
+				id := int32(i + 1)
+				entries := slices.Repeat([]wireEntry{{top: 0, bottom: 2}}, c.entries)
+				nodes[i] = wireNode{id: id, parent: id - 1, child: id + 1, entries: entries}
+			}
+			nodes[c.changes-1].child = 0
+
+			last := int32(c.changes)
+			base := slices.Repeat([]string{"line"}, c.lines)
+			h, r := reconstructor(b, withReference(graphBytes(nodes, 1, last, 0, last, last), base), base, limits.Default())
+			root, err := h.Lookup(0)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			for b.Loop() {
+				if _, err := r.Reconstruct(b.Context(), root); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
 }
