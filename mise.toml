@@ -30,7 +30,7 @@ env = { CGO_ENABLED = "1" }
 run = "go test -race -count=1 -timeout=3m ./..."
 
 [tasks.fuzz]
-description = "Run short decoder, history, replay text, diff, and discovery fuzz checks"
+description = "Run short decoder, history, replay text, diff, discovery, and terminal text fuzz checks"
 run = [
   "go test ./internal/undofile -run='^$' -fuzz='^FuzzDecode$' -fuzztime=10s -parallel=2 -timeout=30s",
   "go test ./internal/history -run='^$' -fuzz='^FuzzHistory$' -fuzztime=10s -parallel=2 -timeout=30s",
@@ -38,6 +38,7 @@ run = [
   "go test ./internal/diff -run='^$' -fuzz='^FuzzLines$' -fuzztime=10s -parallel=2 -timeout=30s",
   "go test ./internal/discover -run='^$' -fuzz='^FuzzNames$' -fuzztime=10s -parallel=2 -timeout=30s",
   "go test ./internal/discover -run='^$' -fuzz='^FuzzChoose$' -fuzztime=10s -parallel=2 -timeout=30s",
+  "go test ./internal/termtext -run='^$' -fuzz='^FuzzClip$' -fuzztime=10s -parallel=2 -timeout=30s",
 ]
 
 [tasks.vet]

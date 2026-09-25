@@ -54,6 +54,13 @@ jobs:
           go mod verify
       - name: Test
         run: go test -count=1 -timeout=3m ./...
+      # The race detector needs cgo. The browser's worker, cache, and signal
+      # relay run beside Bubble Tea's goroutines, and the release build
+      # itself stays static.
+      - name: Test with the race detector
+        env:
+          CGO_ENABLED: "1"
+        run: go test -race -count=1 -timeout=5m ./...
       - name: Vet
         run: go vet ./...
       - name: Build

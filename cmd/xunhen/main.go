@@ -22,7 +22,8 @@ func main() {
 		debug.SetMemoryLimit(768 << 20)
 	}
 
-	// No background work needs joining. Keep SIGINT's default disposition so
-	// a blocked stdout write does not swallow interrupts.
+	// Keep SIGINT's default disposition so a blocked stdout write does not
+	// swallow interrupts. Only browse catches signals, while it owns the
+	// terminal, and it joins its worker before run returns.
 	os.Exit(run(context.Background(), os.Args[1:], os.Stdout, os.Stderr))
 }

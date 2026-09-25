@@ -8,12 +8,25 @@ You write a passage of code, undo it, and follow another path.
 The first branch disappears from view. It may not be gone.
 
 **xunhen** is a read-only Linux tool that reads Neovim's saved undo history,
-including abandoned branches that never reached a file or git. A terminal
-browser is planned.
+including abandoned branches that never reached a file or git, and lets you
+browse it in the terminal.
 
 ## Usage
 
-Point it at your source file and your undo directory:
+Open the history of a file in the browser:
+
+```sh
+xunhen browse --source retry.go --undo-dir ~/.local/state/nvim/undo
+```
+
+The tree on the left holds every retained state; the selected one shows on the
+right. Move with the arrows or `j` and `k`, compare two states with `space` to
+pin one and `d` to diff it with the selection, and press `e` for the command
+that saves the selected state to a file. `?` lists every key, and `q` quits.
+[docs/browse.md](docs/browse.md) covers the rest.
+
+The same work is available as plain commands, for scripts or terminals the
+browser cannot use:
 
 ```sh
 xunhen inspect --source retry.go --undo-dir ~/.local/state/nvim/undo
@@ -31,6 +44,8 @@ xunhen show --undo history.undo --base retry.go --node 2
 - `show` rebuilds one state. Add `--raw --final-newline=include` to write
   exact text you can redirect to a file.
 - `diff` compares two states as a unified diff.
+- `browse` does all three interactively. It needs a terminal; without one it
+  exits with status 1 and points to the commands above.
 
 Only edits Neovim saved to disk can be found, and rebuilding text needs the
 source as it was when the undo file was last written. Run
@@ -41,6 +56,7 @@ source as it was when the undo file was last written. Run
 - [Undo format](docs/undo-format.md): what is decoded and its limits
 - [Discovery](docs/discovery.md): how `--source` finds a history
 - [Diff](docs/diff.md): the comparison algorithm
+- [Browse](docs/browse.md): the terminal browser, its keys, and its memory use
 
 ## Development
 

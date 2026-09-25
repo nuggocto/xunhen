@@ -29,7 +29,11 @@ func TestCommandResponses(t *testing.T) {
 		{name: "version help", args: []string{"help", "version"}, out: "Usage: xunhen version"},
 		{name: "inspection help", args: []string{"help", "inspect"}, out: "Usage: xunhen inspect --undo PATH"},
 		{name: "show help topic", args: []string{"help", "show"}, out: "Usage: xunhen show"},
-		{name: "planned command", args: []string{"browse"}, status: 1, err: "browse is not available"},
+		{name: "browse help topic", args: []string{"help", "browse"}, out: "Usage: xunhen browse"},
+		{name: "browse without inputs", args: []string{"browse"}, status: 2, err: "expected browse --undo PATH --base PATH"},
+		// The paths do not exist. Reaching the terminal check first means no
+		// input was opened, and nothing full-screen was written.
+		{name: "browse without a terminal", args: []string{"browse", "--undo", "u", "--base", "b"}, status: 1, err: "browse needs an interactive terminal"},
 		{name: "unknown command", args: []string{"unknown"}, status: 2, err: "unknown command"},
 		{name: "unknown option", args: []string{"--unknown"}, status: 2, err: "unknown command or option"},
 		{name: "unknown help topic", args: []string{"help", "unknown"}, status: 2, err: "unknown command"},
@@ -154,6 +158,8 @@ func TestCommandArgumentContract(t *testing.T) {
 		{name: "inspect", mode: "source", valid: []string{"--source", "s", "--undo-dir", "d"}},
 		{name: "show", mode: "source", valid: []string{"--source", "s", "--undo-dir", "d", "--node", "1"}, nodes: []string{"--node"}},
 		{name: "diff", mode: "source", valid: []string{"--source", "s", "--undo-dir", "d", "--from", "1", "--to", "2"}, nodes: []string{"--from", "--to"}},
+		{name: "browse", mode: "explicit", valid: []string{"--undo", "u", "--base", "b"}},
+		{name: "browse", mode: "source", valid: []string{"--source", "s", "--undo-dir", "d"}},
 	}
 
 	type contractCase struct {

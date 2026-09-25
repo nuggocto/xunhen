@@ -23,25 +23,10 @@ func TestExecutable(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	binary := filepath.Join(dir, "xunhen")
+	binary := buildExecutable(t, dir)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
 	defer cancel()
-
-	build := exec.CommandContext(ctx, "go", "build",
-		"-trimpath", "-ldflags=-X main.version=v0.0.0-test", "-o", binary, ".")
-	build.Env = append(os.Environ(),
-		"GOWORK=off",
-		"GOENV=off",
-		"GOTOOLCHAIN=local",
-		"GOPROXY=off",
-		"GOSUMDB=off",
-		"GOFLAGS=-mod=readonly",
-		"CGO_ENABLED=0",
-	)
-	if output, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build executable: %v\n%s", err, output)
-	}
 
 	undo := undoFixture(t, "abandoned-branch")
 	undoPath := filepath.Join(dir, "history with spaces.undo")
@@ -100,7 +85,13 @@ func TestExecutable(t *testing.T) {
 		{name: "help", args: []string{"--help"}, out: "Usage:"},
 		{name: "stamped version", args: []string{"--version"}, out: "xunhen v0.0.0-test\n"},
 		{name: "invalid invocation", args: []string{"unknown"}, status: 2, err: "unknown command"},
-		{name: "unavailable operation", args: []string{"browse"}, status: 1, err: "not available"},
+		{
+			name:   "browser without a terminal",
+			args:   []string{"browse", "--undo", undoPath, "--base", basePath},
+			status: 1,
+			err:    "stdin is not a terminal",
+			exact:  true,
+		},
 		{
 			name: "inspection without source or editor",
 			args: []string{"inspect", "--undo", undoPath},
@@ -259,6 +250,33 @@ func TestExecutable(t *testing.T) {
 	t.Run("interrupt while stdout is blocked", func(t *testing.T) {
 		checkBlockedOutputInterrupt(t, binary, dir)
 	})
+}
+
+// buildExecutable builds the command as a release does, statically and
+// without network access, into dir.
+func buildExecutable(t *testing.T, dir string) string {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
+	defer cancel()
+
+	binary := filepath.Join(dir, "xunhen")
+	build := exec.CommandContext(ctx, "go", "build",
+		"-trimpath", "-ldflags=-X main.version=v0.0.0-test", "-o", binary, ".")
+	build.Env = append(os.Environ(),
+		"GOWORK=off",
+		"GOENV=off",
+		"GOTOOLCHAIN=local",
+		"GOPROXY=off",
+		"GOSUMDB=off",
+		"GOFLAGS=-mod=readonly",
+		"CGO_ENABLED=0",
+	)
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build executable: %v\n%s", err, output)
+	}
+
+	return binary
 }
 
 // treeState lists every entry under the named subdirectories of dir with its

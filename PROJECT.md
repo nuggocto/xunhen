@@ -85,9 +85,10 @@ Decisions made for the starting design:
 
 The installed version strings identify a starting environment, not a verified
 compatibility matrix. Record the actual Neovim build provenance when generating
-fixtures. The current executable uses only the standard library; the selected
-Go minimum and CI toolchain are 1.27.1, recorded in `go.mod`. Select the Bubble
-Tea dependency when its interface work begins.
+fixtures. The executable uses the standard library, Bubble Tea v2.0.10 for the
+terminal browser, and Bubble Tea's own x/ansi package to measure terminal cells
+the way its renderer does. The selected Go minimum and CI toolchain are 1.27.1,
+recorded in `go.mod`.
 
 Bubble Tea is justified by terminal lifecycle handling, input processing, and
 its model/update/view structure. Its transitive dependencies still count toward
@@ -838,28 +839,28 @@ repeatedly entering node selectors.
 
 #### 6.1 Build the interaction model
 
-- [ ] Pin the selected Bubble Tea release and justify any extra UI dependencies before adding them.
-- [ ] Implement `browse` with a branch tree, selected-state preview, and comparison view using the existing core operations.
-- [ ] Add keyboard navigation, expand/collapse, scrolling, selecting a comparison pair, and jumping to a node ID.
-- [ ] Show the selected node, base/reference position, available timestamps, and loading/error state without inventing unavailable metadata.
-- [ ] Add in-app help and a documented route to export the selected state with the existing CLI.
-- [ ] Support small terminals, resize events, no-color display, and readable Unicode/control-byte handling without requiring patched fonts.
+- [x] Pin the selected Bubble Tea release and justify any extra UI dependencies before adding them.
+- [x] Implement `browse` with a branch tree, selected-state preview, and comparison view using the existing core operations.
+- [x] Add keyboard navigation, expand/collapse, scrolling, selecting a comparison pair, and jumping to a node ID.
+- [x] Show the selected node, base/reference position, available timestamps, and loading/error state without inventing unavailable metadata.
+- [x] Add in-app help and a documented route to export the selected state with the existing CLI.
+- [x] Support small terminals, resize events, no-color display, and readable Unicode/control-byte handling without requiring patched fonts.
 
 #### 6.2 Keep work bounded and results current
 
-- [ ] Add the single reconstruction/diff worker with at most one running and one latest pending request.
-- [ ] Cancel obsolete work and use load/selection generations to reject late results.
-- [ ] Implement a 128 MiB byte-accounted LRU snapshot cache, room for a compared pair of the largest 64 MiB states, with immutable entries and explicit ownership of retained backing storage.
-- [ ] Discard the cache on a new history/base load and ensure evicted entries cannot corrupt still-displayed snapshots.
-- [ ] Keep decoding, replay, and diff work out of rendering callbacks and preserve usable input handling while work runs.
+- [x] Add the single reconstruction/diff worker with at most one running and one latest pending request.
+- [x] Cancel obsolete work and use load/selection generations to reject late results.
+- [x] Implement a 128 MiB byte-accounted LRU snapshot cache, room for a compared pair of the largest 64 MiB states, with immutable entries and explicit ownership of retained backing storage.
+- [x] Discard the cache on a new history/base load and ensure evicted entries cannot corrupt still-displayed snapshots.
+- [x] Keep decoding, replay, and diff work out of rendering callbacks and preserve usable input handling while work runs.
 
 #### 6.3 Verify terminal behavior
 
-- [ ] Exercise selection, comparison, rapid navigation, reload, cancellation, and stale-result rejection against synthetic histories.
-- [ ] Verify clean quit, Ctrl-C, relevant termination signals, and suspend/resume behavior; restore terminal settings and release the worker.
-- [ ] Reject non-interactive/dumb-terminal use with a useful CLI fallback rather than printing a broken full-screen interface.
+- [x] Exercise selection, comparison, rapid navigation, reload, cancellation, and stale-result rejection against synthetic histories.
+- [x] Verify clean quit, Ctrl-C, relevant termination signals, and suspend/resume behavior; restore terminal settings and release the worker.
+- [x] Reject non-interactive/dumb-terminal use with a useful CLI fallback rather than printing a broken full-screen interface.
 - [ ] Check at least one ordinary Linux terminal, an SSH session, and a tmux session using the built binary.
-- [ ] Add race testing for worker/cache interactions; keep assertions focused on behavior rather than colors or widget layout.
+- [x] Add race testing for worker/cache interactions; keep assertions focused on behavior rather than colors or widget layout.
 
 - [ ] **Phase 6 complete:** a user can navigate and compare the recovery example interactively, including fast selection changes and clean exit under failure.
 

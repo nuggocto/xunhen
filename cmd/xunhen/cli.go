@@ -7,18 +7,22 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 
 	"github.com/nuggocto/xunhen/internal/history"
 	"github.com/nuggocto/xunhen/internal/termtext"
 )
 
-// An interrupt keeps its default disposition, so the kernel ends the process
-// and the shell reports status 130 without a code path here.
+// Outside the browser, an interrupt keeps its default disposition, so the
+// kernel ends the process and the shell reports status 130 without a code
+// path here. The browser catches signals to restore the terminal first and
+// then exits with the same 128+signal status.
 const (
-	exitSuccess = 0
-	exitFailure = 1
-	exitUsage   = 2
+	exitSuccess   = 0
+	exitFailure   = 1
+	exitUsage     = 2
+	exitInterrupt = 130
 )
 
 const helpText = `xunhen - seek traces in Neovim's saved undo history
@@ -30,11 +34,13 @@ Usage:
   xunhen inspect --undo PATH
   xunhen show --undo PATH --base PATH --node ID [--raw --final-newline=include|omit]
   xunhen diff --undo PATH --base PATH --from ID --to ID
+  xunhen browse --undo PATH --base PATH
 
 Each command can also find the history from the source file instead:
   xunhen inspect --source PATH --undo-dir DIR...
   xunhen show --source PATH --undo-dir DIR... --node ID
   xunhen diff --source PATH --undo-dir DIR... --from ID --to ID
+  xunhen browse --source PATH --undo-dir DIR...
 
 Available commands:
   help       Show help
@@ -42,11 +48,9 @@ Available commands:
   inspect    Describe an undo history
   show       Reconstruct a retained state
   diff       Compare two retained states
-
-Planned command (not available in this build):
   browse     Explore a history in the terminal
 
-This development build inspects histories, recovers states, and compares them.
+Run 'xunhen help COMMAND' for a command's options.
 `
 
 const versionHelp = "Usage: xunhen version\nShow version and build information.\n"
@@ -59,6 +63,7 @@ var commandHelp = map[string]string{
 	"inspect": inspectHelp,
 	"show":    showHelp,
 	"diff":    diffHelp,
+	"browse":  browseHelp,
 }
 
 func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
@@ -84,9 +89,6 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		if text, ok := commandHelp[args[1]]; ok {
 			return writeOutput(stdout, stderr, text)
 		}
-		if args[1] == "browse" {
-			return writeOutput(stdout, stderr, args[1]+" is planned and not available in this build.\n")
-		}
 		return diagnostic(stderr, exitUsage, "unknown command; see 'xunhen --help'")
 
 	case "version", "--version":
@@ -103,8 +105,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return compareStates(ctx, args[1:], stdout, stderr)
 
 	case "browse":
-		// Future command arguments are deliberately not parsed or opened yet.
-		return diagnostic(stderr, exitFailure, args[0]+" is not available in this build")
+		return browse(ctx, args[1:], os.Stdin, stdout, stderr)
 
 	default:
 		// Unknown arguments can contain terminal controls. Do not echo them.
