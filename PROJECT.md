@@ -859,10 +859,10 @@ repeatedly entering node selectors.
 - [x] Exercise selection, comparison, rapid navigation, reload, cancellation, and stale-result rejection against synthetic histories.
 - [x] Verify clean quit, Ctrl-C, relevant termination signals, and suspend/resume behavior; restore terminal settings and release the worker.
 - [x] Reject non-interactive/dumb-terminal use with a useful CLI fallback rather than printing a broken full-screen interface.
-- [ ] Check at least one ordinary Linux terminal, an SSH session, and a tmux session using the built binary.
+- [x] Check at least one ordinary Linux terminal, an SSH session, and a tmux session using the built binary.
 - [x] Add race testing for worker/cache interactions; keep assertions focused on behavior rather than colors or widget layout.
 
-- [ ] **Phase 6 complete:** a user can navigate and compare the recovery example interactively, including fast selection changes and clean exit under failure.
+- [x] **Phase 6 complete:** a user can navigate and compare the recovery example interactively, including fast selection changes and clean exit under failure.
 
 ### Phase 7 — Correctness, resource, and compatibility hardening
 
