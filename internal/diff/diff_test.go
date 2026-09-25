@@ -193,6 +193,17 @@ func checkDiff(t *testing.T, left, right []string, hunks []diff.Hunk, minimal bo
 		index, produced, changes := h.LeftStart, 0, 0
 		var ops []diff.Op
 		for line := range h.Lines() {
+			// Both indexes name the line's position on each side: the
+			// left-hand line it is or precedes, and the same on the right.
+			if line.Left != index || line.Right != len(result) {
+				t.Fatalf("%q -> %q: hunk %d line %d has indexes %d/%d, want %d/%d",
+					left, right, i, len(ops), line.Left, line.Right, index, len(result))
+			}
+			// Random access agrees with iteration, so a viewer can start
+			// drawing at any line.
+			if at, ok := h.Line(len(ops)); !ok || at != line {
+				t.Fatalf("%q -> %q: hunk %d Line(%d) = %+v, want %+v", left, right, i, len(ops), at, line)
+			}
 			ops = append(ops, line.Op)
 			switch line.Op {
 			case diff.Insert:
@@ -213,6 +224,9 @@ func checkDiff(t *testing.T, left, right []string, hunks []diff.Hunk, minimal bo
 			}
 		}
 
+		if _, ok := h.Line(len(ops)); ok || h.Len() != len(ops) {
+			t.Fatalf("%q -> %q: hunk %d has %d lines but Len %d", left, right, i, len(ops), h.Len())
+		}
 		if index-h.LeftStart != h.LeftCount || produced != h.RightCount {
 			t.Fatalf("%q -> %q: hunk %d counts do not match its lines", left, right, i)
 		}

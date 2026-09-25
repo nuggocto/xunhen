@@ -62,6 +62,26 @@ func (s *Snapshot) Lines() []string {
 	return slices.Clone(s.lines)
 }
 
+// Len returns the number of logical lines, at least one for a completed
+// state. Together with Line it reads a state without copying it, which a
+// viewer redrawing a few lines of a four-million-line state needs.
+func (s *Snapshot) Len() int {
+	if s == nil {
+		return 0
+	}
+
+	return len(s.lines)
+}
+
+// Line returns one logical line, or false for an out-of-range index.
+func (s *Snapshot) Line(index int) (string, bool) {
+	if s == nil || index < 0 || index >= len(s.lines) {
+		return "", false
+	}
+
+	return s.lines[index], true
+}
+
 // Reconstruct replays from the reference state to target, applying each
 // persisted header once. Headers above the shared ancestor already face undo
 // and headers below it on the target branch face redo, so a fresh workspace
@@ -76,9 +96,14 @@ func (r *Reconstructor) Reconstruct(ctx context.Context, target NodeRef) (*Snaps
 		return nil, err
 	}
 
+	path, err := h.replayPath(ctx, target.index)
+	if err != nil {
+		return nil, err
+	}
+
 	// VerifiedBase.Lines returns a fresh copy, so the workspace can own it.
 	w := &replay{ctx: ctx, history: h, limits: r.limits, text: newText(r.base.Lines(), chunkLines)}
-	for _, index := range h.replayPath(target.index) {
+	for _, index := range path {
 		if err := w.applyHeader(index); err != nil {
 			return nil, err
 		}
@@ -93,10 +118,14 @@ func (r *Reconstructor) Reconstruct(ctx context.Context, target NodeRef) (*Snaps
 
 // replayPath lists headers in application order: up from the reference to the
 // shared ancestor, then down to the target. New proved that every parent chain
-// ends at the root, and the node limit bounds each walk.
-func (h *History) replayPath(target int) []int {
+// ends at the root, and the node limit bounds each walk. A walk can visit a
+// million nodes, so it checks cancellation as it goes.
+func (h *History) replayPath(ctx context.Context, target int) ([]int, error) {
 	onReferencePath := make([]bool, len(h.nodes))
-	for i := h.reference; ; i = h.parent(i) {
+	for step, i := 0, h.reference; ; step, i = step+1, h.parent(i) {
+		if err := checkpoint(ctx, step); err != nil {
+			return nil, err
+		}
 		onReferencePath[i] = true
 		if i == 0 {
 			break
@@ -106,17 +135,23 @@ func (h *History) replayPath(target int) []int {
 	var down []int
 	ancestor := target
 	for !onReferencePath[ancestor] {
+		if err := checkpoint(ctx, len(down)); err != nil {
+			return nil, err
+		}
 		down = append(down, ancestor)
 		ancestor = h.parent(ancestor)
 	}
 
 	var path []int
 	for i := h.reference; i != ancestor; i = h.parent(i) {
+		if err := checkpoint(ctx, len(path)); err != nil {
+			return nil, err
+		}
 		path = append(path, i)
 	}
 
 	slices.Reverse(down)
-	return append(path, down...)
+	return append(path, down...), nil
 }
 
 // replay is one request's workspace. It needs no work limit of its own: a

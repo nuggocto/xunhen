@@ -58,7 +58,8 @@ type History struct {
 
 // New checks identities, references, sibling lists, ancestry, connectivity,
 // and the persisted reference position in O(nodes) bounded iterative passes.
-// The node limit bounds each pass, so cancellation is checked between them.
+// A pass over a million nodes takes tens of milliseconds, so each one checks
+// cancellation every cancelInterval nodes as well as between passes.
 func New(ctx context.Context, file *undofile.DecodedFile, lim limits.Limits) (*History, error) {
 	if err := lim.Validate(); err != nil {
 		return nil, err
@@ -85,11 +86,11 @@ func New(ctx context.Context, file *undofile.DecodedFile, lim limits.Limits) (*H
 	h.byID = make(map[NodeID]int, meta.HeaderCount+1)
 	h.byID[0] = 0
 
-	for _, pass := range []func() error{h.indexRecords, h.validateLinks, h.walk, h.bindReference} {
+	for _, pass := range []func(context.Context) error{h.indexRecords, h.validateLinks, h.walk, h.bindReference} {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if err := pass(); err != nil {
+		if err := pass(ctx); err != nil {
 			return nil, err
 		}
 	}
@@ -101,8 +102,25 @@ func New(ctx context.Context, file *undofile.DecodedFile, lim limits.Limits) (*H
 	return h, nil
 }
 
-func (h *History) indexRecords() error {
+// cancelInterval is the number of nodes a pass visits between cancellation
+// checks.
+const cancelInterval = 1024
+
+// checkpoint reports cancellation once every cancelInterval steps.
+func checkpoint(ctx context.Context, step int) error {
+	if step%cancelInterval != 0 {
+		return nil
+	}
+
+	return ctx.Err()
+}
+
+func (h *History) indexRecords(ctx context.Context) error {
 	for i := range h.metadata.HeaderCount {
+		if err := checkpoint(ctx, i); err != nil {
+			return err
+		}
+
 		record, ok := h.file.Record(i)
 		if !ok {
 			return errors.New("decoded record inventory is incomplete")
@@ -171,8 +189,12 @@ func (h *History) record(n node) undofile.Record {
 	return r
 }
 
-func (h *History) validateLinks() error {
+func (h *History) validateLinks(ctx context.Context) error {
 	for i, n := range h.nodes {
+		if err := checkpoint(ctx, i); err != nil {
+			return err
+		}
+
 		info := n.info
 		links := [...]struct {
 			name string
@@ -226,11 +248,15 @@ func (h *History) validateLinks() error {
 	return nil
 }
 
-func (h *History) walk() error {
+func (h *History) walk(ctx context.Context) error {
 	seen := make([]bool, len(h.nodes))
 	stack := []int{0}
 
 	for len(stack) != 0 {
+		if err := checkpoint(ctx, len(h.order)); err != nil {
+			return err
+		}
+
 		index := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
 
@@ -257,7 +283,7 @@ func (h *History) walk() error {
 	return nil
 }
 
-func (h *History) bindReference() error {
+func (h *History) bindReference(ctx context.Context) error {
 	meta := h.metadata
 	for _, link := range []undofile.Sequence{meta.Newest, meta.NextRedo} {
 		if _, exists := h.byID[NodeID(link)]; !exists {
@@ -278,7 +304,11 @@ func (h *History) bindReference() error {
 		return h.invalid(undofile.Record{}, "newest header", "reference without a next redo must be a leaf")
 	}
 
-	for id := NodeID(0); ; {
+	for step, id := 0, NodeID(0); ; step++ {
+		if err := checkpoint(ctx, step); err != nil {
+			return err
+		}
+
 		info := h.nodeInfo(id)
 		if id == target {
 			h.reference = h.byID[id]

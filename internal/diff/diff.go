@@ -27,9 +27,13 @@ const (
 )
 
 // Line is one hunk line. Text holds the exact compared bytes, unescaped.
+// Left and Right are zero-based line indexes on each side. A deleted line
+// has no right-hand index, so Right is the right-hand line it precedes, and
+// an inserted line's Left is likewise the left-hand line it precedes.
 type Line struct {
-	Op   Op
-	Text string
+	Op          Op
+	Text        string
+	Left, Right int
 }
 
 // run is a stretch of lines with one operation. Every run records both
@@ -48,6 +52,10 @@ type Hunk struct {
 
 	runs        []run
 	left, right []string
+
+	// starts[i] is the display position of runs[i]'s first line, so Line
+	// finds any position with a binary search instead of a walk.
+	starts []int
 }
 
 // Lines yields the hunk in display order. Within one change, every deleted
@@ -56,18 +64,50 @@ func (h Hunk) Lines() iter.Seq[Line] {
 	return func(yield func(Line) bool) {
 		for _, r := range h.runs {
 			for i := range r.count {
-				line := Line{Op: r.op}
-				if r.op == Insert {
-					line.Text = h.right[r.right+i]
-				} else {
-					line.Text = h.left[r.left+i]
-				}
-
-				if !yield(line) {
+				if !yield(h.line(r, i)) {
 					return
 				}
 			}
 		}
+	}
+}
+
+// Len returns the number of lines the hunk displays, context included.
+func (h Hunk) Len() int {
+	if len(h.runs) == 0 {
+		return 0
+	}
+
+	last := h.runs[len(h.runs)-1]
+	return h.starts[len(h.starts)-1] + last.count
+}
+
+// Line returns the line at a display position in [0, Len), or false for a
+// position outside the hunk. It costs O(log runs), so a viewer can start
+// drawing anywhere in a hunk of millions of lines.
+func (h Hunk) Line(position int) (Line, bool) {
+	if position < 0 || position >= h.Len() {
+		return Line{}, false
+	}
+
+	// The last run starting at or before position holds it.
+	i, found := slices.BinarySearch(h.starts, position)
+	if !found {
+		i--
+	}
+
+	return h.line(h.runs[i], position-h.starts[i]), true
+}
+
+// line returns the i-th line of run r.
+func (h Hunk) line(r run, i int) Line {
+	switch r.op {
+	case Insert:
+		return Line{Op: r.op, Text: h.right[r.right+i], Left: r.left, Right: r.right + i}
+	case Delete:
+		return Line{Op: r.op, Text: h.left[r.left+i], Left: r.left + i, Right: r.right}
+	default:
+		return Line{Op: r.op, Text: h.left[r.left+i], Left: r.left + i, Right: r.right + i}
 	}
 }
 
@@ -217,9 +257,13 @@ func newHunk(runs []run, left, right []string) Hunk {
 		runs:       runs,
 		left:       left,
 		right:      right,
+		starts:     make([]int, len(runs)),
 	}
 
-	for _, r := range runs {
+	position := 0
+	for i, r := range runs {
+		h.starts[i] = position
+		position += r.count
 		if r.op != Insert {
 			h.LeftCount += r.count
 		}
