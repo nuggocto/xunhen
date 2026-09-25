@@ -30,3 +30,4 @@
   a project landing page and a release changelog, it should never become the working TUI.
 - Do not edit `../xunhen-front` unless the current work or user request includes
   it.
+- Do not spawn sub-agents unless the current work or user request requires it.
