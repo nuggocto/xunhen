@@ -320,24 +320,26 @@ func TestStateLineLimit(t *testing.T) {
 }
 
 // TestSearchStages sends one input through each stage by lowering the effort
-// thresholds. After the common "{" and "}" are trimmed, the regions are
-// "one } { two" and "two } { one". The exact search finds the minimal four
-// edits. Anchoring matches the unique lines "}" and "{", which also gives
-// four. The plain stage matches nothing inside the region: eight edits.
+// thresholds. The left side is 300 copies of "a" and then "k"; the right side
+// moves "k" to the front. At 602 lines the region is too large for the small
+// region exception, so a spent exact effort really does lead to anchoring.
+// The exact search keeps the "a" lines: two edits. Anchoring can only use
+// "k", the one unique line, and moves every "a" instead: 600 edits. The plain
+// stage matches nothing: 602 edits.
 func TestSearchStages(t *testing.T) {
 	t.Parallel()
 
-	left := []string{"{", "one", "}", "{", "two", "}"}
-	right := []string{"{", "two", "}", "{", "one", "}"}
+	left := append(slices.Repeat([]string{"a"}, 300), "k")
+	right := append([]string{"k"}, slices.Repeat([]string{"a"}, 300)...)
 
 	tests := []struct {
 		name         string
 		exact, total int
 		edits        int
 	}{
-		{name: "exact search", exact: 1 << 30, total: 1 << 30, edits: 4},
-		{name: "anchored after the exact effort", exact: 0, total: 1 << 30, edits: 4},
-		{name: "plain after all effort", exact: 0, total: 0, edits: 8},
+		{name: "exact search", exact: 1 << 30, total: 1 << 30, edits: 2},
+		{name: "anchored after the exact effort", exact: 0, total: 1 << 30, edits: 600},
+		{name: "plain after all effort", exact: 0, total: 0, edits: 602},
 	}
 
 	for _, tt := range tests {
@@ -577,12 +579,13 @@ func FuzzLines(f *testing.F) {
 	f.Add([]byte("abababababab"), []byte("babababababa"))
 
 	// The default thresholds keep these inputs exact, so the diff must be
-	// minimal. Lowered thresholds give up mid-search or skip straight to
-	// anchoring or plain changes; those diffs must still be complete.
+	// minimal. Lowered thresholds give up mid-search and fall back to
+	// anchoring, or skip straight to plain changes; those diffs must still be
+	// complete. A spent exact effort alone would change nothing here, because
+	// regions under smallRegion lines still get the exact search.
 	stages := []struct {
 		exact, total int
 	}{
-		{exact: 0, total: 1 << 30},
 		{exact: 7, total: 60},
 		{exact: 0, total: 0},
 	}

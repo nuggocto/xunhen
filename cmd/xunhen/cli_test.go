@@ -163,6 +163,7 @@ func TestCommandArgumentContract(t *testing.T) {
 	}
 
 	var tests []contractCase
+	helped := map[string]bool{}
 	for _, c := range commands {
 		with := func(extra ...string) []string {
 			return slices.Concat([]string{c.name}, c.valid, extra)
@@ -170,10 +171,17 @@ func TestCommandArgumentContract(t *testing.T) {
 		usage := "Usage: xunhen " + c.name
 		label := c.name + " " + c.mode
 
+		// Help takes no input flags, so it runs once per command, not per form.
+		if !helped[c.name] {
+			helped[c.name] = true
+			tests = append(tests,
+				contractCase{name: c.name + "/long help", args: []string{c.name, "--help"}, stdout: usage},
+				contractCase{name: c.name + "/short help", args: []string{c.name, "-h"}, stdout: usage},
+				contractCase{name: c.name + "/help topic", args: []string{"help", c.name}, stdout: usage},
+			)
+		}
+
 		tests = append(tests,
-			contractCase{name: label + "/long help", args: []string{c.name, "--help"}, stdout: usage},
-			contractCase{name: label + "/short help", args: []string{c.name, "-h"}, stdout: usage},
-			contractCase{name: label + "/help topic", args: []string{"help", c.name}, stdout: usage},
 			contractCase{name: label + "/help among flags", args: with("--help"), status: exitUsage, diagnostic: "must be used alone"},
 			contractCase{name: label + "/repeated flag", args: with(c.valid[0], c.valid[1]), status: exitUsage, diagnostic: "only once"},
 			contractCase{name: label + "/trailing positional", args: with("extra"), status: exitUsage, diagnostic: "expected " + c.name},
