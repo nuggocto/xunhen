@@ -26,6 +26,10 @@ breaking the behavior it guards makes it fail; the mutations listed under
 | Every exit from the browser restores the terminal and stops the worker | `TestBrowserUnderATerminal`, `TestWorkerShutdown` |
 | Limits admit exactly their ceiling | `TestDecodeLimitBoundaries`, `TestReplayEntryBoundaries`, `TestSearchByteLimit`, `TestSearchDirectoryLimit`, `TestHistoryBoundsAndCancellation`, `TestReadFileAcceptsOnlyRegularFiles` |
 | Resource use stays within the documented targets | [Performance](performance.md), `TestCacheHoldsTheLargestPair`, `TestCompareDoesNotCopyStates` |
+| The export command on screen names the same files once pasted into a shell | `TestShellQuoting`, `TestExportInstructions` (read back from the drawn screen under both width methods) |
+| A release is exactly its commit, with the version its tag names | `TestResolveRefusesUnidentifiedSources`, `TestResolveIdentifiesTheCommit`, `TestEnvironmentRules`, `TestBuildEnvironmentIsExplicit`, `TestModuleRules` |
+| Release archives are reproducible and hold only regular files with fixed modes, owners, and times | `TestWriteIsDeterministic`, `TestWriteRejectsBadNames`, `TestReadRejectsUnsafeArchives`, `TestReadRejectsTrailingData`, `tools/reproduce.sh` in CI |
+| Every channel's executable passes the same artifact checks | `tools/verify` in CI, the release workflow, the Nix checks, and the AUR recipe's `check()`; `TestVerifierJudgesExecutables` and `TestVerifierJudgesArchives` confirm it fails wrong executables and damaged archives |
 
 `TestCorpusThroughTheCommand`, `TestReplayOracle`, and `TestPreviewsMatchNeovim`
 read the stored Neovim corpus, so every `go test ./...` runs the oracle
@@ -71,14 +75,23 @@ mise run race           # the tests under the race detector
 mise run fuzz           # every fuzz target for about 10 seconds
 mise run fuzz-extended  # every fuzz target for about 15 minutes
 mise run vulncheck      # reachable known vulnerabilities
+mise run notices        # THIRD_PARTY_NOTICES.txt matches the linked modules
+mise run reproduce      # two clean release builds, compared byte for byte
 mise run measure        # the resource workloads
 ```
 
-CI runs the first four checks on every push and pull request, in separate
-jobs: correctness, race, fuzz smoke, and vulnerabilities. The extended fuzz
-campaign and the measurements run locally, before a release. None of these
-checks skips when a tool is missing. The terminal tests fail without a
-pseudo-terminal and the quoting tests fail without bash. Two kinds of test
+CI runs these jobs on every push and pull request: correctness, which also
+runs `tools/verify` against the build and checks the notices; race; fuzz
+smoke; vulnerabilities; a reproducible release build, whose archive
+`tools/verify` then checks; and the Nix package, whose sandboxed build runs
+the whole suite before `tools/verify` checks the packaged executable. The
+extended fuzz campaign and the measurements run locally, before a release.
+[releasing.md](releasing.md) describes the release workflow's checks.
+
+None of these checks skips when a tool is missing. The terminal tests fail
+without a pseudo-terminal, the quoting tests without bash, the release-tool
+tests without git, and the artifact verifier's tests without `/bin/sh`. Two
+kinds of test
 skip: the permission cases, when run as root, whom permission bits do not
 restrict, and `TestMeasureWorkload`, which measures rather than checks and
 runs only when `tools/measure.sh` points it at a workload.
@@ -181,8 +194,12 @@ BSD-style licensed:
 | github.com/xo/terminfo | v0.0.0-20220910002029-abceb7e1c41e | MIT | Bubble Tea |
 | golang.org/x/sync, golang.org/x/sys | v0.21.0, v0.46.0 | BSD-style | Bubble Tea |
 
-A release must carry these licenses' notices. `go mod verify` checks every
-module against `go.sum` in CI.
+`THIRD_PARTY_NOTICES.txt` reproduces each of these modules' license files and
+the Go distribution's. `tools/release.sh notices` generates it from the
+modules linked into the built executable, so a module only a test or tool
+imports never appears; CI and every release build fail when it is stale.
+The release archive and the Arch package install it beside `LICENSE`.
+`go mod verify` checks every module against `go.sum` in CI.
 
 `tools/vulncheck` is a separate module that pins govulncheck v1.8.0 and its
 dependencies by checksum, so the vulnerability check never downloads an

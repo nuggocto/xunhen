@@ -11,6 +11,33 @@ The first branch disappears from view. It may not be gone.
 including abandoned branches that never reached a file or git, and lets you
 browse it in the terminal.
 
+It runs on Linux on x86-64 as one static executable. It never modifies your
+undo files or sources, never starts Neovim, and needs no configuration.
+
+## What can be recovered
+
+Only history Neovim wrote to disk: with `'undofile'` on, an undo file is
+written each time the buffer is saved. Edits made after the last write, and
+states older than `'undolevels'` keeps, are gone. Rebuilding text also needs
+the source as it was when the undo file was last written; the undo file
+stores changes, not complete copies. [docs/troubleshooting.md](docs/troubleshooting.md)
+explains what to do when something is missing.
+
+## Install
+
+No release has been published yet. Once it is, xunhen installs from:
+
+- a [release archive](docs/install.md#release-archive), with checksums, into
+  `~/.local/bin` without root;
+- the [Nix flake](docs/install.md#nix-and-nixos), for a user profile or a
+  NixOS system configuration;
+- the [AUR](docs/install.md#arch-user-repository) package `xunhen`, with
+  `makepkg`;
+- [Go source](docs/install.md#go-source), with `go install`.
+
+Until then, build it from a clone with Go 1.27.1:
+`go build -o bin/xunhen ./cmd/xunhen`.
+
 ## Usage
 
 Open the history of a file in the browser:
@@ -19,11 +46,11 @@ Open the history of a file in the browser:
 xunhen browse --source retry.go --undo-dir ~/.local/state/nvim/undo
 ```
 
-The tree on the left holds every retained state; the selected one shows on the
-right. Move with the arrows or `j` and `k`, compare two states with `space` to
-pin one and `d` to diff it with the selection, and press `e` for the command
+Use your own `'undodir'`; `:echo &undodir` in Neovim prints it. The tree on
+the left holds every retained state; the selected one shows on the right.
+Move with the arrows or `j` and `k`, compare two states with `space` to pin
+one and `d` to diff it with the selection, and press `e` for the command
 that saves the selected state to a file. `?` lists every key, and `q` quits.
-[docs/browse.md](docs/browse.md) covers the rest.
 
 The same work is available as plain commands, for scripts or terminals the
 browser cannot use:
@@ -32,6 +59,8 @@ browser cannot use:
 xunhen inspect --source retry.go --undo-dir ~/.local/state/nvim/undo
 xunhen show    --source retry.go --undo-dir ~/.local/state/nvim/undo --node 2
 xunhen diff    --source retry.go --undo-dir ~/.local/state/nvim/undo --from 2 --to 3
+xunhen show    --source retry.go --undo-dir ~/.local/state/nvim/undo --node 2 \
+               --raw --final-newline=include > recovered.go
 ```
 
 Or name the undo file and a matching copy of the source directly:
@@ -41,35 +70,36 @@ xunhen show --undo history.undo --base retry.go --node 2
 ```
 
 - `inspect` lists the undo tree and its node numbers.
-- `show` rebuilds one state. Add `--raw --final-newline=include` to write
-  exact text you can redirect to a file.
+- `show` rebuilds one state. `--raw --final-newline=include` writes the
+  exact text for redirecting to a file; the undo file does not record
+  whether the original ended with a newline, so you choose.
 - `diff` compares two states as a unified diff.
 - `browse` does all three interactively. It needs a terminal; without one it
   exits with status 1 and points to the commands above.
 
-Only edits Neovim saved to disk can be found, and rebuilding text needs the
-source as it was when the undo file was last written. Run
-`xunhen help COMMAND` for a command's options.
+[docs/usage.md](docs/usage.md) walks through a complete recovery with a
+history from the test corpus and lists every flag and exit status.
 
 ## Documentation
 
-- [Undo format](docs/undo-format.md): what is decoded and its limits
-- [Discovery](docs/discovery.md): how `--source` finds a history
-- [Diff](docs/diff.md): the comparison algorithm
+- [Install](docs/install.md): every channel, checksums, upgrades, and removal
+- [Usage](docs/usage.md): a recovery walkthrough, flags, exit codes, and output
+- [Troubleshooting](docs/troubleshooting.md): what each error means and what to do
 - [Browse](docs/browse.md): the terminal browser, its keys, and its memory use
-- [Compatibility](docs/compatibility.md): the supported producer and text cases
+- [Discovery](docs/discovery.md): how `--source` finds a history
+- [Compatibility](docs/compatibility.md): the supported producer, text cases, and what stays stable
+- [Undo format](docs/undo-format.md): what is decoded and its limits
+- [Diff](docs/diff.md): the comparison algorithm
 - [Performance](docs/performance.md): workloads, measurements, and targets
 - [Verification](docs/verification.md): what each test guards and how to run the checks
+- [Releasing](docs/releasing.md): versions, reproducible archives, and packages
+- [Changelog](CHANGELOG.md)
 
 ## Development
 
-Use Go 1.27.1 on Linux/amd64. Tests need no Neovim.
+[CONTRIBUTING.md](CONTRIBUTING.md) covers building, the checks, the fixture
+corpus, and adding a decoder. Please report bugs with the issue form, and
+never attach a real undo file: it keeps text you deleted, secrets included.
 
-```sh
-mise run check      # formatting, tests, vet, build
-mise run race       # tests under the race detector
-mise run fuzz       # every fuzz target for about 10 seconds
-mise run vulncheck  # reachable known vulnerabilities
-```
-
-Licensed under [Apache-2.0](LICENSE).
+Licensed under [Apache-2.0](LICENSE). The executable includes third-party
+modules whose licenses are in [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt).

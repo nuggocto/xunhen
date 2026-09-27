@@ -97,6 +97,31 @@ values other than `unix`. Neovim does not record `'fileencoding'`,
 `'fileformat'`, or `'endofline'` in the undo file, so a recovered state is
 exact buffer lines, never the original file's bytes.
 
+## Stability within v1
+
+From version 1.0.0 on, these stay compatible for every 1.x release:
+
+- The command names, their flags, and the two input forms: `--undo` with
+  `--base`, and `--source` with `--undo-dir`.
+- The exit statuses in [usage.md](usage.md#exit-status).
+- The bytes `show --raw` writes for a given state and final-newline policy.
+- The format of `diff`: unified hunks with three lines of context, headed
+  `--- node FROM` and `+++ node TO`.
+- The `node ID:` lines of `inspect` and the names of their fields. Other
+  `inspect` lines are for reading; a later release may add lines or fields.
+- Node IDs: the same unchanged undo file gives the same IDs.
+- Refusing unsupported input, damaged input, and a mismatched base, rather
+  than guessing.
+
+A 1.x release may add commands, flags, supported producers, and text cases,
+and may reword diagnostics; scripts should rely on the exit status, not on
+diagnostic text. The browser's layout and keys may change between minor
+releases. A change that breaks any listed contract needs version 2.0.0.
+
+xunhen is a command, not a library. Every Go package is under `internal/`,
+`cmd/`, or `tools/`, none of it is a public API, and it may change in any
+release.
+
 ## Checking the corpus against the producer
 
 On a machine with the pinned executable, regenerate the corpus and compare
