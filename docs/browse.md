@@ -93,7 +93,11 @@ refuses states that hold invalid UTF-8 or NUL, as `show` documents.
 
 Paths in the command are quoted for a POSIX shell. A path containing control
 characters or invalid UTF-8 uses bash and zsh `$'...'` quoting, which shows
-every byte as a printable escape and gives the shell the original bytes.
+every byte as a printable escape and gives the shell the original bytes. So
+does a printable path that the browser would draw with escapes, such as one
+holding a run of combining marks too long to measure: inside single quotes,
+an escape like `́` would be six literal characters and name another
+file.
 
 ## Reloading
 

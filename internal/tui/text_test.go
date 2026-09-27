@@ -9,6 +9,11 @@ import (
 	"testing"
 	"time"
 	"unicode"
+
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
+
+	"github.com/nuggocto/xunhen/internal/termtext"
 )
 
 // Export commands are pasted into a shell. Each quoted argument must reach
@@ -35,6 +40,7 @@ func TestShellQuoting(t *testing.T) {
 		{name: "terminal escape", arg: "a\x1b[2Jb", want: `$'a\x1b[2Jb'`},
 		{name: "newline and quote", arg: "a\n'b\\", want: `$'a\x0a\'b\\'`},
 		{name: "invalid UTF-8", arg: "a\xffb", want: `$'a\xffb'`},
+		{name: "combining run too long to draw", arg: "a" + strings.Repeat("\u0301", 16) + ".go", want: "$'a" + strings.Repeat(`\xcc\x81`, 16) + ".go'"},
 	}
 
 	for _, tt := range tests {
@@ -66,8 +72,11 @@ func TestShellQuoting(t *testing.T) {
 
 // The export command must reach the shell as the exact arguments that
 // loaded the history, across its continuation lines, and no line may be so
-// wide that it needs thousands of columns. Running the displayed lines
-// through bash, with printf in place of xunhen, checks both.
+// wide that it needs thousands of columns. The command is read back from
+// the drawn screen, under both width methods, because drawing escapes some
+// printable text, and an escape inside single quotes names other bytes.
+// Running those rows through bash, with printf in place of xunhen, checks
+// what a user would copy.
 func TestExportInstructions(t *testing.T) {
 	t.Parallel()
 
@@ -87,40 +96,62 @@ func TestExportInstructions(t *testing.T) {
 	}{
 		{name: "explicit inputs", inputs: []string{"--undo", "history.undo", "--base", "my retry.go"}},
 		{name: "unusual paths", inputs: []string{"--undo", "it's \x1b.undo", "--base", "\u5c0b\u75d5.go"}},
+		{name: "a run of combining marks", inputs: []string{"--undo", "history.undo", "--base", "a" + strings.Repeat("\u0301", 16) + ".go"}},
 		{name: "the most undo directories", inputs: many},
+	}
+	methods := []struct {
+		name   string
+		method termtext.Method
+	}{
+		{name: "rune widths", method: termtext.Runes},
+		{name: "cluster widths", method: termtext.Clusters},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+		for _, m := range methods {
+			t.Run(tt.name+" by "+m.name, func(t *testing.T) {
+				t.Parallel()
 
-			lines := exportLines(Labels{Inputs: tt.inputs}, 42)
-			first := slices.Index(lines, "  xunhen show \\")
-			last := slices.IndexFunc(lines, func(line string) bool { return strings.HasSuffix(line, "> recovered.go") })
-			if first < 0 || last < first {
-				t.Fatalf("no command in the instructions:\n%s", strings.Join(lines, "\n"))
-			}
-			for _, line := range lines {
-				if len(line) > 200 {
-					t.Fatalf("a %d-column line: %q", len(line), line)
+				b := newBrowser(t, 1000, 60)
+				s := load(t, readFixture(t, "abandoned-branch").loader())
+				s.labels.Inputs = tt.inputs
+				b.loaded(s)
+				if m.method == termtext.Clusters {
+					b.m.Update(tea.ModeReportMsg{Mode: ansi.ModeUnicodeCore, Value: ansi.ModeSet})
 				}
-			}
+				b.press("e")
 
-			script := strings.Join(lines[first:last+1], "\n")
-			script = strings.Replace(script, "xunhen show", "printf '%s\\0'", 1)
-			script = strings.TrimSuffix(script, " > recovered.go")
+				var rows []string
+				for _, row := range b.screen() {
+					rows = append(rows, strings.TrimRight(row, " "))
+				}
+				first := slices.Index(rows, "  xunhen show \\")
+				last := slices.IndexFunc(rows, func(row string) bool { return strings.HasSuffix(row, "> recovered.go") })
+				if first < 0 || last < first {
+					t.Fatalf("no command on the screen:\n%s", strings.Join(rows, "\n"))
+				}
+				for _, row := range rows {
+					if width := ansi.StringWidth(row); width > 200 {
+						t.Fatalf("a %d-column row: %q", width, row)
+					}
+				}
 
-			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-			defer cancel()
-			out, err := exec.CommandContext(ctx, bash, "-c", script).Output()
-			if err != nil {
-				t.Fatal(err)
-			}
+				script := strings.Join(rows[first:last+1], "\n")
+				script = strings.Replace(script, "xunhen show", "printf '%s\\0'", 1)
+				script = strings.TrimSuffix(script, " > recovered.go")
 
-			want := append(slices.Clone(tt.inputs), "--node", "42", "--raw", "--final-newline=include")
-			if got := strings.Split(strings.TrimSuffix(string(out), "\x00"), "\x00"); !slices.Equal(got, want) {
-				t.Fatalf("bash received %q, want %q", got, want)
-			}
-		})
+				ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+				defer cancel()
+				out, err := exec.CommandContext(ctx, bash, "-c", script).Output()
+				if err != nil {
+					t.Fatalf("bash failed on the drawn command: %v\n%s", err, script)
+				}
+
+				want := append(slices.Clone(tt.inputs), "--node", "3", "--raw", "--final-newline=include")
+				if got := strings.Split(strings.TrimSuffix(string(out), "\x00"), "\x00"); !slices.Equal(got, want) {
+					t.Fatalf("bash received %q, want %q", got, want)
+				}
+			})
+		}
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/nuggocto/xunhen/internal/history"
+	"github.com/nuggocto/xunhen/internal/termtext"
 )
 
 var helpLines = []string{
@@ -109,10 +110,10 @@ func exportLines(labels Labels, node history.NodeID) []string {
 }
 
 // shellQuote quotes one argument for a POSIX shell. Arguments made of common
-// path characters stay bare; printable text goes in single quotes; anything
-// else uses $'...' with \xHH escapes, which bash and zsh read and which
-// displays as printable ASCII. Terminal escaping is separate: the result
-// is still drawn through termtext like any other text.
+// path characters stay bare. Printable text goes in single quotes when the
+// browser draws it exactly as it is; anything else uses $'...' with \xHH
+// escapes, which bash and zsh read and which displays as printable ASCII.
+// The result is still drawn through termtext like any other text.
 func shellQuote(arg string) string {
 	if arg != "" && strings.Trim(arg, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_@%+=:,./-") == "" {
 		return arg
@@ -126,7 +127,9 @@ func shellQuote(arg string) string {
 		}
 	}
 	if printable {
-		return "'" + strings.ReplaceAll(arg, "'", `'\''`) + "'"
+		if quoted := "'" + strings.ReplaceAll(arg, "'", `'\''`) + "'"; drawnAsIs(quoted) {
+			return quoted
+		}
 	}
 
 	var b strings.Builder
@@ -146,4 +149,24 @@ func shellQuote(arg string) string {
 	b.WriteString("'")
 
 	return b.String()
+}
+
+// drawnAsIs reports whether the browser draws a quoted argument as its own
+// bytes under both width methods. Drawing escapes controls and invalid bytes,
+// and also some printable text, such as a combining sequence longer than
+// termtext measures. Inside single quotes an escape like \u0301 is six
+// literal characters, so a command copied from the screen would name another
+// file. exportLines puts a space on each side of every argument, and the
+// check draws those spaces too, because where a character cluster ends can
+// depend on what follows it.
+func drawnAsIs(quoted string) bool {
+	line := " " + quoted + " "
+	for _, method := range []termtext.Method{termtext.Runes, termtext.Clusters} {
+		drawn, _ := termtext.Clip(line, nil, method, 0, termtext.Width(line, nil, method))
+		if drawn != line {
+			return false
+		}
+	}
+
+	return true
 }
