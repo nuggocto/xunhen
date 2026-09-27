@@ -159,11 +159,10 @@ func Compare(ctx context.Context, from, to *history.Snapshot, lim limits.Limits)
 		return nil, errors.New("snapshots belong to different histories")
 	}
 
-	// Snapshot.Lines returns copies, so the hunks can own them directly. The
-	// snapshots are not used after this, so a caller that drops them lets the
-	// collector reclaim them while the comparison runs.
+	// The hunks refer to the snapshots' own line arrays rather than copies,
+	// so a diff holds no line array of its own. Nothing here writes to them.
 	fromNode, toNode := from.Node(), to.Node()
-	left, right := from.Lines(), to.Lines()
+	left, right := from.ReadOnlyLines(), to.ReadOnlyLines()
 
 	hunks, err := compare(ctx, left, right, lim, defaultEffort)
 	if err != nil {
@@ -180,7 +179,7 @@ type effort struct {
 
 var defaultEffort = effort{exact: defaultExactEffort, total: defaultTotalEffort}
 
-// compare owns left and right; the hunks keep references to them.
+// compare only reads left and right; the hunks keep references to them.
 func compare(ctx context.Context, left, right []string, lim limits.Limits, e effort) ([]Hunk, error) {
 	if err := lim.Validate(); err != nil {
 		return nil, err

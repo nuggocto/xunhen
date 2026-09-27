@@ -16,7 +16,7 @@ func main() {
 
 	// Keep the heap near its live size once it grows large. The largest
 	// accepted inputs need under 650 MiB of live data, so this soft limit
-	// kept every measured worst case under 800 MiB of resident memory;
+	// kept every measured worst case under 850 MiB of resident memory;
 	// ordinary runs never reach it. GOMEMLIMIT takes precedence when set.
 	if os.Getenv("GOMEMLIMIT") == "" {
 		debug.SetMemoryLimit(768 << 20)

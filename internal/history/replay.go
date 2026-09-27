@@ -62,6 +62,19 @@ func (s *Snapshot) Lines() []string {
 	return slices.Clone(s.lines)
 }
 
+// ReadOnlyLines returns the logical lines without copying them, for a caller
+// that only reads them, such as a comparison of two four-million-line states
+// that would otherwise copy 64 MiB of line headers per side. The slice is the
+// snapshot's own array, so writing to it would change the snapshot; its
+// capacity ends at its length, so an append copies instead.
+func (s *Snapshot) ReadOnlyLines() []string {
+	if s == nil {
+		return nil
+	}
+
+	return s.lines[:len(s.lines):len(s.lines)]
+}
+
 // Len returns the number of logical lines, at least one for a completed
 // state. Together with Line it reads a state without copying it, which a
 // viewer redrawing a few lines of a four-million-line state needs.

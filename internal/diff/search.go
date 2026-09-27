@@ -60,8 +60,11 @@ type search struct {
 	forward, backward []int32
 
 	// Anchoring counts each line identifier's copies in a region. The slices
-	// are indexed by identifier and reset after each region.
-	leftCount, rightCount, rightAt []int32
+	// are indexed by identifier and reset after each region. A count only
+	// needs to tell one copy from several, so it stops at two and fits in a
+	// byte.
+	leftCount, rightCount []uint8
+	rightAt               []int32
 }
 
 // script returns a complete edit script in line order. Trimming the common
@@ -157,6 +160,8 @@ func (s *search) matches(left, right []string) ([]run, error) {
 	if err != nil {
 		return nil, err
 	}
+	// The table is not used past this point, so its slots can be collected
+	// while the alignment runs.
 	shared := make([]bool, table.count())
 	for _, id := range rightIDs {
 		if id >= 0 {
@@ -167,7 +172,7 @@ func (s *search) matches(left, right []string) ([]run, error) {
 	a, aIndex := keep(leftIDs, func(id int32) bool { return shared[id] })
 	b, bIndex := keep(rightIDs, func(id int32) bool { return id >= 0 })
 
-	found, err := s.align(a, b, table.count())
+	found, err := s.align(a, b, len(shared))
 	if err != nil {
 		return nil, err
 	}
@@ -209,7 +214,9 @@ func newLineTable(left []string) *lineTable {
 		size <<= 1
 	}
 
-	return &lineTable{left: left, seed: maphash.MakeSeed(), slots: make([]uint64, size)}
+	// Every line may be distinct, so first gets its largest size at once
+	// rather than growing through copies it would leave behind.
+	return &lineTable{left: left, seed: maphash.MakeSeed(), slots: make([]uint64, size), first: make([]int32, 0, len(left))}
 }
 
 // slot returns the slot holding line's identifier, or the empty slot where
@@ -293,8 +300,17 @@ func (s *search) checkpoint(i int) error {
 }
 
 // keep returns the identifiers that pass the filter and their region indexes.
+// It compacts ids in place, since the caller has no further use for it, and
+// counts first so that the index array is allocated at its final size.
 func keep(ids []int32, ok func(int32) bool) ([]int32, []int32) {
-	var kept, index []int32
+	n := 0
+	for _, id := range ids {
+		if ok(id) {
+			n++
+		}
+	}
+
+	kept, index := ids[:0], make([]int32, 0, n)
 	for i, id := range ids {
 		if ok(id) {
 			kept = append(kept, id)
@@ -325,8 +341,8 @@ func (s *search) align(a, b []int32, ids int) ([]run, error) {
 
 	s.forward = make([]int32, len(a)+len(b)+2)
 	s.backward = make([]int32, len(a)+len(b)+2)
-	s.leftCount = make([]int32, ids)
-	s.rightCount = make([]int32, ids)
+	s.leftCount = make([]uint8, ids)
+	s.rightCount = make([]uint8, ids)
 	s.rightAt = make([]int32, ids)
 
 	var out []run
@@ -586,10 +602,10 @@ type pair struct {
 func (s *search) anchor(x, y []int32, t task) []task {
 	s.effort += 3 * (len(x) + len(y))
 	for _, id := range x {
-		s.leftCount[id]++
+		s.leftCount[id] = min(s.leftCount[id]+1, 2)
 	}
 	for j, id := range y {
-		s.rightCount[id]++
+		s.rightCount[id] = min(s.rightCount[id]+1, 2)
 		s.rightAt[id] = int32(j)
 	}
 

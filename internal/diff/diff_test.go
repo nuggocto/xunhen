@@ -8,6 +8,7 @@ import (
 	"math/rand/v2"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -15,6 +16,7 @@ import (
 	"github.com/nuggocto/xunhen/internal/diff"
 	"github.com/nuggocto/xunhen/internal/history"
 	"github.com/nuggocto/xunhen/internal/limits"
+	"github.com/nuggocto/xunhen/internal/synth"
 	"github.com/nuggocto/xunhen/internal/undofile"
 )
 
@@ -372,6 +374,51 @@ func TestSearchStages(t *testing.T) {
 	}
 }
 
+// Anchoring pairs lines that occur exactly once on each side. A line with
+// hundreds of copies must not pass for unique: it would anchor its last copy,
+// where the region left after the real anchors matches the first. Regions of
+// at most 512 lines get the exact search instead, so every case is larger.
+func TestRepeatedLinesAreNotAnchors(t *testing.T) {
+	t.Parallel()
+
+	// Swapped pairs at both ends keep trimming away from the repeated line a,
+	// and the anchors x or y, s, and z or w leave it in the gap after s.
+	around := func(left, right []string) ([]string, []string) {
+		return slices.Concat([]string{"y", "x", "s"}, left, []string{"w", "z"}),
+			slices.Concat([]string{"x", "y", "s"}, right, []string{"z", "w"})
+	}
+
+	tests := []struct {
+		name        string
+		left, right []string
+	}{
+		{name: "513 copies on the left", left: slices.Repeat([]string{"a"}, 513), right: []string{"a"}},
+		{name: "513 copies on the right", left: []string{"a"}, right: slices.Repeat([]string{"a"}, 513)},
+		{name: "1025 copies on the left", left: slices.Repeat([]string{"a"}, 1025), right: []string{"a"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			left, right := around(tt.left, tt.right)
+			hunks, err := diff.LinesWithEffort(t.Context(), left, right, 0, 1<<30)
+			if err != nil {
+				t.Fatal(err)
+			}
+			checkDiff(t, left, right, hunks, false)
+
+			for _, h := range hunks {
+				for line := range h.Lines() {
+					if line.Op == diff.Equal && line.Text == "a" && (line.Left != 3 || line.Right != 3) {
+						t.Fatalf("a matched at %d and %d, want the first copies at 3 and 3:\n%s", line.Left, line.Right, render(hunks))
+					}
+				}
+			}
+		})
+	}
+}
+
 func edits(hunks []diff.Hunk) int {
 	count := 0
 	for _, h := range hunks {
@@ -503,8 +550,16 @@ func fixtureSnapshots(t *testing.T, name string, nodes ...history.NodeID) []*his
 		t.Fatal(err)
 	}
 
+	return snapshots(t, undo, strings.Split(strings.TrimSuffix(string(base), "\n"), "\n"), nodes...)
+}
+
+// snapshots decodes an undo file, binds it to its base, and reconstructs the
+// given nodes.
+func snapshots(t *testing.T, undo []byte, base []string, nodes ...history.NodeID) []*history.Snapshot {
+	t.Helper()
+
 	lim := limits.Default()
-	file, err := undofile.Decode(t.Context(), name, bytes.NewReader(undo), lim)
+	file, err := undofile.Decode(t.Context(), "history.undo", bytes.NewReader(undo), lim)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -512,8 +567,7 @@ func fixtureSnapshots(t *testing.T, name string, nodes ...history.NodeID) []*his
 	if err != nil {
 		t.Fatal(err)
 	}
-	lines := strings.Split(strings.TrimSuffix(string(base), "\n"), "\n")
-	verified, err := undofile.VerifyBase(t.Context(), file, name, lines, lim)
+	verified, err := undofile.VerifyBase(t.Context(), file, "base", base, lim)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -536,6 +590,48 @@ func fixtureSnapshots(t *testing.T, name string, nodes ...history.NodeID) []*his
 	}
 
 	return out
+}
+
+// A comparison refers to the states' own line arrays. Copying them would cost
+// 64 MiB per side for a state at the line limit, while the browser already
+// holds both states for drawing. The test does not run in parallel, because
+// the allocation count it reads covers the whole process.
+func TestCompareDoesNotCopyStates(t *testing.T) {
+	const lines = 100_000
+	original := numbered(lines)
+	f := synth.Chain([][]string{original, replaced(original, map[int]string{lines / 2: "changed"})})
+	undo, err := f.Bytes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	states := snapshots(t, undo, f.Reference, 0, 1)
+
+	tests := []struct {
+		name     string
+		from, to *history.Snapshot
+	}{
+		{name: "identical states", from: states[1], to: states[1]},
+		{name: "one line changed in the middle", from: states[0], to: states[1]},
+	}
+
+	// One side's line array; a copy of either side would allocate this much.
+	const array = lines * 16
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var before, after runtime.MemStats
+			runtime.ReadMemStats(&before)
+			d, err := diff.Compare(t.Context(), tt.from, tt.to, limits.Default())
+			runtime.ReadMemStats(&after)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if allocated := after.TotalAlloc - before.TotalAlloc; allocated >= array/8 {
+				t.Fatalf("the comparison allocated %d bytes, as much as copying a state; a line array is %d", allocated, array)
+			}
+			runtime.KeepAlive(d)
+		})
+	}
 }
 
 func TestCompareStates(t *testing.T) {

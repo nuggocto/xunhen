@@ -91,9 +91,9 @@ func documentCharge(lines, index int) int {
 // header row and then one row per line; starts holds each hunk's first row,
 // so any row is found with a binary search and a hunk lookup.
 //
-// A comparison keeps both documents, for their long-line indexes, and the
-// diff keeps copies of both states' line arrays: the diff package owns the
-// lines its hunks refer to.
+// A comparison keeps both documents, for their long-line indexes. The diff's
+// hunks refer to the line arrays of those documents' snapshots, so beyond
+// the documents a comparison holds only its hunks.
 type comparison struct {
 	from, to *document
 	hunks    []diff.Hunk

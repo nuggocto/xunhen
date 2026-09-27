@@ -341,7 +341,7 @@ is not permission to build a whole huge tree into a string on every key press.
 These byte limits do not cap total Go RSS by themselves. Indexes,
 string/slice headers, retained backing storage, allocator behavior, and GC
 overhead come on top. The worst synthetic inputs measured at these ceilings
-peaked at 784 MiB for a command and 923 MiB for the browser;
+peaked at 785 MiB for a command and 820 MiB for the browser;
 [the performance notes](performance.md) list the workloads and account for
 the memory. Capacity claims beyond this
 profile require their own producer fixtures and workload measurements.

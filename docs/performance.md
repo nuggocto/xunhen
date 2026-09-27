@@ -15,7 +15,7 @@ environment they ran in and a summary of every operation.
 | System | Omarchy 4.0.4, Linux 7.2.5 x86_64 |
 | Toolchain | Go 1.27.1 |
 | Build | `GOOS=linux GOARCH=amd64 GOAMD64=v1 CGO_ENABLED=0 go build -trimpath`, as releases are built |
-| Executable | SHA-256 `fe0f9ced1dbb13e8bb8ffbfe93b622cd1fd0cd899e06e0535e695c165fff47ee` |
+| Executable | SHA-256 `a1f0a93a9eaf6eb03aaa369e8f8a3c95b757d4fb3cc556c8464cd3ac424c54b4` |
 
 ## Workloads
 
@@ -88,12 +88,12 @@ begins as a copy of its parent. Values at that floor mean "at most".
 | Operation | Target | Measured on `ordinary` | Status |
 | --- | --- | --- | --- |
 | Load, start to first drawn state | p95 under 500 ms | 20.0 ms end to end; 1.7 ms of it is loading | Met |
-| Uncached preview | p95 under 100 ms | 46 µs | Met |
+| Uncached preview | p95 under 100 ms | 50 µs | Met |
 | Cached selection | p95 under 50 ms | 1 µs, plus at most one 16 ms frame to draw | Met |
-| Comparison, displayed result prepared | p95 under 250 ms | 254 µs | Met |
-| Cancellation of active work | under 100 ms | 9 µs; 21.0 ms slowest of any workload | Met |
-| Exit during active work | under 250 ms | none on `ordinary`, whose comparison ends first; 35.2 ms slowest of any workload | Met |
-| Peak resident memory | under 1 GiB for every workload | 923 MiB worst, on `shuffled` | Met |
+| Comparison, displayed result prepared | p95 under 250 ms | 237 µs | Met |
+| Cancellation of active work | under 100 ms | 6 µs; 28.5 ms slowest of any workload | Met |
+| Exit during active work | under 250 ms | none on `ordinary`, whose comparison ends first; 17.8 ms slowest of any workload | Met |
+| Peak resident memory | under 1 GiB for every workload | 820 MiB worst, on `shuffled` | Met |
 
 The first four targets are interaction budgets. A browser that answers a key
 within about 100 ms feels immediate, and 500 ms is the longest a user should
@@ -108,38 +108,38 @@ long a request would take.
 
 | Workload | Target | Measured |
 | --- | --- | --- |
-| Any near-limit workload | first state drawn within 1 s | 520 ms slowest (`changes-limit`, cold file cache) |
-| Any near-limit workload | uncached preview within 500 ms | 135 ms slowest (`entries-limit`) |
-| Any near-limit workload | comparison within 2 s | 1.02 s slowest (`shuffled`) |
-| Every workload | peak resident memory under 1 GiB | 923 MiB (`shuffled`), 765 MiB (`entries-limit`), 755 MiB (`changes-limit`) |
+| Any near-limit workload | first state drawn within 1 s | 487 ms slowest (`changes-limit`, cold file cache) |
+| Any near-limit workload | uncached preview within 500 ms | 145 ms slowest (`entries-limit`) |
+| Any near-limit workload | comparison within 2 s | 835 ms slowest (`shuffled`) |
+| Every workload | peak resident memory under 1 GiB | 820 MiB (`shuffled`), 762 MiB (`changes-limit`), 726 MiB (`entries-limit`) |
 
 ## Results
 
 | Workload | First state | Uncached preview | Comparison | Cancelled halfway | Exit while comparing | Browser peak |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `small` | 19.9 ms | 13 µs | 51 µs | 4 µs | none | 17 MiB |
-| `ordinary` | 19.7 ms | 35 µs | 200 µs | 2 µs | none | 20 MiB |
-| `deep` | 120.6 ms | 7.7 ms | 7.9 ms | 12 µs | none | 243 MiB |
-| `wide` | 53.4 ms | 14 µs | 45 µs | 3 µs | none | 111 MiB |
-| `shuffled` | 419.9 ms | 53.7 ms | 1.01 s | 8.4 ms | 7.3 ms | 923 MiB |
-| `repeated` | 119.5 ms | 12.8 ms | 163.7 ms | 22 µs | 3.4 ms | 368 MiB |
-| `replaced` | 119.7 ms | 12.3 ms | 97.1 ms | 26 µs | 2.1 ms | 516 MiB |
-| `changes-limit` | 437.0 ms | 100.7 ms | 111.8 ms | 11 µs | 3.2 ms | 755 MiB |
-| `entries-limit` | 270.0 ms | 133.0 ms | 200.1 ms | 7 µs | 2.9 ms | 765 MiB |
-| `lines-limit` | 186.6 ms | 110.1 ms | 218.7 ms | 219 µs | 2.5 ms | 306 MiB |
+| `small` | 19.8 ms | 14 µs | 54 µs | 2 µs | none | 17 MiB |
+| `ordinary` | 19.7 ms | 26 µs | 172 µs | 3 µs | none | 21 MiB |
+| `deep` | 120.1 ms | 7.8 ms | 8.9 ms | 7 µs | none | 232 MiB |
+| `wide` | 53.3 ms | 15 µs | 44 µs | 4 µs | none | 110 MiB |
+| `shuffled` | 387.0 ms | 48.3 ms | 817.2 ms | 24.5 ms | 7.7 ms | 820 MiB |
+| `repeated` | 119.3 ms | 12.0 ms | 158.5 ms | 16 µs | 2.1 ms | 282 MiB |
+| `replaced` | 119.6 ms | 14.2 ms | 89.6 ms | 14 µs | 2.1 ms | 427 MiB |
+| `changes-limit` | 437.3 ms | 101.1 ms | 114.0 ms | 27 µs | 3.0 ms | 762 MiB |
+| `entries-limit` | 253.3 ms | 135.0 ms | 198.7 ms | 6 µs | 2.9 ms | 726 MiB |
+| `lines-limit` | 169.9 ms | 109.2 ms | 217.2 ms | 221 µs | 3.0 ms | 366 MiB |
 
 Medians, from a warm file cache. "First state" is end to end: start, load,
 first preview, and drawing. Preview and comparison times are the worker's,
 from a cold application cache; a cached preview took at most 5 µs on every
 workload. "None" under exit while comparing means every comparison finished
 before the quit took effect, and those exits, which had no work to stop,
-took at most 2.6 ms. The [summary](measurements/2026-09-27/summary.md) has every
+took at most 2.8 ms. The [summary](measurements/2026-09-27/summary.md) has every
 operation with its sample count, 95th percentile where there are enough
 samples, slowest sample, and allocations, and the command timings.
 
 The command-line tools follow the same pattern. `inspect` of the 250 MiB
-`changes-limit` file takes 535 ms and 338 MiB, and `diff` of the shuffled
-pair takes 1.41 s and 784 MiB, as it did before the browser existed.
+`changes-limit` file takes 542 ms and 338 MiB, and `diff` of the shuffled
+pair takes 1.32 s and 785 MiB.
 
 ## Where the memory goes
 
@@ -151,23 +151,31 @@ then reloading, and every part of it has a place:
 | The load | about 250 MiB | 4,000,000 decoded lines, each its own allocation with a 16-byte header, and the base: its file read once and split into 4,000,000 more headers that share it |
 | Graph and tree index | under 1 MiB | Two nodes here; 24 bytes per node in general |
 | Cache | about 122 MiB | Both states' line arrays, 16 bytes per line, charged against the 128 MiB budget |
-| Comparison on screen | about 122 MiB | The diff's own copies of both line arrays; its hunks refer to them |
-| Diff workspace, while it runs | about 250 MiB | A hash table of 8,388,608 slots, identifier and index arrays over both sides, and the two search frontiers |
+| Comparison on screen | a few MiB | Its hunks, which refer to the cached states' line arrays rather than copies of them |
+| Diff workspace, while it runs | about 150 MiB | While matching, a hash table of 8,388,608 slots and identifier arrays over both sides; then, with the table released, the two search frontiers, index arrays, and a count per distinct line |
 | Replay workspace, while it runs | about 120 MiB | A copy of the base's line headers in chunks, and the finished state's array |
 | A reload | about 250 MiB more | The old load stays until the new one validates; the browser drops the cache and the displayed comparison first |
 | Queued work | under 1 KiB | At most one pending request, a few words; a finished result waiting for the view holds a state or comparison already counted above |
 
-The in-process measurement found 482 MiB live after the comparison and 718
-MiB live with a second load held as well. The rest of the 923 MiB peak is
+The in-process measurement found 360 MiB live after the comparison and 596
+MiB live with a second load held as well. The rest of the 820 MiB peak is
 garbage not yet collected and runtime overhead: the command sets a 768 MiB
 soft limit on the Go heap, which is not a cap on resident memory. The cache
 itself stays within its budget; it is one of the smaller holders.
 
-The largest avoidable cost is the diff's copy of line arrays the cache
-already holds, about 122 MiB at the limit. Removing it would need snapshots
-that can lend their lines without a copy. The worst workload is under the 1
-GiB target without that change, so it is left as is, and recorded here as
-the first place to look if a workload ever exceeds the target.
+Fewer cores raise the peak. The collector gets less time beside the work,
+so garbage piles up further before it is swept. Until 2026-09-27 the diff
+copied both line arrays, 122 MiB at the limit, and grew its matching arrays
+by doubling, leaving about 750 MiB live against the 768 MiB soft limit. That
+peaked at 923 MiB here and at 1085 MiB on a four-core CI runner, over the
+target. The diff now reads the states' own arrays and sizes its workspace
+once, and with this machine limited to four cores the same session peaks at
+783 to 830 MiB.
+
+The largest remaining holders are the two loads a reload keeps side by
+side, which a failed reload needs, and the replay's copy of the base, which
+replay rewrites in place. Those are the places to look if a workload ever
+approaches the target again.
 
 ## Reproducing
 

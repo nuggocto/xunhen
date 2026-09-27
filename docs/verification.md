@@ -25,7 +25,7 @@ breaking the behavior it guards makes it fail; the mutations listed under
 | Output failures end with status 1 and one diagnostic | `TestWriteFailures` (immediate and partway failures), `TestExecutable` (closed pipe, full device, interrupt while blocked) |
 | Every exit from the browser restores the terminal and stops the worker | `TestBrowserUnderATerminal`, `TestWorkerShutdown` |
 | Limits admit exactly their ceiling | `TestDecodeLimitBoundaries`, `TestReplayEntryBoundaries`, `TestSearchByteLimit`, `TestSearchDirectoryLimit`, `TestHistoryBoundsAndCancellation`, `TestReadFileAcceptsOnlyRegularFiles` |
-| Resource use stays within the documented targets | [Performance](performance.md), `TestCacheHoldsTheLargestPair` |
+| Resource use stays within the documented targets | [Performance](performance.md), `TestCacheHoldsTheLargestPair`, `TestCompareDoesNotCopyStates` |
 
 `TestCorpusThroughTheCommand`, `TestReplayOracle`, and `TestPreviewsMatchNeovim`
 read the stored Neovim corpus, so every `go test ./...` runs the oracle
@@ -60,6 +60,8 @@ change was reverted:
 | Raw export swaps the two final-newline policies | `TestCorpusThroughTheCommand`, all 47 states |
 | A width report keeps drawing the state measured the old way | `TestClusterWidthsFollowTheRenderer`, the case with a state on screen |
 | The content pane draws no lines | `TestClusterWidthsFollowTheRenderer`, both cases |
+| The diff copies both states' line arrays again | `TestCompareDoesNotCopyStates`, both cases |
+| Anchoring's one-byte line counts wrap past 255 copies | `TestRepeatedLinesAreNotAnchors`, all three cases |
 
 ## Running the checks
 

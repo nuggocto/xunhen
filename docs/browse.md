@@ -198,10 +198,11 @@ they are prepared, so a state still on screen stays intact until the view
 lets go of it.
 
 The cache bounds only what it keeps. A comparison on screen also holds its two
-states and the diff's own copies of their line arrays, a reconstruction needs
-its workspace while it runs, and a reload holds the old history until the
-new one validates. [Performance](performance.md) accounts for each of these
-and records the measured peaks. The worst, comparing two shuffled
-4,000,000-line states and reloading twice, peaked at 923 MiB, within the 1 GiB
-target. The same measurements show every operation stopping within 25 ms of
-cancellation and the browser exiting within 40 ms while a comparison runs.
+states and the diff's hunks, which point into those states' lines rather
+than copying them. A reconstruction needs its workspace while it runs, and a
+reload holds the old history until the new one validates.
+[Performance](performance.md) accounts for each of these and records the
+measured peaks. The worst, comparing two shuffled 4,000,000-line states and
+reloading twice, peaked at 820 MiB, within the 1 GiB target. The same
+measurements show every operation stopping within 30 ms of cancellation and
+the browser exiting within 20 ms while a comparison runs.
