@@ -10,8 +10,12 @@
 # so it would break that, and external linking would add a libc dependency
 # the program has no use for. This recipe therefore builds with cgo off and
 # the default build mode, like the release archive, and keeps -trimpath,
-# -mod=readonly, and -modcacherw from the guidelines. namcap may report the
-# executable as not PIE; that is this decision.
+# -mod=readonly, and -modcacherw from the guidelines.
+#
+# namcap therefore warns that the executable lacks PIE and full RELRO, both
+# of which need external linking. It also calls it unstripped: makepkg's
+# debug option moves the DWARF sections to xunhen-debug and keeps the ELF
+# symbol table. All three warnings are expected.
 
 pkgname=xunhen
 pkgver=@PKGVER@

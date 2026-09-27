@@ -930,7 +930,7 @@ candidate; a maintainer can reproduce its build.
 - [x] Add `flake.nix` and commit `flake.lock`; expose named/default packages and apps without claiming unsupported CPU architectures or operating systems.
 - [x] Pin the nixpkgs input, select a compatible Go builder, and calculate the real Go dependency `vendorHash`; reject placeholder hashes and implicit toolchain downloads during the build.
 - [x] Keep source inputs limited to intended tracked files, preserve required synthetic fixtures for checks, and inject truthful release metadata without depending on a `.git` directory in the sandbox.
-- [ ] Run `nix flake check` and the package build in sandboxed Linux CI; verify that the build/check steps do not depend on undeclared network access, personal configuration, or Neovim.
+- [x] Run `nix flake check` and the package build in sandboxed Linux CI; verify that the build/check steps do not depend on undeclared network access, personal configuration, or Neovim.
 - [x] Document tagged-flake build/run commands, user-profile installation, a NixOS `environment.systemPackages` example, and pin/update/rollback/remove procedures.
 
 #### 8.4 Package for the AUR
@@ -939,20 +939,20 @@ candidate; a maintainer can reproduce its build.
 - [x] Fetch a versioned source archive with a verified checksum, use the committed Go module versions/checksums, and keep the module cache within the package build environment.
 - [x] Implement `prepare`, `build`, `check`, and `package` behavior as needed: compile `cmd/xunhen`, run ordinary tests without Neovim, and install the binary plus required documentation/license material through `$pkgdir`.
 - [x] Follow the current Arch Go packaging guidance, document any pure-Go build-flag choices, and verify the package's actual linkage and declared runtime dependencies.
-- [ ] Generate `.SRCINFO` with `makepkg --printsrcinfo` whenever the resolved recipe changes; lint the recipe/package and build with Arch devtools in a clean chroot.
+- [x] Generate `.SRCINFO` with `makepkg --printsrcinfo` whenever the resolved recipe changes; lint the recipe/package and build with Arch devtools in a clean chroot.
 - [x] Document cloning/reviewing the AUR recipe and using `makepkg`/`pacman` without requiring an AUR helper; include upgrade, downgrade, and removal.
 - [x] Keep the AUR packaging Git repository and its required branch separate from the application repository; preserve `shrek` as the application default branch.
 - [ ] Resolve source-archive checksums after the application tag exists, then publish the generated recipe; do not retag the application to embed a checksum of its own archive.
 
 #### 8.5 Prepare the release workflow
 
-- [ ] Separate read-only CI from the publish job; permit publication only for the intended version tag on a reviewed `shrek` commit after required checks pass.
+- [x] Separate read-only CI from the publish job; permit publication only for the intended version tag on a reviewed `shrek` commit after required checks pass.
 - [x] Pin release actions/tools and keep release-write permissions confined to the publish job; do not execute untrusted pull-request code with that authority.
-- [ ] Stage built assets and metadata for verification before making the GitHub release public.
-- [ ] Publish the already-verified artifact bytes rather than rebuilding between verification and upload.
+- [x] Stage built assets and metadata for verification before making the GitHub release public.
+- [x] Publish the already-verified artifact bytes rather than rebuilding between verification and upload.
 - [x] Write install, checksum verification, user-local `PATH`, upgrade, downgrade, and uninstall instructions with quoted paths and no root requirement for the normal path.
-- [ ] Verify clean-checkout module installation and version reporting for both release archives and module-installed builds; test public tagged installs once candidate tags exist.
-- [ ] Add independent Nix build/check and Arch clean-chroot packaging jobs, with package-specific logs and provenance alongside the archive checks.
+- [x] Verify clean-checkout module installation and version reporting for both release archives and module-installed builds; test public tagged installs once candidate tags exist.
+- [x] Add independent Nix build/check and Arch clean-chroot packaging jobs, with package-specific logs and provenance alongside the archive checks.
 - [x] Define channel publication order: make the tested source tag/archive available, verify the tagged Nix outputs, resolve and validate the AUR recipe, then publish the AUR update.
 - [x] Keep any AUR publishing credentials confined to the maintainer's release path and out of ordinary build or pull-request jobs.
 

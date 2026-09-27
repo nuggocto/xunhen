@@ -128,8 +128,9 @@ anything, so the published bytes are the verified ones.
 
 Two repository settings protect this path:
 
-- Create an environment named `release` with required reviewers. The
-  publish job runs in it, so publishing waits for a maintainer's approval.
+- Give the environment named `release` required reviewers. The publish
+  job runs in it, so publishing waits for a maintainer's approval. GitHub
+  creates the environment, unprotected, the first time the job runs.
 - Turn on immutable releases. GitHub then refuses to change a published
   release's assets or move its tag. Staging already follows the order that
   requires: create the draft, attach every asset, then publish.
@@ -198,9 +199,10 @@ version alone. Before a public tag exists, rehearse with a local source
 archive from `tools/release.sh build -tag`, passed as `-source`, placed next to
 the resolved `PKGBUILD`.
 
-`namcap` may report that the executable is not position-independent. The
-template explains why the recipe builds without cgo and without PIE; keep
-that decision unless the release archive changes it too.
+`namcap` reports three warnings on the package: no PIE, no full RELRO, and
+an unstripped executable. The template explains all three; keep the
+static, cgo-free build unless the release archive changes it too. Any other
+`namcap` finding needs a look.
 
 Keep the AUR SSH key on the maintainer's machine. No workflow in this
 repository holds AUR credentials, and none publishes to the AUR. A dedicated
