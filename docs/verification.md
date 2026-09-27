@@ -74,7 +74,7 @@ mise run measure        # the resource workloads
 
 CI runs the first four checks on every push and pull request, in separate
 jobs: correctness, race, fuzz smoke, and vulnerabilities. The extended fuzz
-campaign and the measurements run weekly and on request. None of these
+campaign and the measurements run locally, before a release. None of these
 checks skips when a tool is missing. The terminal tests fail without a
 pseudo-terminal and the quoting tests fail without bash. Two kinds of test
 skip: the permission cases, when run as root, whom permission bits do not

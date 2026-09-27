@@ -181,6 +181,5 @@ go run ./tools/workload summarize results.jsonl
 
 Each process in a measurement run may grow its data segment to 1.5 GiB, so a
 regression past the target fails the run instead of exhausting the machine.
-The weekly extended CI workflow runs the same measurements on a shared
-runner. Its numbers show whether something broke, not what a user's machine
-will do; compare timings only against this machine.
+Compare timings only against this machine; another computer's numbers show
+whether something broke, not whether a target is met.
