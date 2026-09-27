@@ -84,7 +84,7 @@ func TestExecutable(t *testing.T) {
 		fullDisk     bool // stdout is /dev/full, which fails every write
 	}{
 		{name: "help", args: []string{"--help"}, out: "Usage:"},
-		{name: "stamped version", args: []string{"--version"}, out: "xunhen v0.0.0-test\n"},
+		{name: "stamped version", args: []string{"--version"}, out: "xunhen v0.0.0-test\ncommit: " + testCommit},
 		{name: "invalid invocation", args: []string{"unknown"}, status: 2, err: "unknown command"},
 		{
 			name:   "browser without a terminal",
@@ -269,8 +269,15 @@ func TestExecutable(t *testing.T) {
 	})
 }
 
+// testCommit is the commit buildExecutable stamps, as a package built from
+// a source archive must, since it has no git metadata of its own.
+const testCommit = "0123456789abcdef0123456789abcdef01234567"
+
 // buildExecutable builds the command as a release does, statically and
-// without network access, into dir.
+// without network access, into dir. The module mode comes from the
+// caller's GOFLAGS: a vendored package build, as Nix makes, sets
+// -mod=vendor, and forcing -mod=readonly there would look for modules that
+// only the vendor directory holds.
 func buildExecutable(t *testing.T, dir string) string {
 	t.Helper()
 
@@ -278,15 +285,14 @@ func buildExecutable(t *testing.T, dir string) string {
 	defer cancel()
 
 	binary := filepath.Join(dir, "xunhen")
-	build := exec.CommandContext(ctx, "go", "build",
-		"-trimpath", "-ldflags=-X main.version=v0.0.0-test", "-o", binary, ".")
+	build := exec.CommandContext(ctx, "go", "build", "-trimpath",
+		"-ldflags=-X main.version=v0.0.0-test -X main.commit="+testCommit, "-o", binary, ".")
 	build.Env = append(os.Environ(),
 		"GOWORK=off",
 		"GOENV=off",
 		"GOTOOLCHAIN=local",
 		"GOPROXY=off",
 		"GOSUMDB=off",
-		"GOFLAGS=-mod=readonly",
 		"CGO_ENABLED=0",
 	)
 	if output, err := build.CombinedOutput(); err != nil {
