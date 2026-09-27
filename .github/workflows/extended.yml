@@ -1,0 +1,87 @@
+name: Extended validation
+
+# Long fuzz campaigns and the resource measurements run weekly and on
+# request, not on every push. Shared runners enforce correctness and broad
+# resource bounds; their timings are only directional, and the reference
+# numbers in docs/performance.md come from the named reference machine.
+on:
+  schedule:
+    - cron: "17 3 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: extended-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  GOENV: "off"
+  GOWORK: "off"
+  GOTOOLCHAIN: local
+  GOOS: linux
+  GOARCH: amd64
+  GOAMD64: v1
+  CGO_ENABLED: "0"
+  GOFLAGS: -mod=readonly
+
+jobs:
+  fuzz:
+    name: Extended fuzz campaign
+    runs-on: ubuntu-24.04
+    timeout-minutes: 200
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Fuzz every target for about 15 minutes
+        run: tools/fuzz.sh extended
+      - name: Keep failing inputs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: extended-fuzz-failures
+          path: internal/*/testdata/fuzz/
+          retention-days: 90
+          if-no-files-found: ignore
+
+  resources:
+    name: Resource measurements
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Measure every workload
+        run: tools/measure.sh .local/measurements/ci
+      - name: Keep the measurements
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: measurements
+          path: |
+            .local/measurements/ci/environment.txt
+            .local/measurements/ci/raw.jsonl
+            .local/measurements/ci/summary.md
+          retention-days: 90
+          if-no-files-found: warn

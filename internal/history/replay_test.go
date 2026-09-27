@@ -144,6 +144,120 @@ func TestReplayRejectsInvalidWork(t *testing.T) {
 	}
 }
 
+// TestReplayEntryBoundaries replays one change whose entries face undo, so
+// reconstructing the root applies them in order to the reference text. Each
+// case names the edge of the line range or the limit it exercises. Expected
+// states follow the entry rule in docs/undo-format.md: the stored lines
+// replace the lines strictly between top and bottom, and bottom zero means
+// one past the last line.
+func TestReplayEntryBoundaries(t *testing.T) {
+	t.Parallel()
+
+	abc := []string{"a", "b", "c"}
+	bytesOf := func(lines []string) int {
+		total := 0
+		for _, line := range lines {
+			total += len(line) + 1
+		}
+		return total
+	}
+
+	tests := []struct {
+		name    string
+		base    []string
+		entries []wireEntry
+		limits  func(*limits.Limits)
+		want    []string
+		field   string // the failure's field, empty when replay succeeds
+	}{
+		{name: "whole buffer", base: abc, entries: []wireEntry{{top: 0, bottom: 0, lines: []string{"x"}}}, want: []string{"x"}},
+		{name: "insertion before the first line", base: abc, entries: []wireEntry{{top: 0, bottom: 1, lines: []string{"x"}}}, want: []string{"x", "a", "b", "c"}},
+		{name: "insertion after the last line", base: abc, entries: []wireEntry{{top: 3, bottom: 4, lines: []string{"x"}}}, want: []string{"a", "b", "c", "x"}},
+		{name: "deletion of the last line", base: abc, entries: []wireEntry{{top: 2, bottom: 0}}, want: []string{"a", "b"}},
+		{name: "bottom one past the last line", base: abc, entries: []wireEntry{{top: 1, bottom: 4, lines: []string{"x"}}}, want: []string{"a", "x"}},
+		{name: "deleting everything leaves one empty line", base: abc, entries: []wireEntry{{top: 0, bottom: 0}}, want: []string{""}},
+		{name: "an empty buffer grows", base: []string{""}, entries: []wireEntry{{top: 0, bottom: 0, lines: []string{"x", "y"}}}, want: []string{"x", "y"}},
+		{
+			name: "entries apply in stored order", base: abc,
+			entries: []wireEntry{{top: 0, bottom: 2, lines: []string{"x"}}, {top: 2, bottom: 0, lines: []string{"y", "z"}}},
+			want:    []string{"x", "b", "y", "z"},
+		},
+		{name: "bottom two past the last line", base: abc, entries: []wireEntry{{top: 0, bottom: 5}}, field: "entry range"},
+		{name: "top past the last line", base: abc, entries: []wireEntry{{top: 4, bottom: 0}}, field: "entry range"},
+		{
+			name: "a later entry sees the earlier one's line count", base: abc,
+			entries: []wireEntry{{top: 0, bottom: 0, lines: []string{"x"}}, {top: 1, bottom: 3}},
+			field:   "entry range",
+		},
+		{
+			name: "state lines exactly at the limit", base: abc,
+			entries: []wireEntry{{top: 3, bottom: 0, lines: []string{"x"}}},
+			limits:  func(l *limits.Limits) { l.StateLines = 4 },
+			want:    []string{"a", "b", "c", "x"},
+		},
+		{
+			name: "state lines one over the limit", base: abc,
+			entries: []wireEntry{{top: 3, bottom: 0, lines: []string{"x", "y"}}},
+			limits:  func(l *limits.Limits) { l.StateLines = 4 },
+			field:   "state lines",
+		},
+		{
+			name: "state bytes exactly at the limit", base: abc,
+			entries: []wireEntry{{top: 3, bottom: 0, lines: []string{"xy"}}},
+			limits:  func(l *limits.Limits) { l.StateBytes = bytesOf([]string{"a", "b", "c", "xy"}) },
+			want:    []string{"a", "b", "c", "xy"},
+		},
+		{
+			name: "state bytes one over the limit", base: abc,
+			entries: []wireEntry{{top: 3, bottom: 0, lines: []string{"xyz"}}},
+			limits:  func(l *limits.Limits) { l.StateBytes = bytesOf([]string{"a", "b", "c", "xy"}) },
+			field:   "state bytes",
+		},
+		{
+			// The final state would fit, but the state between the two
+			// entries does not, and replay must not pass through it.
+			name: "an intermediate state over the limit", base: abc,
+			entries: []wireEntry{{top: 3, bottom: 0, lines: []string{"x", "y"}}, {top: 0, bottom: 0, lines: []string{"z"}}},
+			limits:  func(l *limits.Limits) { l.StateLines = 4 },
+			field:   "state lines",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			lim := limits.Default()
+			if tt.limits != nil {
+				tt.limits(&lim)
+			}
+
+			nodes := []wireNode{{id: 1, entries: tt.entries}}
+			data := withReference(graphBytes(nodes, 1, 1, 0, 1, 1), tt.base)
+			h, r := reconstructor(t, data, tt.base, lim)
+			root, err := h.Lookup(0)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			snapshot, err := r.Reconstruct(t.Context(), root)
+			if tt.field != "" {
+				var problem *undofile.InputError
+				if snapshot != nil || !errors.As(err, &problem) || problem.Field != tt.field || problem.Sequence != 1 {
+					t.Fatalf("snapshot = %v, error = %v; want a failure on %s in change 1", snapshot, err, tt.field)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := snapshot.Lines(); !slices.Equal(got, tt.want) {
+				t.Fatalf("root = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 // Deep histories of long files must replay with the default limits. A
 // rewritten line moves no other line; an inserted line shifts every line below
 // it, which chunked replay keeps to the few chunks it touches.

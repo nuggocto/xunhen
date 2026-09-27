@@ -871,28 +871,28 @@ behavior are exercised across the complete application.
 
 #### 7.1 Expand adversarial coverage
 
-- [ ] Extend the corruption corpus across headers, record boundaries, references, counts, text lengths, replay ranges, and unsupported variants.
-- [ ] Fuzz decoding, graph construction, and supported reconstruction using bounded inputs and explicit time/memory budgets.
+- [x] Extend the corruption corpus across headers, record boundaries, references, counts, text lengths, replay ranges, and unsupported variants.
+- [x] Fuzz decoding, graph construction, and supported reconstruction using bounded inputs and explicit time/memory budgets.
 - [ ] Run a short reproducible fuzz smoke in CI and a longer bounded campaign before the release candidate; preserve actionable failing inputs.
-- [ ] Test terminal-control injection through source text, filenames, timestamps/metadata labels, and error messages.
-- [ ] Test cancellation, read/output failures, limit boundaries, and failed reloads without damaging the previously valid UI state.
-- [ ] Verify synthetic input content hashes before and after every command family; audit code for input-path writes and accidental private-content logging.
+- [x] Test terminal-control injection through source text, filenames, timestamps/metadata labels, and error messages.
+- [x] Test cancellation, read/output failures, limit boundaries, and failed reloads without damaging the previously valid UI state.
+- [x] Verify synthetic input content hashes before and after every command family; audit code for input-path writes and accidental private-content logging.
 
 #### 7.2 Measure the intended workload
 
-- [ ] Create reproducible small, ordinary, deep-branch, large-change, and near-limit synthetic workloads with recorded node/text sizes.
-- [ ] Record load time, cold/warm state selection, diff time, allocations, peak memory, and cancellation latency on a named Linux reference machine.
-- [ ] Set acceptance thresholds from the intended interaction and measured workloads; label them as project targets rather than universal performance guarantees.
-- [ ] Account for retained string backing storage, graph/index overhead, cached states, diff workspace, and queued work in the memory assessment.
-- [ ] Fix stalls, runaway work, or budget accounting gaps before adding more elaborate data structures; remeasure changed paths.
+- [x] Create reproducible small, ordinary, deep-branch, large-change, and near-limit synthetic workloads with recorded node/text sizes.
+- [x] Record load time, cold/warm state selection, diff time, allocations, peak memory, and cancellation latency on a named Linux reference machine.
+- [x] Set acceptance thresholds from the intended interaction and measured workloads; label them as project targets rather than universal performance guarantees.
+- [x] Account for retained string backing storage, graph/index overhead, cached states, diff workspace, and queued work in the memory assessment.
+- [x] Fix stalls, runaway work, or budget accounting gaps before adding more elaborate data structures; remeasure changed paths.
 
 #### 7.3 Close compatibility claims
 
-- [ ] Run the full oracle corpus for each producer/build and feature combination intended for v1 support.
-- [ ] Publish explicit supported, rejected, and unverified text/format cases; avoid claiming support for every release sharing a version string.
-- [ ] Check fixture provenance against the supported matrix and retain a regression for every discovered replay defect.
+- [x] Run the full oracle corpus for each producer/build and feature combination intended for v1 support.
+- [x] Publish explicit supported, rejected, and unverified text/format cases; avoid claiming support for every release sharing a version string.
+- [x] Check fixture provenance against the supported matrix and retain a regression for every discovered replay defect.
 - [ ] Run formatting, tests, vet, race tests, module verification, and a pinned `govulncheck` invocation in the appropriate CI jobs.
-- [ ] Review reachable dependency findings and dependency/license changes; update vulnerable build tools before packaging.
+- [x] Review reachable dependency findings and dependency/license changes; update vulnerable build tools before packaging.
 
 Race-check jobs may need a C toolchain and cgo. That is a test-runner
 requirement, not permission to add a libc dependency to the release binary.

@@ -1,13 +1,18 @@
 package tui
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/nuggocto/xunhen/internal/history"
 	"github.com/nuggocto/xunhen/internal/limits"
+	"github.com/nuggocto/xunhen/internal/synth"
 )
 
 // Every state Neovim recorded for the checked-in histories must preview
@@ -162,5 +167,67 @@ func TestReloadedSessionsShareNothing(t *testing.T) {
 	}
 	if _, err := after.reconstructor.Reconstruct(t.Context(), old); err == nil {
 		t.Fatal("the new reconstructor replayed a node reference from the old history")
+	}
+}
+
+// Every operation the worker performs must stop at any of its cancellation
+// checks with the cancellation and no partial result. The load covers
+// decoding, graph validation, base verification, and the tree index; the
+// preview covers a long replay and the column index of a long line; the
+// comparison covers the diff.
+func TestWorkStopsAtEveryCancellationCheck(t *testing.T) {
+	t.Parallel()
+
+	states := make([][]string, 3000)
+	for i := range states {
+		states[i] = []string{fmt.Sprint("state ", i)}
+	}
+	long := strings.Repeat("0123456789", 100_000)
+	body := make([]string, 20_000)
+	for i := range body {
+		body[i] = fmt.Sprint("line ", i*7919%20_000)
+	}
+	states[len(states)-1] = append([]string{long}, body...)
+	undo, base := chain(states)
+	loader := loaderOf(undo, base)
+	s := load(t, loader)
+
+	tests := []struct {
+		name    string
+		request func() request
+	}{
+		{name: "load", request: func() request { return request{kind: loadRequest} }},
+		{name: "preview through a long replay", request: func() request {
+			return request{kind: previewRequest, session: s, target: ref(t, s, 0)}
+		}},
+		{name: "preview of a long line", request: func() request {
+			return request{kind: previewRequest, session: s, target: ref(t, s, history.NodeID(len(states)-1))}
+		}},
+		{name: "comparison", request: func() request {
+			return request{kind: compareRequest, session: s, origin: ref(t, s, 0), target: ref(t, s, history.NodeID(len(states)-1))}
+		}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			counting := synth.CountChecks(t.Context())
+			e := &engine{load: loader, limits: limits.Default(), cache: newCache(cacheBudget)}
+			if out := e.perform(counting, tt.request()); out.err != nil {
+				t.Fatal(out.err)
+			}
+			checks := counting.Checks()
+			t.Logf("%d cancellation checks", checks)
+
+			for _, after := range []int64{0, 1, checks / 4, checks / 2, checks - 1} {
+				e := &engine{load: loader, limits: limits.Default(), cache: newCache(cacheBudget)}
+				out := e.perform(synth.CancelAfter(t.Context(), after), tt.request())
+				if !errors.Is(out.err, context.Canceled) || out.session != nil || out.doc != nil || out.cmp != nil {
+					t.Fatalf("cancelled after %d of %d checks: error %v, session %v, doc %v, comparison %v",
+						after, checks, out.err, out.session != nil, out.doc != nil, out.cmp != nil)
+				}
+			}
+		})
 	}
 }

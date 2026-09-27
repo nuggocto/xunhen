@@ -1,6 +1,7 @@
 package discover_test
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/nuggocto/xunhen/internal/discover"
 	"github.com/nuggocto/xunhen/internal/limits"
+	"github.com/nuggocto/xunhen/internal/synth"
 	"github.com/nuggocto/xunhen/internal/undofile"
 )
 
@@ -558,4 +560,41 @@ func (w *world) dirs(n int, fill func(i int, dir string)) []string {
 	}
 
 	return paths
+}
+
+// A search cancelled at any of its checks, between directories or inside a
+// candidate's decoding, must end with the cancellation and no result, never
+// a partial answer about what was found.
+func TestSearchStopsAtEveryCancellationCheck(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld(t)
+	undo := fixture(t, "abandoned-branch", "history.undo")
+	var dirs []string
+	for i := range 8 {
+		dir := w.path(fmt.Sprintf("d%d", i))
+		if err := os.Mkdir(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		w.put(dir, undo, false)
+		dirs = append(dirs, dir)
+	}
+	request := discover.Request{Target: w.target, Dirs: dirs, Base: w.base}
+
+	counting := synth.CountChecks(t.Context())
+	if _, err := discover.Search(counting, request, limits.Default()); err != nil {
+		t.Fatal(err)
+	}
+	checks := counting.Checks()
+
+	for _, after := range []int64{0, 1, checks / 2, checks - 1} {
+		t.Run(fmt.Sprintf("cancelled after %d of %d checks", after, checks), func(t *testing.T) {
+			t.Parallel()
+
+			result, err := discover.Search(synth.CancelAfter(t.Context(), after), request, limits.Default())
+			if result != nil || !errors.Is(err, context.Canceled) {
+				t.Fatalf("result = %v, error = %v; want cancellation", result, err)
+			}
+		})
+	}
 }

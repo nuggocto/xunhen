@@ -19,7 +19,7 @@ func TestShellQuoting(t *testing.T) {
 
 	bash, err := exec.LookPath("bash")
 	if err != nil {
-		t.Skip("bash is not installed")
+		t.Fatal("bash is required to check shell quoting")
 	}
 
 	tests := []struct {
@@ -73,7 +73,7 @@ func TestExportInstructions(t *testing.T) {
 
 	bash, err := exec.LookPath("bash")
 	if err != nil {
-		t.Skip("bash is not installed")
+		t.Fatal("bash is required to check shell quoting")
 	}
 
 	many := []string{"--source", "retry.go"}

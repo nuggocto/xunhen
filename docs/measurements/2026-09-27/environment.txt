@@ -1,0 +1,13 @@
+commit: 7b1d3705837fed2a4885ddd4c762f76e702f4067 with uncommitted changes
+executable sha256: fe0f9ced1dbb13e8bb8ffbfe93b622cd1fd0cd899e06e0535e695c165fff47ee
+toolchain: go version go1.27.1 linux/amd64
+build: GOOS=linux GOARCH=amd64 GOAMD64=v1 CGO_ENABLED=0 -trimpath
+cpu: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S, 32 threads
+memory: 62.1 GiB
+kernel: Linux 7.2.5-3-omarchy x86_64
+os: Omarchy 4.0.4
+cpufreq governor: performance
+platform profile: performance
+on mains power: 1
+GOMEMLIMIT: unset (the command sets 768 MiB)
+date: 2026-09-27T02:24:19+02:00

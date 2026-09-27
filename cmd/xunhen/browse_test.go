@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,9 +11,10 @@ import (
 	"syscall"
 	"testing"
 	"time"
-	"unsafe"
 
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/nuggocto/xunhen/internal/pty"
 )
 
 // Terminal sequences the browser must balance: the alternate screen it
@@ -58,6 +58,8 @@ func TestBrowserUnderATerminal(t *testing.T) {
 		// dumb runs with TERM=dumb, where the browser must refuse to start
 		// and draw nothing.
 		dumb bool
+		// env adds variables to the command's environment.
+		env []string
 	}{
 		{name: "quit", run: func(t *testing.T, term *terminal, _ *os.Process) {
 			term.write(t, "q")
@@ -102,6 +104,18 @@ func TestBrowserUnderATerminal(t *testing.T) {
 			term.write(t, "q")
 		}},
 		{name: "a dumb terminal", dumb: true, status: 1, stderr: "TERM is dumb"},
+		// Bubble Tea would log every drawn frame, recovered text included,
+		// to this file, and panic logs to the working directory.
+		{
+			name: "debugging variables write nothing",
+			env:  []string{"TEA_TRACE=" + filepath.Join(dir, "trace.log"), "TEA_DEBUG=true"},
+			run: func(t *testing.T, term *terminal, _ *os.Process) {
+				mark := term.mark()
+				term.write(t, "j")
+				term.waitText(t, mark, "experiment()")
+				term.write(t, "q")
+			},
+		},
 		{
 			name:   "a base that does not match",
 			args:   []string{"browse", "--undo", "history.undo", "--base", "other.go"},
@@ -129,8 +143,9 @@ func TestBrowserUnderATerminal(t *testing.T) {
 			if tt.dumb {
 				command.Env[2] = "TERM=dumb"
 			}
+			command.Env = append(command.Env, tt.env...)
 			command.Stdin, command.Stdout, command.Stderr = term.slave, term.slave, term.slave
-			command.SysProcAttr = &syscall.SysProcAttr{Setsid: true, Setctty: true, Ctty: 0}
+			command.SysProcAttr = pty.Attach()
 			if err := command.Start(); err != nil {
 				t.Fatal(err)
 			}
@@ -153,6 +168,9 @@ func TestBrowserUnderATerminal(t *testing.T) {
 				t.Fatalf("terminal settings not restored:\nbefore %+v\nafter  %+v", before, after)
 			}
 			output := term.drain()
+			if _, err := os.Stat(filepath.Join(dir, "trace.log")); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("the browser wrote a trace file: %v", err)
+			}
 			if tt.dumb {
 				if strings.Contains(output, "\x1b") || !strings.Contains(output, tt.stderr) {
 					t.Fatalf("output on a dumb terminal: %q", output)
@@ -184,43 +202,40 @@ func sendSignal(s syscall.Signal) func(*testing.T, *terminal, *os.Process) {
 // terminal is a pseudo-terminal pair. The test keeps the slave side open
 // so the terminal's settings survive the command and can be compared.
 type terminal struct {
+	pair          *pty.Pair
 	master, slave *os.File
 	closeSlave    func()
 	finished      chan struct{} // the reader has read everything
 
-	mu      sync.Mutex
-	output  []byte
-	changed chan struct{} // capacity one: output grew
+	mu       sync.Mutex
+	output   []byte
+	overflow bool          // output passed maxTranscript and was cut
+	changed  chan struct{} // capacity one: output grew
 }
+
+// maxTranscript bounds what one test keeps of a terminal's output. A
+// browser run in these tests writes well under a megabyte.
+const maxTranscript = 16 << 20
 
 func openTerminal(t *testing.T) *terminal {
 	t.Helper()
 
-	master, err := os.OpenFile("/dev/ptmx", os.O_RDWR|syscall.O_NOCTTY, 0)
-	if err != nil {
-		t.Skipf("no pseudo-terminals: %v", err)
-	}
-	var unlock int32
-	if err := ioctl(master, syscall.TIOCSPTLCK, unsafe.Pointer(&unlock)); err != nil {
-		t.Fatal(err)
-	}
-	var number uint32
-	if err := ioctl(master, syscall.TIOCGPTN, unsafe.Pointer(&number)); err != nil {
-		t.Fatal(err)
-	}
-	slave, err := os.OpenFile(fmt.Sprintf("/dev/pts/%d", number), os.O_RDWR|syscall.O_NOCTTY, 0)
+	// A missing pseudo-terminal fails rather than skips: these tests are
+	// the only check of the built browser on a terminal.
+	pair, err := pty.Open(100, 24)
 	if err != nil {
 		t.Fatal(err)
 	}
+	master, slave := pair.Master, pair.Slave
 
 	term := &terminal{
+		pair:       pair,
 		master:     master,
 		slave:      slave,
 		closeSlave: sync.OnceFunc(func() { _ = slave.Close() }),
 		finished:   make(chan struct{}),
 		changed:    make(chan struct{}, 1),
 	}
-	term.resize(t, 100, 24)
 
 	// The reader ends with EIO once every slave descriptor is closed.
 	go func() {
@@ -230,7 +245,11 @@ func openTerminal(t *testing.T) *terminal {
 			n, err := master.Read(buffer)
 			if n > 0 {
 				term.mu.Lock()
-				term.output = append(term.output, buffer[:n]...)
+				if len(term.output)+n <= maxTranscript {
+					term.output = append(term.output, buffer[:n]...)
+				} else {
+					term.overflow = true
+				}
 				term.mu.Unlock()
 				select {
 				case term.changed <- struct{}{}:
@@ -244,8 +263,19 @@ func openTerminal(t *testing.T) *terminal {
 	}()
 	t.Cleanup(func() {
 		term.closeSlave()
-		<-term.finished
+		// The reader ends when the last slave descriptor closes. A child
+		// that outlived its test would hold one open; bound the wait.
+		select {
+		case <-term.finished:
+		case <-time.After(20 * time.Second):
+			t.Error("a process still held the terminal after the test")
+		}
 		_ = master.Close()
+		term.mu.Lock()
+		defer term.mu.Unlock()
+		if term.overflow {
+			t.Errorf("the terminal transcript passed %d bytes", maxTranscript)
+		}
 	})
 
 	return term
@@ -276,29 +306,20 @@ func poll(t *testing.T, what string, done func() bool) {
 	}
 }
 
-func ioctl(f *os.File, request uintptr, arg unsafe.Pointer) error {
-	if _, _, errno := syscall.Syscall(syscall.SYS_IOCTL, f.Fd(), request, uintptr(arg)); errno != 0 {
-		return errno
-	}
-	return nil
-}
-
 func (term *terminal) resize(t *testing.T, columns, rows uint16) {
 	t.Helper()
-
-	size := struct{ rows, columns, x, y uint16 }{rows: rows, columns: columns}
-	if err := ioctl(term.master, syscall.TIOCSWINSZ, unsafe.Pointer(&size)); err != nil {
+	if err := term.pair.Resize(columns, rows); err != nil {
 		t.Fatal(err)
 	}
 }
 
 // settings reads the terminal's line settings, which a program in raw mode
-// changes and must put back.
+// changes and must put back. The test holds the slave side open, so they
+// outlive the command.
 func (term *terminal) settings(t *testing.T) syscall.Termios {
 	t.Helper()
-
-	var attrs syscall.Termios
-	if err := ioctl(term.slave, syscall.TCGETS, unsafe.Pointer(&attrs)); err != nil {
+	attrs, err := term.pair.Settings()
+	if err != nil {
 		t.Fatal(err)
 	}
 	return attrs

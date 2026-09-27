@@ -3,8 +3,6 @@ package tui
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"os"
@@ -13,6 +11,7 @@ import (
 
 	"github.com/nuggocto/xunhen/internal/history"
 	"github.com/nuggocto/xunhen/internal/limits"
+	"github.com/nuggocto/xunhen/internal/synth"
 	"github.com/nuggocto/xunhen/internal/undofile"
 )
 
@@ -23,59 +22,15 @@ func rootOnly(lines []string) []byte {
 	return undo
 }
 
-// chain returns a format 3 undo file, laid out as docs/undo-format.md
-// describes, for a linear history through states: the root holds states[0],
-// node k holds states[k], and the last node is the reference, whose text is
-// the returned base. Each node's entry faces undo and swaps the whole buffer
-// for the previous state. Lines must not contain NUL, which the reference
-// hash would store as LF.
+// chain returns a linear history through states, whose last state is the
+// reference text the returned base must match.
 func chain(states [][]string) (undo []byte, base []string) {
-	base = states[len(states)-1]
-	hash := sha256.New()
-	for _, line := range base {
-		hash.Write([]byte(line))
-		hash.Write([]byte{0})
+	f := synth.Chain(states)
+	undo, err := f.Bytes()
+	if err != nil {
+		panic(err)
 	}
-
-	last := uint32(len(states) - 1)
-	oldest := min(last, 1)
-	b := append([]byte("Vim\x9fUnDo\xe5\x00\x03"), hash.Sum(nil)...)
-	for _, value := range []uint32{uint32(len(base)), 0, 0, 0, oldest, last, 0, last, last, last} {
-		b = binary.BigEndian.AppendUint32(b, value)
-	}
-	b = binary.BigEndian.AppendUint64(b, 0)
-	b = append(b, 0) // absent optional file metadata
-
-	for k := uint32(1); k <= last; k++ {
-		child := k + 1
-		if k == last {
-			child = 0
-		}
-
-		b = binary.BigEndian.AppendUint16(b, 0x5fd0)
-		for _, value := range []uint32{k - 1, child, 0, 0, k} {
-			b = binary.BigEndian.AppendUint32(b, value)
-		}
-		b = append(b, make([]byte, 12)...)
-		b = binary.BigEndian.AppendUint32(b, ^uint32(0)) // cursor virtual column -1
-		b = append(b, make([]byte, 2+26*12+32)...)
-		b = binary.BigEndian.AppendUint64(b, uint64(1_700_000_000+k))
-		b = append(b, 0) // absent optional change metadata
-
-		// Top 0 and bottom 0 span the whole buffer.
-		previous := states[k-1]
-		b = binary.BigEndian.AppendUint16(b, 0xf518)
-		for _, value := range []uint32{0, 0, 0, uint32(len(previous))} {
-			b = binary.BigEndian.AppendUint32(b, value)
-		}
-		for _, line := range previous {
-			b = binary.BigEndian.AppendUint32(b, uint32(len(line)))
-			b = append(b, line...)
-		}
-		b = append(b, 0x35, 0x81, 0x35, 0x81) // ends of the text and extmark lists
-	}
-
-	return append(b, 0xe7, 0xaa), base
+	return undo, f.Reference
 }
 
 // loaderOf returns a loader that decodes and validates the inputs afresh on

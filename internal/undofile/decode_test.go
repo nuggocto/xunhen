@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -157,6 +158,8 @@ func TestDecodeRejectsMalformedInput(t *testing.T) {
 	entry := firstEntry(original, header)
 	savedLength := int(binary.BigEndian.Uint32(original[47:51]))
 	options := 91 + savedLength
+	headerCount := 71 + savedLength
+	lastRecord, _ := decode(t, original).Record(2)
 
 	tests := []struct {
 		name   string
@@ -170,7 +173,12 @@ func TestDecodeRejectsMalformedInput(t *testing.T) {
 		{"zero base lines", replaceInt32(43, 0), undofile.Invalid, 43},
 		{"negative length", replaceInt32(47, -1), undofile.Invalid, 47},
 		{"oversized line", replaceInt32(47, 1<<30), undofile.Limit, 47},
-		{"oversized header count", replaceInt32(71+savedLength, 1<<30), undofile.Limit, int64(71 + savedLength)},
+		{"oversized header count", replaceInt32(headerCount, 1<<30), undofile.Limit, int64(headerCount)},
+		// The envelope's header count must match the records that follow:
+		// one too many reaches the end marker where a record should start,
+		// and one too few finds a record where the end marker should be.
+		{"header count above the records", replaceInt32(headerCount, 4), undofile.Invalid, int64(len(original) - 2)},
+		{"header count below the records", replaceInt32(headerCount, 2), undofile.Invalid, lastRecord.Info().Offset},
 		{"wrong header marker", replaceByte(header, 0), undofile.Invalid, int64(header)},
 		{"zero identity", replaceInt32(header+18, 0), undofile.Invalid, int64(header + 18)},
 		{"negative link", replaceInt32(header+2, -1), undofile.Invalid, int64(header + 2)},
@@ -200,6 +208,9 @@ func TestDecodeRejectsMalformedInput(t *testing.T) {
 			kind:   undofile.Invalid,
 			offset: int64(entry + 6),
 		},
+		{"negative entry top", replaceInt32(entry+2, -1), undofile.Invalid, int64(entry + 2)},
+		{"negative stored count", replaceInt32(entry+14, -1), undofile.Invalid, int64(entry + 14)},
+		{"negative entry line length", replaceInt32(entry+18, -1), undofile.Invalid, int64(entry + 18)},
 		{"oversized stored count", replaceInt32(entry+14, 1<<30), undofile.Limit, int64(entry + 14)},
 		{"NUL on wire", replaceByte(entry+22, 0), undofile.Invalid, int64(entry + 22)},
 		{"oversized entry line", replaceInt32(entry+18, 1<<30), undofile.Limit, int64(entry + 18)},
@@ -306,6 +317,114 @@ func TestDecodeLimits(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Every decoding ceiling must admit an input that needs exactly the limit
+// and reject one that needs a single unit more. The counts come from the
+// fixture itself, so a check that is off by one in either direction fails
+// here rather than on a file at the real limit.
+func TestDecodeLimitBoundaries(t *testing.T) {
+	t.Parallel()
+
+	for _, name := range []string{"linear", "move-lines"} {
+		data := fixtureBytes(t, name)
+		need := needs(t, data)
+
+		tests := []struct {
+			name  string
+			set   func(*limits.Limits, int)
+			need  int
+			field string
+		}{
+			{name: "input bytes", set: func(l *limits.Limits, n int) { l.InputBytes = int64(n) }, need: len(data), field: "undo input bytes"},
+			{name: "history nodes", set: func(l *limits.Limits, n int) { l.Nodes = n }, need: need.nodes, field: "history nodes"},
+			{name: "entries", set: func(l *limits.Limits, n int) { l.Entries = n }, need: need.entries, field: "entries"},
+			{name: "stored lines", set: func(l *limits.Limits, n int) { l.StoredLines = n }, need: need.storedLines, field: "stored lines"},
+			{name: "state lines", set: func(l *limits.Limits, n int) { l.StateLines = n }, need: need.stateLines, field: need.stateField},
+			{name: "line bytes", set: func(l *limits.Limits, n int) { l.LineBytes = n }, need: need.lineBytes, field: need.longestField},
+		}
+
+		for _, tt := range tests {
+			for _, delta := range []int{-1, 0, 1} {
+				if tt.need+delta < 1 {
+					continue // Zero is not a valid limit; there is nothing below one.
+				}
+				t.Run(fmt.Sprintf("%s/%s at need%+d", name, tt.name, delta), func(t *testing.T) {
+					t.Parallel()
+
+					lim := limits.Default()
+					tt.set(&lim, tt.need+delta)
+					file, err := undofile.Decode(t.Context(), "limit", bytes.NewReader(data), lim)
+
+					if delta >= 0 {
+						if err != nil || file == nil {
+							t.Fatalf("a limit of %d rejected an input needing %d: %v", tt.need+delta, tt.need, err)
+						}
+						return
+					}
+
+					var problem *undofile.InputError
+					if file != nil || !errors.As(err, &problem) || problem.Kind != undofile.Limit || problem.Field != tt.field {
+						t.Fatalf("file = %v; error = %#v; want a limit on %s", file, err, tt.field)
+					}
+				})
+			}
+		}
+	}
+}
+
+// requirement records what decoding a file needs of each limit, and the
+// field a limit one below the need reports: the first value, in decoding
+// order, that reaches the need.
+type requirement struct {
+	nodes, entries, storedLines, lineBytes int
+	stateLines                             int
+	longestField, stateField               string
+}
+
+func needs(t *testing.T, data []byte) requirement {
+	t.Helper()
+
+	file := decode(t, data)
+	meta, _ := file.Metadata()
+	saved := int(binary.BigEndian.Uint32(data[47:51]))
+	need := requirement{
+		nodes:      meta.HeaderCount,
+		lineBytes:  saved,
+		stateLines: int(meta.BaseLines),
+
+		longestField: "saved U line length",
+		stateField:   "base lines",
+	}
+
+	// A state-line limit bounds the reference and every line number an
+	// entry records; a bottom may be one past the last line.
+	state := func(value int, field string) {
+		if value > need.stateLines {
+			need.stateLines, need.stateField = value, field
+		}
+	}
+
+	for i := range meta.HeaderCount {
+		record, _ := file.Record(i)
+		need.entries += record.EntryCount() + record.ExtmarkCount()
+		for j := range record.EntryCount() {
+			entry, _ := record.Entry(j)
+			state(int(entry.Top), "entry top")
+			state(int(entry.Bottom)-1, "entry bottom")
+			state(int(entry.LineCountAtSave), "entry saved line count")
+
+			need.storedLines += entry.LineCount()
+			for k := range entry.LineCount() {
+				line, _ := entry.Line(k)
+				if len(line) > need.lineBytes {
+					need.lineBytes, need.longestField = len(line), "entry line length"
+				}
+			}
+		}
+	}
+
+	return need
 }
 
 func TestDecodeReaderFailures(t *testing.T) {

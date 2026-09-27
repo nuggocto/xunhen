@@ -198,22 +198,10 @@ they are prepared, so a state still on screen stays intact until the view
 lets go of it.
 
 The cache bounds only what it keeps. A comparison on screen also holds its two
-states and the diff's own copies of their line arrays, and a reconstruction
-needs its workspace while it runs. These are the peaks measured with the
-built binary on the development machine, Linux/amd64 with Go 1.27.1, read
-from `VmHWM`:
-
-| Input | Actions | Peak memory |
-| --- | --- | --- |
-| Two 4,000,000-line states, one a shuffle of the other | preview both, compare | 837 MiB |
-| The same | compare, then reload twice while comparing | 874 MiB |
-| 550,000 changes in a 223 MiB undo file | jump to both ends, reload, compare | 566 MiB |
-| Three 16 MiB lines | preview, scroll to the end, compare | 121 MiB |
-
-The shuffled comparison is the costliest input `diff` has, as for the
-command, and it stays within the 1 GiB target. These are measurements of
-these inputs, not a guarantee for every input.
-
-The same runs measured how long work takes to stop. Cancelling a load, a
-replay, a comparison, or the indexing of a 16 MiB line returned within 9 ms.
-Quitting while the shuffled comparison ran ended the process in about 20 ms.
+states and the diff's own copies of their line arrays, a reconstruction needs
+its workspace while it runs, and a reload holds the old history until the
+new one validates. [Performance](performance.md) accounts for each of these
+and records the measured peaks. The worst, comparing two shuffled
+4,000,000-line states and reloading twice, peaked at 923 MiB, within the 1 GiB
+target. The same measurements show every operation stopping within 25 ms of
+cancellation and the browser exiting within 40 ms while a comparison runs.

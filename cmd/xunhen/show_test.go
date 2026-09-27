@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/nuggocto/xunhen/internal/limits"
 )
@@ -372,5 +374,94 @@ func assertUnchanged(t *testing.T, path string, want []byte) {
 	got, err := os.ReadFile(path)
 	if err != nil || !bytes.Equal(got, want) {
 		t.Fatalf("%s changed: %v", path, err)
+	}
+}
+
+// TestCorpusThroughTheCommand runs every recorded state of every fixture
+// whose base the command supports through show, as a user would export it,
+// and compares the bytes with the state Neovim recorded. A state holding NUL
+// or invalid UTF-8 must be refused rather than exported. The replay tests
+// check the same states below the command; this checks base loading, raw
+// export, and the final-newline policy on top of them.
+func TestCorpusThroughTheCommand(t *testing.T) {
+	t.Parallel()
+
+	paths, err := filepath.Glob("../../testdata/undo/*/oracle.json")
+	if err != nil || len(paths) == 0 {
+		t.Fatalf("oracle inventory: %v", err)
+	}
+	unsupportedBase := map[string]bool{"crlf": true, "embedded-nul": true, "invalid-utf8": true, "latin1": true}
+
+	for _, path := range paths {
+		name := filepath.Base(filepath.Dir(path))
+		if unsupportedBase[name] {
+			continue // TestFixtureBaseLoading checks their refusal.
+		}
+
+		var oracle struct {
+			Loaded struct {
+				States []struct {
+					Seq      int
+					LinesHex []string `json:"lines_hex"`
+				}
+			}
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal(data, &oracle); err != nil {
+			t.Fatal(err)
+		}
+
+		seen := map[int]bool{}
+		for _, state := range oracle.Loaded.States {
+			if seen[state.Seq] {
+				continue // A state revisited in the oracle has one answer.
+			}
+			seen[state.Seq] = true
+
+			t.Run(fmt.Sprintf("%s/node %d", name, state.Seq), func(t *testing.T) {
+				t.Parallel()
+
+				var lines []string
+				for _, encoded := range state.LinesHex {
+					line, err := hex.DecodeString(encoded)
+					if err != nil {
+						t.Fatal(err)
+					}
+					lines = append(lines, string(line))
+				}
+				exportable := true
+				for _, line := range lines {
+					exportable = exportable && utf8.ValidString(line) && !strings.Contains(line, "\x00")
+				}
+
+				dir := filepath.Dir(path)
+				for _, policy := range []string{"include", "omit"} {
+					args := []string{
+						"show", "--undo", filepath.Join(dir, "history.undo"), "--base", filepath.Join(dir, "base.bin"),
+						"--node", strconv.Itoa(state.Seq), "--raw", "--final-newline=" + policy,
+					}
+					var out, diagnostic bytes.Buffer
+					status := run(t.Context(), args, &out, &diagnostic)
+
+					if !exportable {
+						if status != 1 || out.Len() != 0 || !strings.Contains(diagnostic.String(), "raw export unsupported") {
+							t.Fatalf("%s: status %d, stdout %q, stderr %q; want a refusal", policy, status, out.String(), diagnostic.String())
+						}
+						continue
+					}
+
+					want := strings.Join(lines, "\n")
+					if policy == "include" {
+						want += "\n"
+					}
+					if status != 0 || out.String() != want {
+						t.Fatalf("%s: status %d, stdout %q, stderr %q; want %q", policy, status, out.String(), diagnostic.String(), want)
+					}
+				}
+			})
+		}
 	}
 }

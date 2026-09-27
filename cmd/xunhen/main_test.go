@@ -81,6 +81,7 @@ func TestExecutable(t *testing.T) {
 		closedStdout bool
 		exact        bool // stdout must equal out rather than contain it
 		stdoutFile   bool // redirect stdout to a regular file
+		fullDisk     bool // stdout is /dev/full, which fails every write
 	}{
 		{name: "help", args: []string{"--help"}, out: "Usage:"},
 		{name: "stamped version", args: []string{"--version"}, out: "xunhen v0.0.0-test\n"},
@@ -121,6 +122,13 @@ func TestExecutable(t *testing.T) {
 			status:       1,
 			err:          "cannot write output",
 			closedStdout: true,
+		},
+		{
+			name:     "raw export to a full device",
+			args:     []string{"show", "--undo", undoPath, "--base", basePath, "--node", "2", "--raw", "--final-newline=include"},
+			status:   1,
+			err:      "cannot write output",
+			fullDisk: true,
 		},
 		{
 			name:       "raw export redirected to a file",
@@ -190,6 +198,15 @@ func TestExecutable(t *testing.T) {
 					t.Fatal(err)
 				}
 				command.Stdout = writer
+			}
+
+			if tt.fullDisk {
+				full, err := os.OpenFile("/dev/full", os.O_WRONLY, 0)
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { _ = full.Close() })
+				command.Stdout = full
 			}
 
 			var redirected *os.File

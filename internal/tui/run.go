@@ -47,6 +47,17 @@ func Run(ctx context.Context, config Config) (Outcome, error) {
 		return Outcome{}, err
 	}
 
+	// Bubble Tea writes everything it draws, recovered text included, to
+	// the file TEA_TRACE names, and TEA_DEBUG makes it write panic logs into
+	// the working directory. Abandoned edits can hold secrets, and the
+	// browser writes no files, so neither variable reaches Bubble Tea, which
+	// reads them from the process environment.
+	for _, name := range []string{"TEA_TRACE", "TEA_DEBUG"} {
+		if err := os.Unsetenv(name); err != nil {
+			return Outcome{}, err
+		}
+	}
+
 	e := &engine{load: config.Load, limits: config.Limits, cache: newCache(cacheBudget)}
 	w := newWorker(ctx, e.perform)
 	defer w.close()

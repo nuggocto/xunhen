@@ -72,6 +72,29 @@ func TestReadFileAcceptsOnlyRegularFiles(t *testing.T) {
 			}
 			return filepath.Join(dir, "link")
 		}},
+		{name: "no read permission", max: 3, wantErr: os.ErrPermission, setup: func(t *testing.T, dir string) string {
+			skipAsRoot(t)
+			path := filepath.Join(dir, "f")
+			write(t, path, "abc")
+			if err := os.Chmod(path, 0); err != nil {
+				t.Fatal(err)
+			}
+			return path
+		}},
+		{name: "no search permission on the directory", max: 3, wantErr: os.ErrPermission, setup: func(t *testing.T, dir string) string {
+			skipAsRoot(t)
+			sub := filepath.Join(dir, "sub")
+			if err := os.Mkdir(sub, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			write(t, filepath.Join(sub, "f"), "abc")
+			if err := os.Chmod(sub, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			// Restore access so the test directory can be removed.
+			t.Cleanup(func() { _ = os.Chmod(sub, 0o700) })
+			return filepath.Join(sub, "f")
+		}},
 	}
 
 	for _, tt := range tests {
@@ -82,6 +105,15 @@ func TestReadFileAcceptsOnlyRegularFiles(t *testing.T) {
 			_, err := input.ReadFile(t.Context(), path, "test", tt.max, readAll)
 			checkError(t, err, tt.wantErr)
 		})
+	}
+}
+
+// skipAsRoot skips a permission case under root, whom permission bits do
+// not restrict.
+func skipAsRoot(t *testing.T) {
+	t.Helper()
+	if os.Geteuid() == 0 {
+		t.Skip("permission bits do not restrict root")
 	}
 }
 

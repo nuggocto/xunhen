@@ -341,7 +341,9 @@ is not permission to build a whole huge tree into a string on every key press.
 These byte limits do not cap total Go RSS by themselves. Indexes,
 string/slice headers, retained backing storage, allocator behavior, and GC
 overhead come on top. The worst synthetic inputs measured at these ceilings
-peaked at 766 MiB; `PROJECT.md` lists the cases. Capacity claims beyond this
+peaked at 784 MiB for a command and 923 MiB for the browser;
+[the performance notes](performance.md) list the workloads and account for
+the memory. Capacity claims beyond this
 profile require their own producer fixtures and workload measurements.
 
 [revision]: https://github.com/neovim/neovim/tree/5885a30e1e1225349079e7a1c4a3848aa8e43e42

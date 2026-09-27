@@ -57,14 +57,19 @@ source as it was when the undo file was last written. Run
 - [Discovery](docs/discovery.md): how `--source` finds a history
 - [Diff](docs/diff.md): the comparison algorithm
 - [Browse](docs/browse.md): the terminal browser, its keys, and its memory use
+- [Compatibility](docs/compatibility.md): the supported producer and text cases
+- [Performance](docs/performance.md): workloads, measurements, and targets
+- [Verification](docs/verification.md): what each test guards and how to run the checks
 
 ## Development
 
 Use Go 1.27.1 on Linux/amd64. Tests need no Neovim.
 
 ```sh
-mise run check   # formatting, tests, vet, build
-mise run fuzz    # short fuzz runs
+mise run check      # formatting, tests, vet, build
+mise run race       # tests under the race detector
+mise run fuzz       # every fuzz target for about 10 seconds
+mise run vulncheck  # reachable known vulnerabilities
 ```
 
 Licensed under [Apache-2.0](LICENSE).

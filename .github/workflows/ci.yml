@@ -14,22 +14,26 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Every job builds the supported configuration with the toolchain go.mod
+# names and never touches the network for modules it has not verified.
+env:
+  GOENV: "off"
+  GOWORK: "off"
+  GOTOOLCHAIN: local
+  GOOS: linux
+  GOARCH: amd64
+  GOAMD64: v1
+  CGO_ENABLED: "0"
+  GOFLAGS: -mod=readonly
+
 jobs:
   check:
+    name: Correctness
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     defaults:
       run:
         shell: bash
-    env:
-      GOENV: "off"
-      GOWORK: "off"
-      GOTOOLCHAIN: local
-      GOOS: linux
-      GOARCH: amd64
-      GOAMD64: v1
-      CGO_ENABLED: "0"
-      GOFLAGS: -mod=readonly
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -52,20 +56,101 @@ jobs:
         run: |
           go mod tidy -diff
           go mod verify
+          go -C tools/vulncheck mod tidy -diff
+          go -C tools/vulncheck mod verify
+      # The tests include the Neovim oracle corpus, the terminal tests on a
+      # pseudo-terminal, and the fuzz targets' stored inputs.
       - name: Test
-        run: go test -count=1 -timeout=3m ./...
-      # The race detector needs cgo. The browser's worker, cache, and signal
-      # relay run beside Bubble Tea's goroutines, and the release build
-      # itself stays static.
-      - name: Test with the race detector
-        env:
-          CGO_ENABLED: "1"
-        run: go test -race -count=1 -timeout=5m ./...
+        run: go test -count=1 -timeout=5m ./...
       - name: Vet
         run: go vet ./...
       - name: Build
         run: go build -trimpath -o bin/xunhen ./cmd/xunhen
+      - name: Check the build is static
+        run: |
+          if ! file bin/xunhen | grep -q 'statically linked'; then
+            file bin/xunhen >&2
+            exit 1
+          fi
       - name: Check for generated changes
         run: |
           git diff --exit-code
           test -z "$(git ls-files --others --exclude-standard)"
+
+  race:
+    name: Race detector
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    # The race detector needs cgo and a C compiler to run the tests. The
+    # release build stays static; this job never produces it.
+    env:
+      CGO_ENABLED: "1"
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Check the C compiler
+        run: cc --version
+      - name: Test with the race detector
+        run: go test -race -count=1 -timeout=10m ./...
+
+  fuzz:
+    name: Fuzz smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Fuzz every target for about 10 seconds
+        run: tools/fuzz.sh smoke
+      # A failing input is small and synthetic: keep it for reproduction.
+      - name: Keep failing inputs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: fuzz-failures
+          path: internal/*/testdata/fuzz/
+          retention-days: 30
+          if-no-files-found: ignore
+
+  vulnerabilities:
+    name: Vulnerability check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      # tools/vulncheck pins govulncheck and its dependencies by checksum.
+      # It analyzes the source for the release configuration above and
+      # reports only vulnerable code the command can reach.
+      - name: Check reachable vulnerabilities
+        run: go -C tools/vulncheck tool govulncheck -C ../.. ./...

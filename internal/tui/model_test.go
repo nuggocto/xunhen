@@ -3,6 +3,7 @@ package tui
 import (
 	"errors"
 	"fmt"
+	"math"
 	"regexp"
 	"strings"
 	"testing"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/nuggocto/xunhen/internal/history"
 	"github.com/nuggocto/xunhen/internal/limits"
+	"github.com/nuggocto/xunhen/internal/synth"
 	"github.com/nuggocto/xunhen/internal/termtext"
 )
 
@@ -332,6 +334,9 @@ func TestReload(t *testing.T) {
 			if tt.reloaded && b.m.origin != b.m.session.tree.reference {
 				t.Fatal("the comparison origin did not return to the reference")
 			}
+			if !tt.reloaded && b.m.session.tree.ids[b.m.origin] != 2 {
+				t.Fatalf("a failed reload moved the comparison origin to node %d", b.m.session.tree.ids[b.m.origin])
+			}
 			if tt.noticeContent != "" && !strings.Contains(b.m.notice, tt.noticeContent) {
 				t.Fatalf("notice %q, want it to contain %q", b.m.notice, tt.noticeContent)
 			}
@@ -342,6 +347,13 @@ func TestReload(t *testing.T) {
 			}
 			if b.m.cmp != nil || b.m.doc != nil {
 				t.Fatal("an obsolete result reached the view")
+			}
+
+			// The installed history, old or new, reconstructs and shows its
+			// content again, although the reload released what was shown.
+			b.answer(q)
+			if b.m.cmp == nil || !b.shows("1 hunk") && !b.shows("identical") {
+				t.Fatalf("no comparison after the reload:\n%s", strings.Join(b.screen(), "\n"))
 			}
 		})
 	}
@@ -379,6 +391,37 @@ func TestEarlierLoadResultsAreDiscarded(t *testing.T) {
 					b.m.session != first, b.m.loading, b.m.notice)
 			}
 		})
+	}
+}
+
+// A failed reload's notice and the recorded times are drawn from untrusted
+// input too: a search error names candidate paths, and a damaged or hostile
+// history can record any 64-bit time.
+func TestUntrustedNoticesAndTimes(t *testing.T) {
+	t.Parallel()
+
+	extreme := synth.Chain([][]string{{"root"}, {"one"}, {"two"}})
+	extreme.Nodes[0].Time = math.MinInt64
+	extreme.Nodes[1].Time = math.MaxInt64
+	undo, err := extreme.Bytes()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	b := newBrowser(t, 120, 20)
+	b.loaded(load(t, loaderOf(undo, extreme.Reference)))
+	b.answer(b.work.last(t))
+	b.press("r")
+	b.m.Update(result{request: b.work.last(t), err: errors.New("no history for \x1b]0;PWNED\a/undo/\u202eevil\xff")})
+
+	screen := strings.Join(b.screen(), "\n")
+	if !strings.Contains(screen, "Reload failed") {
+		t.Fatalf("the failure is not shown:\n%s", screen)
+	}
+	for _, r := range screen {
+		if r != '\n' && r != ' ' && !unicode.IsGraphic(r) || r == utf8.RuneError {
+			t.Fatalf("screen holds %U:\n%q", r, screen)
+		}
 	}
 }
 
@@ -445,7 +488,7 @@ func TestUntrustedTextCannotControlTheTerminal(t *testing.T) {
 		"\x1b]52;c;dGVzdA==\a clipboard",
 		"\x1b[2J\x1b[H clear",
 		"\u009b31m C1 introducer",
-		"‮ reversed",
+		"\u202e reversed",
 		"\xff\xfe invalid",
 		"tab\there \r carriage",
 	}
@@ -595,25 +638,60 @@ func repeated(n int, key string) []string {
 // Once the terminal reports Unicode core mode, Bubble Tea measures whole
 // clusters, and an emoji presentation selector makes a symbol two cells wide.
 // The browser must measure the same way, or a line's end falls off the pane
-// where no sideways scrolling can reach it.
+// where no sideways scrolling can reach it. A state already on screen was
+// measured the old way; drawing it again would clip it wrongly, and
+// measuring it without its index rescans every line, which stalls the
+// browser for seconds on a line near the size limit.
 func TestClusterWidthsFollowTheRenderer(t *testing.T) {
 	t.Parallel()
 
-	b := newBrowser(t, 100, 20)
-	b.loaded(load(t, loaderOf(chain([][]string{{"x"}, {strings.Repeat("\u2764\ufe0f", 40) + "TAIL"}}))))
-	b.m.Update(tea.ModeReportMsg{Mode: ansi.ModeUnicodeCore, Value: ansi.ModeReset})
-
-	q := b.work.last(t)
-	if q.method != termtext.Clusters {
-		t.Fatal("the shown state was not prepared again for cluster widths")
+	tests := []struct {
+		name  string
+		shown bool // a state prepared with rune widths is on screen
+	}{
+		{name: "report before the first state"},
+		{name: "report while a state is shown", shown: true},
 	}
-	b.answer(q)
-	b.press("tab", "$")
 
-	for _, row := range b.screen() {
-		if strings.Contains(row, "\u2764") && (!strings.Contains(row, "TAIL") || ansi.StringWidth(row) > 100) {
-			t.Fatalf("by cluster widths, the row is %d cells and ends %q", ansi.StringWidth(row), row[max(0, len(row)-20):])
-		}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			b := newBrowser(t, 100, 20)
+			b.loaded(load(t, loaderOf(chain([][]string{{"x"}, {strings.Repeat("\u2764\ufe0f", 40) + "TAIL"}}))))
+			if tt.shown {
+				b.answer(b.work.last(t))
+				b.press("tab", "$")
+			}
+			b.m.Update(tea.ModeReportMsg{Mode: ansi.ModeUnicodeCore, Value: ansi.ModeReset})
+			if b.shows("\u2764") {
+				t.Fatalf("a state measured by rune widths is still drawn:\n%s", strings.Join(b.screen(), "\n"))
+			}
+
+			q := b.work.last(t)
+			if q.method != termtext.Clusters {
+				t.Fatal("the shown state was not prepared again for cluster widths")
+			}
+			b.answer(q)
+			if !tt.shown {
+				b.press("tab")
+			}
+			b.press("$")
+
+			found := false
+			for _, row := range b.screen() {
+				if !strings.Contains(row, "\u2764") {
+					continue
+				}
+				found = true
+				if !strings.Contains(row, "TAIL") || ansi.StringWidth(row) > 100 {
+					t.Fatalf("by cluster widths, the row is %d cells and ends %q", ansi.StringWidth(row), row[max(0, len(row)-20):])
+				}
+			}
+			if !found {
+				t.Fatalf("the state is not drawn:\n%s", strings.Join(b.screen(), "\n"))
+			}
+		})
 	}
 }
 

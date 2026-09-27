@@ -95,14 +95,20 @@ func TestWriteFailures(t *testing.T) {
 		name       string
 		args       []string
 		failStderr bool
-		other      string // stream that still works
-		want       string
+		// accepted is how many bytes the failing stdout takes before its
+		// first error, so output can fail partway through.
+		accepted int
+		other    string // stream that still works
+		want     string
 	}{
 		{name: "help to failing stdout", args: []string{"--help"}, other: "stderr", want: "cannot write output"},
 		{name: "inspection to failing stdout", args: []string{"inspect", "--undo", undo}, other: "stderr", want: "cannot write output"},
 		{name: "state to failing stdout", args: []string{"show", "--undo", undo, "--base", base, "--node", "2"}, other: "stderr", want: "cannot write output"},
 		{name: "diff to failing stdout", args: []string{"diff", "--undo", undo, "--base", base, "--from", "2", "--to", "3"}, other: "stderr", want: "cannot write output"},
 		{name: "diagnostic to failing stderr", args: []string{"unknown"}, failStderr: true, other: "stdout"},
+		{name: "raw state to failing stdout", args: []string{"show", "--undo", undo, "--base", base, "--node", "2", "--raw", "--final-newline=include"}, other: "stderr", want: "cannot write output"},
+		{name: "state failing partway", args: []string{"show", "--undo", undo, "--base", base, "--node", "2"}, accepted: 10, other: "stderr", want: "cannot write output"},
+		{name: "diff failing partway", args: []string{"diff", "--undo", undo, "--base", base, "--from", "2", "--to", "3"}, accepted: 20, other: "stderr", want: "cannot write output"},
 	}
 
 	for _, tt := range tests {
@@ -110,7 +116,7 @@ func TestWriteFailures(t *testing.T) {
 			t.Parallel()
 
 			var working bytes.Buffer
-			stdout, stderr := io.Writer(failedWriter{}), io.Writer(&working)
+			stdout, stderr := io.Writer(&shortWriter{room: tt.accepted}), io.Writer(&working)
 			if tt.failStderr {
 				stdout, stderr = &working, failedWriter{}
 			}
@@ -120,6 +126,9 @@ func TestWriteFailures(t *testing.T) {
 			}
 
 			assertOutput(t, tt.other, working.String(), tt.want)
+			if n := strings.Count(working.String(), "cannot write output"); tt.want != "" && n != 1 {
+				t.Fatalf("the failure was reported %d times: %q", n, working.String())
+			}
 		})
 	}
 }
@@ -132,6 +141,21 @@ func assertOutput(t *testing.T, stream, got, contains string) {
 	} else if !strings.Contains(got, contains) {
 		t.Errorf("%s = %q, want it to contain %q", stream, got, contains)
 	}
+}
+
+// shortWriter accepts room bytes and then fails every write, as a pipe or
+// disk that fills up would. A short write returns an error with it.
+type shortWriter struct {
+	room int
+}
+
+func (w *shortWriter) Write(p []byte) (int, error) {
+	n := min(len(p), w.room)
+	w.room -= n
+	if n < len(p) {
+		return n, errors.New("no space left")
+	}
+	return n, nil
 }
 
 type failedWriter struct{}

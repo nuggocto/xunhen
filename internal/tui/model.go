@@ -129,7 +129,11 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // report follows the renderer's width method. Bubble Tea switches to
 // cluster widths on these same replies to its Unicode core mode query. The
-// shown result was measured the old way, so it is prepared again.
+// shown result's column indexes follow the old method, and measuring its
+// lines without them would rescan each one on this goroutine, which takes
+// seconds for a line near the size limit. So the result leaves the screen
+// and the worker prepares it again. The scroll offsets stay for the new
+// result to settle, since the text is the same.
 func (m *model) report(msg tea.ModeReportMsg) {
 	if msg.Mode != ansi.ModeUnicodeCore {
 		return
@@ -144,9 +148,8 @@ func (m *model) report(msg tea.ModeReportMsg) {
 	}
 
 	m.method = termtext.Clusters
+	m.doc, m.cmp = nil, nil
 	m.request()
-	m.settle()
-	m.clampSideways()
 }
 
 // startLoad asks the worker for a new load. Displayed results are released
