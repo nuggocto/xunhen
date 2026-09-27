@@ -1,0 +1,57 @@
+name: Publish release
+
+# Publishes a draft release that release.yml staged, after checking its
+# assets again. It never builds anything: the published bytes are the ones
+# that were built, verified, and staged. The release environment should
+# require a maintainer's approval; docs/releasing.md describes the setup.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to publish, such as v1.0.0
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  publish:
+    name: Publish the staged release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: release
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check the staged release
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$*"; exit 1; }
+          [[ $TAG =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$ ]] || fail "$TAG is not a release tag"
+          version=${TAG#v}
+          [[ $(gh release view "$TAG" --json isDraft --jq .isDraft) == true ]] || fail "$TAG is not a draft release"
+
+          gh release download "$TAG" --dir staged
+          cd staged
+          expected=("provenance.json" "SHA256SUMS.txt" "xunhen_${version}_linux_amd64.tar.gz" "xunhen_${version}_source.tar.gz")
+          [[ $(find . -type f -printf '%f\n' | sort) == $(printf '%s\n' "${expected[@]}" | sort) ]] || fail "the draft holds other assets than the release's four"
+          sha256sum --check --strict SHA256SUMS.txt
+
+          # The provenance must describe this tag's commit and these bytes.
+          commit=$(gh api "repos/$GH_REPO/commits/$TAG" --jq .sha)
+          jq -e --arg tag "$TAG" --arg commit "$commit" \
+            '.tag == $tag and .snapshot == false and .source.commit == $commit' provenance.json >/dev/null ||
+            fail "provenance.json does not describe $TAG at $commit"
+          for archive in xunhen_*.tar.gz; do
+            want=$(jq -r --arg name "$archive" '.artifacts[] | select(.name == $name) | .sha256' provenance.json)
+            [[ $want == "$(sha256sum "$archive" | cut -d' ' -f1)" ]] || fail "provenance.json disagrees about $archive"
+          done
+      - name: Publish
+        run: gh release edit "$TAG" --draft=false

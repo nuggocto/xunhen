@@ -1,0 +1,331 @@
+name: Release
+
+# Pushing an annotated tag vX.Y.Z builds, checks, and stages a draft
+# release. Nothing here publishes it: publish.yml does that, by hand, from
+# the staged bytes. docs/releasing.md describes the whole sequence.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  GOENV: "off"
+  GOWORK: "off"
+  GOTOOLCHAIN: local
+
+jobs:
+  checks:
+    name: Required checks
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  validate:
+    name: Release identity
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.identity.outputs.tag }}
+      version: ${{ steps.identity.outputs.version }}
+      commit: ${{ steps.identity.outputs.commit }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # The tag must be annotated, name the commit this run built, equal v
+      # followed by VERSION, sit on the reviewed history of shrek, and have
+      # its release notes in CHANGELOG.md.
+      - name: Check the tag
+        id: identity
+        shell: bash
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$*"; exit 1; }
+          [[ $(git cat-file -t "refs/tags/$TAG") == tag ]] || fail "$TAG is not an annotated tag"
+          commit=$(git rev-parse "refs/tags/$TAG^{commit}")
+          [[ $commit == "$GITHUB_SHA" ]] || fail "$TAG names $commit, but this run built $GITHUB_SHA"
+          version=$(git show "$commit:VERSION")
+          [[ $TAG == "v$version" ]] || fail "$TAG does not match VERSION $version"
+          git merge-base --is-ancestor "$commit" origin/shrek || fail "$commit is not on shrek"
+          # grep -q would stop reading early and fail git show under pipefail.
+          grep -q "^## \[$version\] - " <(git show "$commit:CHANGELOG.md") || fail "CHANGELOG.md has no section for $version"
+          {
+            echo "tag=$TAG"
+            echo "version=$version"
+            echo "commit=$commit"
+          } >>"$GITHUB_OUTPUT"
+
+  archive:
+    name: Release archives
+    needs: [checks, validate]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      sums: ${{ steps.sums.outputs.sha256 }}
+    env:
+      TAG: ${{ needs.validate.outputs.tag }}
+      VERSION: ${{ needs.validate.outputs.version }}
+      COMMIT: ${{ needs.validate.outputs.commit }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      # Logs stay outside the checkout: reproduce.sh refuses a working tree
+      # with untracked files, since a release must be exactly its commit.
+      - name: Build the archives twice and compare them
+        run: |
+          set -o pipefail
+          mkdir -p "$RUNNER_TEMP/logs"
+          tools/reproduce.sh -tag "$TAG" .local/reproduce 2>&1 | tee "$RUNNER_TEMP/logs/reproduce.log"
+      - name: Verify the binary archive
+        run: |
+          set -o pipefail
+          dir=.local/reproduce/first
+          go run ./tools/verify -archive "$dir/xunhen_${VERSION}_linux_amd64.tar.gz" -sums "$dir/SHA256SUMS.txt" \
+            -version "$TAG" -commit "$COMMIT" -go "$(go env GOVERSION)" 2>&1 | tee "$RUNNER_TEMP/logs/verify.log"
+      - name: Record the checksum file's hash
+        id: sums
+        run: echo "sha256=$(sha256sum .local/reproduce/first/SHA256SUMS.txt | cut -d' ' -f1)" >>"$GITHUB_OUTPUT"
+      - name: Collect the artifacts
+        run: |
+          mkdir staged
+          cp .local/reproduce/first/* staged/
+          cp .local/reproduce/environment.txt "$RUNNER_TEMP/logs/"
+      - name: Keep the artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: archive
+          path: staged/
+          if-no-files-found: error
+      - name: Keep the logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: archive-logs
+          path: ${{ runner.temp }}/logs/
+          if-no-files-found: ignore
+
+  nix:
+    name: Nix package
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      # The NixOS check boots a virtual machine, which needs KVM.
+      - name: Allow access to KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install Nix
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24  # v31.11.1
+        with:
+          extra_nix_config: |
+            sandbox = true
+            system-features = nixos-test benchmark big-parallel kvm
+      # Every check: the package build with the whole test suite, tools/verify
+      # against the packaged executable, and a NixOS machine that installs it
+      # through environment.systemPackages.
+      - name: Check the flake
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p "$RUNNER_TEMP/logs"
+          nix flake check -L 2>&1 | tee "$RUNNER_TEMP/logs/flake-check.log"
+      - name: Record the package
+        shell: bash
+        run: |
+          set -o pipefail
+          nix build -L .#xunhen
+          logs="$RUNNER_TEMP/logs"
+          ./result/bin/xunhen --version | tee "$logs/version.txt"
+          nix path-info --closure-size --human-readable ./result | tee "$logs/path-info.txt"
+          sha256sum ./result/bin/xunhen | tee "$logs/executable.sha256"
+      # docs/install.md's user-profile steps: install, remove, roll the
+      # removal back, and remove again.
+      - name: Install, roll back, and remove in a user profile
+        shell: bash
+        run: |
+          set -euo pipefail
+          bin="$HOME/.nix-profile/bin/xunhen"
+          nix profile add .#xunhen
+          "$bin" --version | tee "$RUNNER_TEMP/logs/profile-version.txt"
+          nix profile remove xunhen
+          test ! -e "$bin"
+          nix profile rollback
+          "$bin" --version
+          nix profile remove xunhen
+          test ! -e "$bin"
+      - name: Keep the logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: nix-logs
+          path: ${{ runner.temp }}/logs/
+          if-no-files-found: ignore
+
+  # A clean Arch container builds the recipe from the exact source archive
+  # the release will publish, installs the package, verifies the installed
+  # executable, and removes it again. The maintainer's devtools clean-chroot
+  # build comes before publishing to the AUR; docs/releasing.md covers it.
+  arch:
+    name: Arch package
+    needs: [validate, archive]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    container:
+      image: archlinux@sha256:8745817f349ed24373341ddb92776209eeec3f0364ea48f7f645ac5800d30a50  # base-devel
+    env:
+      VERSION: ${{ needs.validate.outputs.version }}
+      COMMIT: ${{ needs.validate.outputs.commit }}
+      TAG: ${{ needs.validate.outputs.tag }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Install packaging tools
+        run: pacman -Syu --noconfirm --needed base-devel namcap git go
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Fetch the release archives
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          name: archive
+          path: dist
+      # makepkg refuses to run as root.
+      - name: Resolve the recipe
+        run: |
+          useradd --create-home builder
+          chown -R builder "$GITHUB_WORKSPACE"
+          mkdir -p logs
+          sudo -H -u builder packaging/aur/resolve.sh -version "$VERSION" -commit "$COMMIT" -maintainer "xunhen release workflow" \
+            -source "dist/xunhen_${VERSION}_source.tar.gz" -out build
+          cp "dist/xunhen_${VERSION}_source.tar.gz" build/
+          chown -R builder build
+          cp build/PKGBUILD build/.SRCINFO logs/
+      - name: Lint the recipe
+        run: namcap build/PKGBUILD | tee logs/namcap-pkgbuild.txt
+      - name: Build, test, and verify the package
+        run: |
+          set -o pipefail
+          cd build
+          sudo -H -u builder makepkg --cleanbuild --noconfirm 2>&1 | tee ../logs/makepkg.log
+      - name: Lint the package
+        run: namcap build/xunhen-[0-9]*.pkg.tar.zst | tee logs/namcap-package.txt
+      - name: Install and verify the package
+        run: |
+          set -o pipefail
+          pacman -U --noconfirm build/xunhen-[0-9]*.pkg.tar.zst
+          pacman -Qi xunhen | tee logs/package-info.txt
+          sha256sum /usr/bin/xunhen | tee logs/executable.sha256
+          sudo -H -u builder go run ./tools/verify -binary /usr/bin/xunhen -version "$TAG" -commit "$COMMIT" \
+            -go "$(go env GOVERSION)" 2>&1 | tee logs/verify-installed.log
+      # docs/install.md's upgrade and downgrade: a second package release
+      # of the same source, then back to the first, then removal.
+      - name: Upgrade, downgrade, and remove the package
+        run: |
+          set -euo pipefail
+          sudo -H -u builder packaging/aur/resolve.sh -version "$VERSION" -commit "$COMMIT" -maintainer "xunhen release workflow" \
+            -source "dist/xunhen_${VERSION}_source.tar.gz" -pkgrel 2 -out rebuild
+          cp "dist/xunhen_${VERSION}_source.tar.gz" rebuild/
+          chown -R builder rebuild
+          (cd rebuild && sudo -H -u builder makepkg --cleanbuild --nocheck --noconfirm)
+          first=$(find build -name 'xunhen-[0-9]*-1-x86_64.pkg.tar.zst')
+          second=$(find rebuild -name 'xunhen-[0-9]*-2-x86_64.pkg.tar.zst')
+          pacman -U --noconfirm "$second"
+          [[ $(pacman -Q xunhen) == *-2 ]]
+          pacman -U --noconfirm "$first"
+          [[ $(pacman -Q xunhen) == *-1 ]]
+          /usr/bin/xunhen --version
+          pacman -R --noconfirm xunhen
+          test ! -e /usr/bin/xunhen
+      - name: Keep the package and logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: arch-results
+          path: |
+            logs/
+            build/*.pkg.tar.zst
+          if-no-files-found: ignore
+
+  stage:
+    name: Stage the draft release
+    needs: [validate, archive, nix, arch]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # The only job with write access. It runs no repository code: it checks
+    # hashes, reads the release notes, and uploads the verified bytes.
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ needs.validate.outputs.tag }}
+      VERSION: ${{ needs.validate.outputs.version }}
+      SUMS: ${{ needs.archive.outputs.sums }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Fetch the verified archives
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          name: archive
+          path: dist
+      # The bytes must be the ones the archive job built and verified.
+      - name: Check the handoff
+        run: |
+          set -euo pipefail
+          [[ $(sha256sum dist/SHA256SUMS.txt | cut -d' ' -f1) == "$SUMS" ]]
+          (cd dist && sha256sum --check --strict SHA256SUMS.txt)
+          expected=("provenance.json" "SHA256SUMS.txt" "xunhen_${VERSION}_linux_amd64.tar.gz" "xunhen_${VERSION}_source.tar.gz")
+          [[ $(find dist -type f -printf '%f\n' | sort) == $(printf '%s\n' "${expected[@]}" | sort) ]]
+      - name: Read the release notes
+        run: |
+          set -euo pipefail
+          gh api "repos/$GH_REPO/contents/CHANGELOG.md?ref=$TAG" -H "Accept: application/vnd.github.raw" >CHANGELOG.md
+          awk -v v="$VERSION" '
+            $0 ~ "^## \\[" v "\\] - " { found = 1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md >notes.md
+          test -s notes.md
+      - name: Create the draft release
+        run: |
+          set -euo pipefail
+          prerelease=()
+          [[ $VERSION == *-* ]] && prerelease=(--prerelease)
+          gh release create "$TAG" --draft --verify-tag "${prerelease[@]}" --title "xunhen $VERSION" --notes-file notes.md \
+            dist/xunhen_*.tar.gz dist/SHA256SUMS.txt dist/provenance.json
+      - name: Check the uploaded bytes
+        run: |
+          set -euo pipefail
+          gh release download "$TAG" --dir uploaded
+          for file in dist/*; do cmp "$file" "uploaded/${file##*/}"; done

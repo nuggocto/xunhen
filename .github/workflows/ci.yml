@@ -6,6 +6,8 @@ on:
   pull_request:
     branches: [shrek]
   workflow_dispatch:
+  # The release workflow runs these same checks on the tagged commit.
+  workflow_call:
 
 permissions:
   contents: read
@@ -72,6 +74,17 @@ jobs:
             file bin/xunhen >&2
             exit 1
           fi
+      # The checks a release archive, the Nix package, and the Arch package
+      # pass, run against this build. A build from a checkout reports the
+      # pseudo-version Go derives from the commit, and that commit.
+      - name: Verify the executable
+        run: |
+          version=$(go version -m bin/xunhen | awk '$1 == "mod" { print $3 }')
+          go run ./tools/verify -binary bin/xunhen -version "$version" -commit "$(git rev-parse HEAD)" -go "$(go env GOVERSION)"
+      - name: Check third-party notices are current
+        env:
+          GOFLAGS: ""
+        run: tools/release.sh notices -check
       - name: Check for generated changes
         run: |
           git diff --exit-code
@@ -154,3 +167,54 @@ jobs:
       # reports only vulnerable code the command can reach.
       - name: Check reachable vulnerabilities
         run: go -C tools/vulncheck tool govulncheck -C ../.. ./...
+
+  release-build:
+    name: Reproducible release build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    # The release tool refuses a preset GOFLAGS and sets its own
+    # environment, so this job clears the workflow's.
+    env:
+      GOFLAGS: ""
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Build the snapshot artifacts twice and compare them
+        run: tools/reproduce.sh .local/reproduce
+      - name: Verify the binary archive
+        run: |
+          dir=.local/reproduce/first
+          version=$(jq -r .version "$dir/provenance.json")
+          go run ./tools/verify -archive "$dir/xunhen_${version}_linux_amd64.tar.gz" -sums "$dir/SHA256SUMS.txt" \
+            -version "v$version" -commit "$(git rev-parse HEAD)" -go "$(go env GOVERSION)"
+
+  nix:
+    name: Nix package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Nix
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24  # v31.11.1
+        with:
+          extra_nix_config: |
+            sandbox = true
+      # Building the package runs the whole test suite in the sandbox; the
+      # verify check then runs tools/verify against the packaged executable.
+      # A stale vendorHash fails here. The release workflow also boots the
+      # NixOS test machine.
+      - name: Build the package and verify it
+        run: nix build -L .#checks.x86_64-linux.verify
