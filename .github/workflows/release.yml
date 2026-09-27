@@ -246,10 +246,13 @@ jobs:
           # mkarchroot resolves its directory with readlink -f, which needs
           # the parent to exist.
           docker exec arch mkdir -p /chroot
-          docker exec arch mkarchroot -C /usr/share/devtools/pacman.conf.d/extra.conf \
+          # arch-nspawn names its systemd slice after SUDO_USER or USER,
+          # which docker exec leaves unset.
+          docker exec --env USER=root arch mkarchroot -C /usr/share/devtools/pacman.conf.d/extra.conf \
             -M /usr/share/devtools/makepkg.conf.d/x86_64.conf /chroot/root base-devel >logs/mkarchroot.log 2>&1
           # check() runs the test suite and tools/verify inside the chroot.
-          docker exec --workdir /work/build arch makechrootpkg -c -r /chroot -U builder 2>&1 | tee logs/makechrootpkg.log
+          docker exec --env USER=root --workdir /work/build arch makechrootpkg -c -r /chroot -U builder 2>&1 |
+            tee logs/makechrootpkg.log
       - name: Lint the package
         run: docker exec arch bash -c 'namcap build/xunhen-[0-9]*.pkg.tar.zst' | tee logs/namcap-package.txt
       - name: Install and verify the package
