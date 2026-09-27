@@ -144,8 +144,9 @@ Arch packaging environment. A passing generic Linux archive test does not
 verify either package-manager integration.
 
 Publish through GitHub Releases for `nuggocto/xunhen`. The initial asset is
-`xunhen_1.0.0_linux_amd64.tar.gz`, accompanied by `SHA256SUMS.txt`, release notes,
-and build/dependency provenance. Installation is extraction plus placing the
+`xunhen_1.0.0_linux_amd64.tar.gz`, accompanied by the source archive
+`xunhen_1.0.0_source.tar.gz` that the AUR recipe builds from, `SHA256SUMS.txt`,
+release notes, and `provenance.json` with the build and dependency provenance. Installation is extraction plus placing the
 binary on `PATH`, with a user-local option that does not require root. Document
 verification, upgrade, downgrade, and uninstall. Source installation uses the
 tagged `github.com/nuggocto/xunhen/cmd/xunhen` package.
@@ -906,54 +907,54 @@ candidate; a maintainer can reproduce its build.
 
 #### 8.1 Write the user and maintainer guides
 
-- [ ] Expand `README.md` with the purpose, retained-history limitation, supported Linux target, archive/NixOS/AUR installation, and a complete inspect/show/diff/browse walkthrough.
-- [ ] Document CLI flags, exit codes, TUI controls, raw export, discovery rules, resource-limit errors, and supported text formats.
-- [ ] Add troubleshooting for disabled or unwritten persistent history, pruned branches, missing/mismatched bases, unsupported formats, permissions, and terminal limitations.
-- [ ] Document how to build, run checks, regenerate isolated fixtures, add a decoder, and extend the compatibility matrix.
-- [ ] Add a changelog and compatibility policy: v1 CLI/output contracts are stable within v1, while internal Go packages remain private implementation details.
-- [ ] Document bug reporting with version/format/error context and minimal synthetic reproductions; explain why users should not upload real undo files by default.
+- [x] Expand `README.md` with the purpose, retained-history limitation, supported Linux target, archive/NixOS/AUR installation, and a complete inspect/show/diff/browse walkthrough.
+- [x] Document CLI flags, exit codes, TUI controls, raw export, discovery rules, resource-limit errors, and supported text formats.
+- [x] Add troubleshooting for disabled or unwritten persistent history, pruned branches, missing/mismatched bases, unsupported formats, permissions, and terminal limitations.
+- [x] Document how to build, run checks, regenerate isolated fixtures, add a decoder, and extend the compatibility matrix.
+- [x] Add a changelog and compatibility policy: v1 CLI/output contracts are stable within v1, while internal Go packages remain private implementation details.
+- [x] Document bug reporting with version/format/error context and minimal synthetic reproductions; explain why users should not upload real undo files by default.
 
 #### 8.2 Automate reproducible packaging
 
-- [ ] Add a small release build/package script using the selected Go toolchain and standard Linux archive/checksum tools; avoid a release framework unless it earns its dependency cost.
-- [ ] Build Linux/amd64 with `CGO_ENABLED=0`, `GOAMD64=v1`, and trimmed build paths; record release version, source commit, toolchain, and module/build settings.
-- [ ] Make release builds reject dirty source trees and uncontrolled local workspace overrides; avoid wall-clock timestamps in binaries and normalize archive metadata.
-- [ ] Build twice in separate clean directories with the same pinned inputs and compare binary/archive hashes; investigate differences before claiming reproducibility.
-- [ ] Inspect embedded build metadata and executable linkage; include the executable, README, license, and required dependency notices in the archive.
-- [ ] Generate archive checksums and a provenance/dependency manifest tied to the source commit and CI run. Document that checksums alone are not publisher authentication.
-- [ ] Validate archive paths and file permissions, and exclude fixture source content, local paths, credentials, and development-only artifacts.
+- [x] Add a small release build/package script using the selected Go toolchain and standard Linux archive/checksum tools; avoid a release framework unless it earns its dependency cost.
+- [x] Build Linux/amd64 with `CGO_ENABLED=0`, `GOAMD64=v1`, and trimmed build paths; record release version, source commit, toolchain, and module/build settings.
+- [x] Make release builds reject dirty source trees and uncontrolled local workspace overrides; avoid wall-clock timestamps in binaries and normalize archive metadata.
+- [x] Build twice in separate clean directories with the same pinned inputs and compare binary/archive hashes; investigate differences before claiming reproducibility.
+- [x] Inspect embedded build metadata and executable linkage; include the executable, README, license, and required dependency notices in the archive.
+- [x] Generate archive checksums and a provenance/dependency manifest tied to the source commit and CI run. Document that checksums alone are not publisher authentication.
+- [x] Validate archive paths and file permissions, and exclude fixture source content, local paths, credentials, and development-only artifacts.
 
 #### 8.3 Package for NixOS
 
-- [ ] Add `nix/package.nix` using `buildGoModule` for `cmd/xunhen`, with the application license, executable metadata, tests, and the supported `x86_64-linux` platform.
-- [ ] Add `flake.nix` and commit `flake.lock`; expose named/default packages and apps without claiming unsupported CPU architectures or operating systems.
-- [ ] Pin the nixpkgs input, select a compatible Go builder, and calculate the real Go dependency `vendorHash`; reject placeholder hashes and implicit toolchain downloads during the build.
-- [ ] Keep source inputs limited to intended tracked files, preserve required synthetic fixtures for checks, and inject truthful release metadata without depending on a `.git` directory in the sandbox.
+- [x] Add `nix/package.nix` using `buildGoModule` for `cmd/xunhen`, with the application license, executable metadata, tests, and the supported `x86_64-linux` platform.
+- [x] Add `flake.nix` and commit `flake.lock`; expose named/default packages and apps without claiming unsupported CPU architectures or operating systems.
+- [x] Pin the nixpkgs input, select a compatible Go builder, and calculate the real Go dependency `vendorHash`; reject placeholder hashes and implicit toolchain downloads during the build.
+- [x] Keep source inputs limited to intended tracked files, preserve required synthetic fixtures for checks, and inject truthful release metadata without depending on a `.git` directory in the sandbox.
 - [ ] Run `nix flake check` and the package build in sandboxed Linux CI; verify that the build/check steps do not depend on undeclared network access, personal configuration, or Neovim.
-- [ ] Document tagged-flake build/run commands, user-profile installation, a NixOS `environment.systemPackages` example, and pin/update/rollback/remove procedures.
+- [x] Document tagged-flake build/run commands, user-profile installation, a NixOS `environment.systemPackages` example, and pin/update/rollback/remove procedures.
 
 #### 8.4 Package for the AUR
 
-- [ ] Prepare a maintained source-package recipe template under `packaging/aur/`, targeting `xunhen` on `x86_64`, with version, `pkgrel`, license, homepage, and appropriate build/runtime dependencies.
-- [ ] Fetch a versioned source archive with a verified checksum, use the committed Go module versions/checksums, and keep the module cache within the package build environment.
-- [ ] Implement `prepare`, `build`, `check`, and `package` behavior as needed: compile `cmd/xunhen`, run ordinary tests without Neovim, and install the binary plus required documentation/license material through `$pkgdir`.
-- [ ] Follow the current Arch Go packaging guidance, document any pure-Go build-flag choices, and verify the package's actual linkage and declared runtime dependencies.
+- [x] Prepare a maintained source-package recipe template under `packaging/aur/`, targeting `xunhen` on `x86_64`, with version, `pkgrel`, license, homepage, and appropriate build/runtime dependencies.
+- [x] Fetch a versioned source archive with a verified checksum, use the committed Go module versions/checksums, and keep the module cache within the package build environment.
+- [x] Implement `prepare`, `build`, `check`, and `package` behavior as needed: compile `cmd/xunhen`, run ordinary tests without Neovim, and install the binary plus required documentation/license material through `$pkgdir`.
+- [x] Follow the current Arch Go packaging guidance, document any pure-Go build-flag choices, and verify the package's actual linkage and declared runtime dependencies.
 - [ ] Generate `.SRCINFO` with `makepkg --printsrcinfo` whenever the resolved recipe changes; lint the recipe/package and build with Arch devtools in a clean chroot.
-- [ ] Document cloning/reviewing the AUR recipe and using `makepkg`/`pacman` without requiring an AUR helper; include upgrade, downgrade, and removal.
-- [ ] Keep the AUR packaging Git repository and its required branch separate from the application repository; preserve `shrek` as the application default branch.
+- [x] Document cloning/reviewing the AUR recipe and using `makepkg`/`pacman` without requiring an AUR helper; include upgrade, downgrade, and removal.
+- [x] Keep the AUR packaging Git repository and its required branch separate from the application repository; preserve `shrek` as the application default branch.
 - [ ] Resolve source-archive checksums after the application tag exists, then publish the generated recipe; do not retag the application to embed a checksum of its own archive.
 
 #### 8.5 Prepare the release workflow
 
 - [ ] Separate read-only CI from the publish job; permit publication only for the intended version tag on a reviewed `shrek` commit after required checks pass.
-- [ ] Pin release actions/tools and keep release-write permissions confined to the publish job; do not execute untrusted pull-request code with that authority.
+- [x] Pin release actions/tools and keep release-write permissions confined to the publish job; do not execute untrusted pull-request code with that authority.
 - [ ] Stage built assets and metadata for verification before making the GitHub release public.
 - [ ] Publish the already-verified artifact bytes rather than rebuilding between verification and upload.
-- [ ] Write install, checksum verification, user-local `PATH`, upgrade, downgrade, and uninstall instructions with quoted paths and no root requirement for the normal path.
+- [x] Write install, checksum verification, user-local `PATH`, upgrade, downgrade, and uninstall instructions with quoted paths and no root requirement for the normal path.
 - [ ] Verify clean-checkout module installation and version reporting for both release archives and module-installed builds; test public tagged installs once candidate tags exist.
 - [ ] Add independent Nix build/check and Arch clean-chroot packaging jobs, with package-specific logs and provenance alongside the archive checks.
-- [ ] Define channel publication order: make the tested source tag/archive available, verify the tagged Nix outputs, resolve and validate the AUR recipe, then publish the AUR update.
-- [ ] Keep any AUR publishing credentials confined to the maintainer's release path and out of ordinary build or pull-request jobs.
+- [x] Define channel publication order: make the tested source tag/archive available, verify the tagged Nix outputs, resolve and validate the AUR recipe, then publish the AUR update.
+- [x] Keep any AUR publishing credentials confined to the maintainer's release path and out of ordinary build or pull-request jobs.
 
 - [ ] **Phase 8 complete:** the archive, Nix package, and AUR recipe have repeatable build/check paths, and the documentation covers installation and maintenance for each channel.
 
