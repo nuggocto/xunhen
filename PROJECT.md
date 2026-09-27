@@ -873,7 +873,7 @@ behavior are exercised across the complete application.
 
 - [x] Extend the corruption corpus across headers, record boundaries, references, counts, text lengths, replay ranges, and unsupported variants.
 - [x] Fuzz decoding, graph construction, and supported reconstruction using bounded inputs and explicit time/memory budgets.
-- [ ] Run a short reproducible fuzz smoke in CI and a longer bounded campaign before the release candidate; preserve actionable failing inputs.
+- [x] Run a short reproducible fuzz smoke in CI and a longer bounded campaign before the release candidate; preserve actionable failing inputs.
 - [x] Test terminal-control injection through source text, filenames, timestamps/metadata labels, and error messages.
 - [x] Test cancellation, read/output failures, limit boundaries, and failed reloads without damaging the previously valid UI state.
 - [x] Verify synthetic input content hashes before and after every command family; audit code for input-path writes and accidental private-content logging.
@@ -891,13 +891,13 @@ behavior are exercised across the complete application.
 - [x] Run the full oracle corpus for each producer/build and feature combination intended for v1 support.
 - [x] Publish explicit supported, rejected, and unverified text/format cases; avoid claiming support for every release sharing a version string.
 - [x] Check fixture provenance against the supported matrix and retain a regression for every discovered replay defect.
-- [ ] Run formatting, tests, vet, race tests, module verification, and a pinned `govulncheck` invocation in the appropriate CI jobs.
+- [x] Run formatting, tests, vet, race tests, module verification, and a pinned `govulncheck` invocation in the appropriate CI jobs.
 - [x] Review reachable dependency findings and dependency/license changes; update vulnerable build tools before packaging.
 
 Race-check jobs may need a C toolchain and cgo. That is a test-runner
 requirement, not permission to add a libc dependency to the release binary.
 
-- [ ] **Phase 7 complete:** the advertised corpus passes, no release-blocking correctness or resource issue remains, and compatibility/performance claims have recorded evidence.
+- [x] **Phase 7 complete:** the advertised corpus passes, no release-blocking correctness or resource issue remains, and compatibility/performance claims have recorded evidence.
 
 ### Phase 8 — User documentation and Linux release machinery
 
