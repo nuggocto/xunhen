@@ -4,13 +4,21 @@ name: Publish release
 # assets again. It never builds anything: the published bytes are the ones
 # that were built, verified, and staged. The release environment should
 # require a maintainer's approval; docs/releasing.md describes the setup.
+#
+# With rehearsal set, it runs every check against a rehearsal-COMMIT draft
+# and then deletes that draft instead of publishing it.
 on:
   workflow_dispatch:
     inputs:
-      tag:
-        description: Release tag to publish, such as v1.0.0
+      release:
+        description: Draft to publish, such as v1.0.0, or rehearsal-COMMIT with rehearsal set
         required: true
         type: string
+      rehearsal:
+        description: Check a rehearsal draft, then delete it instead of publishing
+        required: false
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -23,7 +31,8 @@ jobs:
     permissions:
       contents: write
     env:
-      TAG: ${{ inputs.tag }}
+      RELEASE: ${{ inputs.release }}
+      REHEARSAL: ${{ inputs.rehearsal }}
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
     defaults:
@@ -34,24 +43,40 @@ jobs:
         run: |
           set -euo pipefail
           fail() { echo "::error::$*"; exit 1; }
-          [[ $TAG =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$ ]] || fail "$TAG is not a release tag"
-          version=${TAG#v}
-          [[ $(gh release view "$TAG" --json isDraft --jq .isDraft) == true ]] || fail "$TAG is not a draft release"
+          if [[ $REHEARSAL == true ]]; then
+            [[ $RELEASE =~ ^rehearsal-[0-9a-f]{12}$ ]] || fail "$RELEASE is not a rehearsal draft"
+          else
+            [[ $RELEASE =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$ ]] || fail "$RELEASE is not a release tag"
+          fi
+          [[ $(gh release view "$RELEASE" --json isDraft --jq .isDraft) == true ]] || fail "$RELEASE is not a draft release"
 
-          gh release download "$TAG" --dir staged
+          gh release download "$RELEASE" --dir staged
           cd staged
+          version=$(jq -r .version provenance.json)
           expected=("provenance.json" "SHA256SUMS.txt" "xunhen_${version}_linux_amd64.tar.gz" "xunhen_${version}_source.tar.gz")
-          [[ $(find . -type f -printf '%f\n' | sort) == $(printf '%s\n' "${expected[@]}" | sort) ]] || fail "the draft holds other assets than the release's four"
+          [[ $(find . -type f -printf '%f\n' | sort) == $(printf '%s\n' "${expected[@]}" | sort) ]] ||
+            fail "the draft holds other assets than the release's four"
           sha256sum --check --strict SHA256SUMS.txt
 
-          # The provenance must describe this tag's commit and these bytes.
-          commit=$(gh api "repos/$GH_REPO/commits/$TAG" --jq .sha)
-          jq -e --arg tag "$TAG" --arg commit "$commit" \
-            '.tag == $tag and .snapshot == false and .source.commit == $commit' provenance.json >/dev/null ||
-            fail "provenance.json does not describe $TAG at $commit"
+          # The provenance must describe the draft's commit and these bytes.
+          if [[ $REHEARSAL == true ]]; then
+            commit=$(jq -r .source.commit provenance.json)
+            [[ $RELEASE == "rehearsal-${commit:0:12}" ]] || fail "provenance.json names $commit, not $RELEASE"
+            jq -e '.snapshot == true and (has("tag") | not)' provenance.json >/dev/null || fail "provenance.json is not a snapshot's"
+          else
+            [[ $version == "${RELEASE#v}" ]] || fail "provenance.json is for version $version, not $RELEASE"
+            commit=$(gh api "repos/$GH_REPO/commits/$RELEASE" --jq .sha)
+            jq -e --arg tag "$RELEASE" --arg commit "$commit" \
+              '.tag == $tag and .snapshot == false and .source.commit == $commit' provenance.json >/dev/null ||
+              fail "provenance.json does not describe $RELEASE at $commit"
+          fi
           for archive in xunhen_*.tar.gz; do
             want=$(jq -r --arg name "$archive" '.artifacts[] | select(.name == $name) | .sha256' provenance.json)
             [[ $want == "$(sha256sum "$archive" | cut -d' ' -f1)" ]] || fail "provenance.json disagrees about $archive"
           done
       - name: Publish
-        run: gh release edit "$TAG" --draft=false
+        if: ${{ !inputs.rehearsal }}
+        run: gh release edit "$RELEASE" --draft=false
+      - name: Delete the rehearsal draft
+        if: ${{ inputs.rehearsal }}
+        run: gh release delete "$RELEASE" --yes

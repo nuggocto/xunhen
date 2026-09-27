@@ -92,20 +92,36 @@ The tag starts `.github/workflows/release.yml`:
 | Job | What it checks or produces | Permissions |
 | --- | --- | --- |
 | Required checks | the whole CI workflow, run on the tagged commit | read |
-| Release identity | the tag is annotated, names the built commit, matches `VERSION`, is on `shrek`, and has a changelog section | read |
+| Release identity | `tools/release-identity.sh`: the tag is annotated, names the built commit, matches `VERSION`, is on `shrek`, and has a changelog section | read |
 | Release archives | `tools/reproduce.sh -tag`: two builds from fresh clones at different paths, compared byte for byte, then `tools/verify` on the archive | read |
 | Nix package | `nix flake check`: the sandboxed build and test suite, `tools/verify` on the packaged executable, and a NixOS machine that installs xunhen through `environment.systemPackages` | read |
-| Arch package | the recipe resolved against the exact source archive, linted with `namcap`, built with `makepkg` in a clean Arch container (its `check()` runs the tests and `tools/verify`), installed, verified again, and removed | read |
+| Arch package | the recipe resolved against the exact source archive, linted with `namcap`, built with devtools in a clean chroot (its `check()` runs the tests and `tools/verify`), installed and verified again, upgraded, downgraded, and removed | read |
 | Stage | rechecks every hash, reads the release notes, creates a **draft** release with the four assets, downloads them again, and compares | write |
 
 Each job keeps its logs as a workflow artifact: the reproduction and
 verification logs, `nix flake check` output and the package's hash and
 closure, and the Arch build log, `namcap` reports, and package.
 
+The Arch job runs devtools in a privileged container that shares the
+runner's cgroups, process namespace, and system bus, which
+`systemd-nspawn` needs. That is fine on a disposable CI runner and a bad
+idea on a workstation: on your own Arch machine, install `devtools` and run
+`extra-x86_64-build` directly instead.
+
+### Rehearsing
+
+Run **Release** by hand from `shrek` (Actions, Release, Run workflow) to
+rehearse every job on the current commit without a tag. The archives get
+the snapshot version `VERSION-snapshot.gCOMMIT`, and staging creates a draft
+named `rehearsal-COMMIT`. GitHub creates a draft's tag only when the draft
+is published, so a rehearsal adds no tag. Then run **Publish release** with
+that name and `rehearsal` set: it runs every publishing check against the
+draft and deletes it instead of publishing.
+
 ### Publishing
 
 Staging leaves a draft. Look at it, then run **Publish release**
-(`.github/workflows/publish.yml`) by hand with the tag. It downloads the
+(`.github/workflows/publish.yml`) by hand with the tag as `release`. It downloads the
 draft's assets, checks them against `SHA256SUMS.txt` and `provenance.json`
 and the tag's commit, and only then publishes the draft. It never builds
 anything, so the published bytes are the verified ones.

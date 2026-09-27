@@ -83,8 +83,9 @@ mise run measure        # the resource workloads
 CI runs these jobs on every push and pull request: correctness, which also
 runs `tools/verify` against the build and checks the notices; race; fuzz
 smoke; vulnerabilities; a reproducible release build, whose archive
-`tools/verify` then checks; and the Nix package, whose sandboxed build runs
-the whole suite before `tools/verify` checks the packaged executable. The
+`tools/verify` then checks; and `nix flake check`, whose sandboxed build
+runs the whole suite before `tools/verify` checks the packaged executable
+and a NixOS machine installs it. The
 extended fuzz campaign and the measurements run locally, before a release.
 [releasing.md](releasing.md) describes the release workflow's checks.
 

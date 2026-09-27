@@ -1,11 +1,14 @@
 name: Release
 
 # Pushing an annotated tag vX.Y.Z builds, checks, and stages a draft
-# release. Nothing here publishes it: publish.yml does that, by hand, from
-# the staged bytes. docs/releasing.md describes the whole sequence.
+# release. Running this workflow by hand on shrek rehearses the same steps
+# on a snapshot and stages a draft named rehearsal-COMMIT, which creates no
+# tag. Nothing here publishes: publish.yml does that, by hand, from the
+# staged bytes. docs/releasing.md describes the whole sequence.
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -34,36 +37,33 @@ jobs:
       tag: ${{ steps.identity.outputs.tag }}
       version: ${{ steps.identity.outputs.version }}
       commit: ${{ steps.identity.outputs.commit }}
+      release: ${{ steps.identity.outputs.release }}
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      # The tag must be annotated, name the commit this run built, equal v
-      # followed by VERSION, sit on the reviewed history of shrek, and have
-      # its release notes in CHANGELOG.md.
-      - name: Check the tag
+      # A tag must be annotated, name the built commit, match VERSION, be
+      # on shrek, and have its changelog section. A rehearsal must run on
+      # shrek itself.
+      - name: Check the release identity
         id: identity
         shell: bash
         env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          fail() { echo "::error::$*"; exit 1; }
-          [[ $(git cat-file -t "refs/tags/$TAG") == tag ]] || fail "$TAG is not an annotated tag"
-          commit=$(git rev-parse "refs/tags/$TAG^{commit}")
-          [[ $commit == "$GITHUB_SHA" ]] || fail "$TAG names $commit, but this run built $GITHUB_SHA"
-          version=$(git show "$commit:VERSION")
-          [[ $TAG == "v$version" ]] || fail "$TAG does not match VERSION $version"
-          git merge-base --is-ancestor "$commit" origin/shrek || fail "$commit is not on shrek"
-          # grep -q would stop reading early and fail git show under pipefail.
-          grep -q "^## \[$version\] - " <(git show "$commit:CHANGELOG.md") || fail "CHANGELOG.md has no section for $version"
-          {
-            echo "tag=$TAG"
-            echo "version=$version"
-            echo "commit=$commit"
-          } >>"$GITHUB_OUTPUT"
+          if [[ $EVENT == push ]]; then
+            tools/release-identity.sh tag "$TAG" "$GITHUB_SHA" | tee -a "$GITHUB_OUTPUT"
+          elif [[ $REF == refs/heads/shrek ]]; then
+            tools/release-identity.sh rehearsal "$GITHUB_SHA" | tee -a "$GITHUB_OUTPUT"
+          else
+            echo "::error::rehearse from shrek, not $REF"
+            exit 1
+          fi
 
   archive:
     name: Release archives
@@ -96,13 +96,15 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p "$RUNNER_TEMP/logs"
-          tools/reproduce.sh -tag "$TAG" .local/reproduce 2>&1 | tee "$RUNNER_TEMP/logs/reproduce.log"
+          tag=()
+          [[ -n $TAG ]] && tag=(-tag "$TAG")
+          tools/reproduce.sh "${tag[@]}" .local/reproduce 2>&1 | tee "$RUNNER_TEMP/logs/reproduce.log"
       - name: Verify the binary archive
         run: |
           set -o pipefail
           dir=.local/reproduce/first
           go run ./tools/verify -archive "$dir/xunhen_${VERSION}_linux_amd64.tar.gz" -sums "$dir/SHA256SUMS.txt" \
-            -version "$TAG" -commit "$COMMIT" -go "$(go env GOVERSION)" 2>&1 | tee "$RUNNER_TEMP/logs/verify.log"
+            -version "v$VERSION" -commit "$COMMIT" -go "$(go env GOVERSION)" 2>&1 | tee "$RUNNER_TEMP/logs/verify.log"
       - name: Record the checksum file's hash
         id: sums
         run: echo "sha256=$(sha256sum .local/reproduce/first/SHA256SUMS.txt | cut -d' ' -f1)" >>"$GITHUB_OUTPUT"
@@ -188,27 +190,24 @@ jobs:
           path: ${{ runner.temp }}/logs/
           if-no-files-found: ignore
 
-  # A clean Arch container builds the recipe from the exact source archive
-  # the release will publish, installs the package, verifies the installed
-  # executable, and removes it again. The maintainer's devtools clean-chroot
-  # build comes before publishing to the AUR; docs/releasing.md covers it.
+  # Arch devtools build the recipe in a clean chroot, from the exact source
+  # archive the release will publish. systemd-nspawn, which devtools uses,
+  # needs a privileged container that shares the runner's cgroups, process
+  # namespace, and system bus; the runner is a disposable machine. The
+  # same container then installs the package, verifies the installed
+  # executable, upgrades, downgrades, and removes it.
   arch:
     name: Arch package
     needs: [validate, archive]
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    container:
-      image: archlinux@sha256:8745817f349ed24373341ddb92776209eeec3f0364ea48f7f645ac5800d30a50  # base-devel
+    timeout-minutes: 40
     env:
       VERSION: ${{ needs.validate.outputs.version }}
       COMMIT: ${{ needs.validate.outputs.commit }}
-      TAG: ${{ needs.validate.outputs.tag }}
     defaults:
       run:
         shell: bash
     steps:
-      - name: Install packaging tools
-        run: pacman -Syu --noconfirm --needed base-devel namcap git go
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -218,53 +217,64 @@ jobs:
         with:
           name: archive
           path: dist
-      # makepkg refuses to run as root.
+      - name: Start an Arch container with devtools
+        run: |
+          mkdir -p logs
+          docker run --detach --name arch --privileged --pid=host --cgroupns=host \
+            --tmpfs /run --volume /sys/fs/cgroup:/sys/fs/cgroup:rw \
+            --volume /run/dbus/system_bus_socket:/run/dbus/system_bus_socket \
+            --volume /etc/machine-id:/etc/machine-id:ro \
+            --volume "$GITHUB_WORKSPACE:/work" --workdir /work \
+            archlinux@sha256:8745817f349ed24373341ddb92776209eeec3f0364ea48f7f645ac5800d30a50 sleep infinity
+          docker exec arch pacman -Syu --noconfirm --needed base-devel devtools namcap git go
+          docker exec arch pacman -Q devtools namcap go pacman | tee logs/tools.txt
+          docker exec arch useradd --create-home builder
+          # builder owns only the directories it builds in; the rest of the
+          # workspace stays the runner's, so later steps can write logs.
+          docker exec arch install -d -o builder -g builder build rebuild
       - name: Resolve the recipe
         run: |
-          useradd --create-home builder
-          chown -R builder "$GITHUB_WORKSPACE"
-          mkdir -p logs
-          sudo -H -u builder packaging/aur/resolve.sh -version "$VERSION" -commit "$COMMIT" -maintainer "xunhen release workflow" \
-            -source "dist/xunhen_${VERSION}_source.tar.gz" -out build
-          cp "dist/xunhen_${VERSION}_source.tar.gz" build/
-          chown -R builder build
+          docker exec --user builder arch packaging/aur/resolve.sh -version "$VERSION" -commit "$COMMIT" \
+            -maintainer "xunhen release workflow" -source "dist/xunhen_${VERSION}_source.tar.gz" -out build
+          docker exec --user builder arch cp "dist/xunhen_${VERSION}_source.tar.gz" build/
           cp build/PKGBUILD build/.SRCINFO logs/
       - name: Lint the recipe
-        run: namcap build/PKGBUILD | tee logs/namcap-pkgbuild.txt
-      - name: Build, test, and verify the package
+        run: docker exec arch namcap build/PKGBUILD | tee logs/namcap-pkgbuild.txt
+      - name: Build in a clean chroot
         run: |
           set -o pipefail
-          cd build
-          sudo -H -u builder makepkg --cleanbuild --noconfirm 2>&1 | tee ../logs/makepkg.log
+          docker exec arch mkarchroot -C /usr/share/devtools/pacman.conf.d/extra.conf \
+            -M /usr/share/devtools/makepkg.conf.d/x86_64.conf /chroot/root base-devel >logs/mkarchroot.log 2>&1
+          # check() runs the test suite and tools/verify inside the chroot.
+          docker exec --workdir /work/build arch makechrootpkg -c -r /chroot -U builder 2>&1 | tee logs/makechrootpkg.log
       - name: Lint the package
-        run: namcap build/xunhen-[0-9]*.pkg.tar.zst | tee logs/namcap-package.txt
+        run: docker exec arch bash -c 'namcap build/xunhen-[0-9]*.pkg.tar.zst' | tee logs/namcap-package.txt
       - name: Install and verify the package
         run: |
           set -o pipefail
-          pacman -U --noconfirm build/xunhen-[0-9]*.pkg.tar.zst
-          pacman -Qi xunhen | tee logs/package-info.txt
-          sha256sum /usr/bin/xunhen | tee logs/executable.sha256
-          sudo -H -u builder go run ./tools/verify -binary /usr/bin/xunhen -version "$TAG" -commit "$COMMIT" \
-            -go "$(go env GOVERSION)" 2>&1 | tee logs/verify-installed.log
+          docker exec arch bash -c 'pacman -U --noconfirm build/xunhen-[0-9]*.pkg.tar.zst'
+          docker exec arch pacman -Qi xunhen | tee logs/package-info.txt
+          docker exec arch sha256sum /usr/bin/xunhen | tee logs/executable.sha256
+          docker exec --user builder arch go run ./tools/verify -binary /usr/bin/xunhen -version "v$VERSION" \
+            -commit "$COMMIT" -go "$(docker exec arch go env GOVERSION)" 2>&1 | tee logs/verify-installed.log
       # docs/install.md's upgrade and downgrade: a second package release
       # of the same source, then back to the first, then removal.
       - name: Upgrade, downgrade, and remove the package
         run: |
           set -euo pipefail
-          sudo -H -u builder packaging/aur/resolve.sh -version "$VERSION" -commit "$COMMIT" -maintainer "xunhen release workflow" \
-            -source "dist/xunhen_${VERSION}_source.tar.gz" -pkgrel 2 -out rebuild
-          cp "dist/xunhen_${VERSION}_source.tar.gz" rebuild/
-          chown -R builder rebuild
-          (cd rebuild && sudo -H -u builder makepkg --cleanbuild --nocheck --noconfirm)
+          docker exec --user builder arch packaging/aur/resolve.sh -version "$VERSION" -commit "$COMMIT" \
+            -maintainer "xunhen release workflow" -source "dist/xunhen_${VERSION}_source.tar.gz" -pkgrel 2 -out rebuild
+          docker exec --user builder arch cp "dist/xunhen_${VERSION}_source.tar.gz" rebuild/
+          docker exec --user builder --workdir /work/rebuild arch makepkg --cleanbuild --nocheck --noconfirm >logs/rebuild.log 2>&1
           first=$(find build -name 'xunhen-[0-9]*-1-x86_64.pkg.tar.zst')
           second=$(find rebuild -name 'xunhen-[0-9]*-2-x86_64.pkg.tar.zst')
-          pacman -U --noconfirm "$second"
-          [[ $(pacman -Q xunhen) == *-2 ]]
-          pacman -U --noconfirm "$first"
-          [[ $(pacman -Q xunhen) == *-1 ]]
-          /usr/bin/xunhen --version
-          pacman -R --noconfirm xunhen
-          test ! -e /usr/bin/xunhen
+          docker exec arch pacman -U --noconfirm "$second"
+          [[ $(docker exec arch pacman -Q xunhen) == *-2 ]]
+          docker exec arch pacman -U --noconfirm "$first"
+          [[ $(docker exec arch pacman -Q xunhen) == *-1 ]]
+          docker exec arch /usr/bin/xunhen --version
+          docker exec arch pacman -R --noconfirm xunhen
+          docker exec arch test ! -e /usr/bin/xunhen
       - name: Keep the package and logs
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
@@ -280,13 +290,15 @@ jobs:
     needs: [validate, archive, nix, arch]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    # The only job with write access. It runs no repository code: it checks
-    # hashes, reads the release notes, and uploads the verified bytes.
+    # The only job with write access here. It runs no repository code: it
+    # checks hashes, reads the release notes, and uploads the verified bytes.
     permissions:
       contents: write
     env:
       TAG: ${{ needs.validate.outputs.tag }}
       VERSION: ${{ needs.validate.outputs.version }}
+      COMMIT: ${{ needs.validate.outputs.commit }}
+      RELEASE: ${{ needs.validate.outputs.release }}
       SUMS: ${{ needs.archive.outputs.sums }}
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
@@ -307,9 +319,13 @@ jobs:
           (cd dist && sha256sum --check --strict SHA256SUMS.txt)
           expected=("provenance.json" "SHA256SUMS.txt" "xunhen_${VERSION}_linux_amd64.tar.gz" "xunhen_${VERSION}_source.tar.gz")
           [[ $(find dist -type f -printf '%f\n' | sort) == $(printf '%s\n' "${expected[@]}" | sort) ]]
-      - name: Read the release notes
+      - name: Write the release notes
         run: |
           set -euo pipefail
+          if [[ -z $TAG ]]; then
+            printf 'Rehearsal of the release workflow for %s. Not a release.\n' "$COMMIT" >notes.md
+            exit 0
+          fi
           gh api "repos/$GH_REPO/contents/CHANGELOG.md?ref=$TAG" -H "Accept: application/vnd.github.raw" >CHANGELOG.md
           awk -v v="$VERSION" '
             $0 ~ "^## \\[" v "\\] - " { found = 1; next }
@@ -317,15 +333,22 @@ jobs:
             found { print }
           ' CHANGELOG.md >notes.md
           test -s notes.md
+      # A tagged release names its existing tag. A rehearsal's draft names
+      # the commit instead; GitHub creates a draft's tag only when it is
+      # published, and a rehearsal is never published.
       - name: Create the draft release
         run: |
           set -euo pipefail
-          prerelease=()
-          [[ $VERSION == *-* ]] && prerelease=(--prerelease)
-          gh release create "$TAG" --draft --verify-tag "${prerelease[@]}" --title "xunhen $VERSION" --notes-file notes.md \
-            dist/xunhen_*.tar.gz dist/SHA256SUMS.txt dist/provenance.json
+          options=(--draft --title "xunhen $VERSION" --notes-file notes.md)
+          if [[ -n $TAG ]]; then
+            options+=(--verify-tag)
+          else
+            options+=(--target "$COMMIT")
+          fi
+          [[ $VERSION == *-* ]] && options+=(--prerelease)
+          gh release create "$RELEASE" "${options[@]}" dist/xunhen_*.tar.gz dist/SHA256SUMS.txt dist/provenance.json
       - name: Check the uploaded bytes
         run: |
           set -euo pipefail
-          gh release download "$TAG" --dir uploaded
+          gh release download "$RELEASE" --dir uploaded
           for file in dist/*; do cmp "$file" "uploaded/${file##*/}"; done
