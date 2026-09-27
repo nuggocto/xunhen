@@ -97,6 +97,7 @@ func TestExportInstructions(t *testing.T) {
 		{name: "explicit inputs", inputs: []string{"--undo", "history.undo", "--base", "my retry.go"}},
 		{name: "unusual paths", inputs: []string{"--undo", "it's \x1b.undo", "--base", "\u5c0b\u75d5.go"}},
 		{name: "a run of combining marks", inputs: []string{"--undo", "history.undo", "--base", "a" + strings.Repeat("\u0301", 16) + ".go"}},
+		{name: "invalid UTF-8", inputs: []string{"--undo", "hist\xffory.undo", "--base", "retry.go"}},
 		{name: "the most undo directories", inputs: many},
 	}
 	methods := []struct {
