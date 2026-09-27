@@ -55,6 +55,18 @@ description = "Build bin/xunhen"
 env = { CGO_ENABLED = "0" }
 run = "go build -trimpath -o bin/xunhen ./cmd/xunhen"
 
+[tasks.notices]
+description = "Fail if THIRD_PARTY_NOTICES.txt no longer matches the modules linked into xunhen"
+run = "tools/release.sh notices -check"
+
+[tasks.reproduce]
+description = "Build the release archives twice from clean clones of HEAD and compare them"
+run = "tools/reproduce.sh"
+
+[tasks.release]
+description = "Build the release artifacts for HEAD into dist/ (pass -tag vX.Y.Z for a release)"
+run = "tools/release.sh build"
+
 [tasks.check]
 description = "Check formatting and run tests, vet, and build"
 depends = ["fmt-check", "test", "vet", "build"]
