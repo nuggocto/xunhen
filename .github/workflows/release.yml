@@ -243,6 +243,9 @@ jobs:
       - name: Build in a clean chroot
         run: |
           set -o pipefail
+          # mkarchroot resolves its directory with readlink -f, which needs
+          # the parent to exist.
+          docker exec arch mkdir -p /chroot
           docker exec arch mkarchroot -C /usr/share/devtools/pacman.conf.d/extra.conf \
             -M /usr/share/devtools/makepkg.conf.d/x86_64.conf /chroot/root base-devel >logs/mkarchroot.log 2>&1
           # check() runs the test suite and tools/verify inside the chroot.
