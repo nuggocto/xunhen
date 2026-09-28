@@ -1062,34 +1062,6 @@ website, and a clear path for maintaining both.
 - [ ] Check `https://xunhen.org` and its Changelog tab after deployment: read the complete categorized notes on-site, test release anchors and installation links, and confirm the version, date, limitations, and HTTPS behavior.
 - [ ] Keep prior version assets available for downgrade; never silently replace a published binary with different bytes.
 
-#### 11.3 Hand off to maintenance
-
-- [ ] Document patch-release criteria, supported Go/dependency update checks, and how a new Neovim producer enters the compatibility matrix.
-- [ ] Define regression triage: reproduce safely, add a minimal fixture, fix the cause, and rerun relevant release gates before a patch release.
-- [ ] Document the response to a broken release: describe the defect, recommend a known-good version when one exists, and publish a new patch version rather than retagging.
-- [ ] Review the issue-report template and ensure version, platform, format context, and synthetic reproduction are enough to start diagnosis.
-- [ ] Keep product roadmap checkboxes here; use release notes to explain shipped behavior rather than internal planning labels.
-- [ ] Document coordinated updates for all distribution channels: application version, Nix inputs/dependency hash when needed, AUR `pkgver`/`pkgrel`, checksums, `.SRCINFO`, and installation smoke tests.
-- [ ] Assign responsibility for AUR out-of-date reports and Nix build regressions; distinguish packaging-only fixes from application patch releases without moving published tags.
-- [ ] Include frontend release-content updates, Astro/Node dependency maintenance, Pages build failures, domain renewal, and rollback in the maintenance instructions.
-
-- [ ] **Phase 11 complete:** v1.0.0 is available and verified through all distribution channels, `xunhen.org` publishes the matching installation links/changelog, and maintenance procedures cover the application and site.
-
-## References
-
-- [Neovim undo help](https://neovim.io/doc/user/undo.html): documented persistence and branching behavior.
-- [Neovim options](https://neovim.io/doc/user/options.html): `'undofile'`, `'undodir'`, and `'undolevels'`.
-- [Neovim source](https://github.com/neovim/neovim): reader, writer, replay implementation, and tests; use pinned producer revisions for compatibility work.
-- [Bubble Tea](https://github.com/charmbracelet/bubbletea): TUI framework; select a release and its matching API documentation at implementation time.
-- [Go command](https://pkg.go.dev/cmd/go): build settings, module installs, embedded build information, and verification commands.
-- [Nixpkgs Go packaging](https://nixos.org/manual/nixpkgs/stable/#sec-language-go): `buildGoModule`, dependency hashes, and Go package checks.
-- [NixOS manual](https://nixos.org/manual/nixos/stable/): declarative package installation and system configuration.
-- [AUR submission guidelines](https://wiki.archlinux.org/title/AUR_submission_guidelines): package naming, ownership, `.SRCINFO`, publication, and maintenance.
-- [Arch Go packaging guidelines](https://dev.archlinux.org/package-guidelines/go/): module handling, build flags, checks, and package installation.
-- [Astro configuration](https://docs.astro.build/en/reference/configuration-reference/): static output and canonical site settings.
-- [Astro on Cloudflare Pages](https://developers.cloudflare.com/pages/framework-guides/deploy-an-astro-site/): Pages build/deployment settings; this project uses static output.
-- [Pages custom domains](https://developers.cloudflare.com/pages/configuration/custom-domains/): apex-domain prerequisites, domain association, and HTTPS troubleshooting.
-
 ## After v1
 
 Phases 12 through 15 are candidate follow-ups, not conditions for releasing
