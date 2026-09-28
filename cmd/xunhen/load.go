@@ -101,26 +101,54 @@ func splitUndoDirs(value string) []string {
 }
 
 // parseArgs parses flags that may come before and after positional
-// arguments, and returns the positional ones. A FlagSet stops at the first
-// argument that is not a flag, so parsing resumes after each one; after
-// "--", every argument is positional. Each round consumes at least one
-// argument, so the loop ends.
+// arguments, and returns the positional ones. It splits the arguments
+// itself, because a FlagSet stops at the first argument that is not a flag.
+// A flag without "=" that takes a value consumes the next argument, even
+// one that looks like a flag or is "--"; "--" in a flag's position ends
+// the flags, and every argument after it is positional. So
+// "--undo-dir -- FILE" names the directory "--" and a FILE, as it would for
+// the flag package alone.
 func parseArgs(flags *flag.FlagSet, args []string) ([]string, error) {
-	var positional []string
-	for {
-		if err := parseFlags(flags, args); err != nil {
-			return nil, err
+	var named, positional []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "--":
+			positional = append(positional, args[i+1:]...)
+			i = len(args)
+		case len(arg) < 2 || arg[0] != '-':
+			// "-" alone is a positional argument, as for the flag package.
+			positional = append(positional, arg)
+		default:
+			named = append(named, arg)
+			name, _, attached := strings.Cut(strings.TrimLeft(arg, "-"), "=")
+			if !attached && takesValue(flags, name) && i+1 < len(args) {
+				i++
+				named = append(named, args[i])
+			}
 		}
-		rest := flags.Args()
-		if len(rest) == 0 {
-			return positional, nil
-		}
-		if consumed := len(args) - len(rest); consumed > 0 && args[consumed-1] == "--" {
-			return append(positional, rest...), nil
-		}
-		positional = append(positional, rest[0])
-		args = rest[1:]
 	}
+
+	if err := parseFlags(flags, named); err != nil {
+		return nil, err
+	}
+	if flags.NArg() != 0 {
+		// Every positional argument was set aside above; the flag package
+		// leaves one only for input it cannot read as flags.
+		return nil, fmt.Errorf("unexpected argument %q", flags.Arg(0))
+	}
+	return positional, nil
+}
+
+// takesValue reports whether a defined flag needs a value. Unknown flags
+// take none, so parseFlags reports them by name.
+func takesValue(flags *flag.FlagSet, name string) bool {
+	f := flags.Lookup(name)
+	if f == nil {
+		return false
+	}
+	boolean, ok := f.Value.(interface{ IsBoolFlag() bool })
+	return !ok || !boolean.IsBoolFlag()
 }
 
 // usage is the error for an invocation that names no usable input form.

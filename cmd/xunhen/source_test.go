@@ -44,6 +44,12 @@ func TestInputModeRules(t *testing.T) {
 		// After --, an argument that looks like a flag is the FILE, so the
 		// command gets as far as searching the missing directory.
 		{name: "file after --", args: []string{"inspect", "--undo-dir", "d", "--", "-s"}, status: exitFailure, diagnostic: "could not search"},
+		// A flag's value may itself be "--": here it names the directory,
+		// so the flags after the source still count as flags, and show
+		// gets as far as reading the missing source instead of a usage
+		// error.
+		{name: "directory named --", args: []string{"show", "--undo-dir", "--", "s", "--node", "1"}, status: exitFailure, diagnostic: "open source file s:"},
+		{name: "separator after a directory named --", args: []string{"show", "--undo-dir", "--", "--node", "1", "--", "-s"}, status: exitFailure, diagnostic: "open source file -s:"},
 		{name: "directory without a source", args: []string{"show", "--undo", "u", "--base", "b", "--undo-dir", "d", "--node", "1"}, status: exitUsage, diagnostic: "requires --source"},
 		{name: "repeated source", args: []string{"inspect", "--source", "s", "--source", "t", "--undo-dir", "d"}, status: exitUsage, diagnostic: "only once"},
 		{name: "empty source", args: []string{"inspect", "--source=", "--undo-dir", "d"}, status: exitUsage, diagnostic: "requires a path"},
