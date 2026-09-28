@@ -312,7 +312,10 @@ func failedReload(t *testing.T, term *terminal, dir, rewrite string) {
 	}
 	mark := term.mark()
 	term.write(t, "r")
-	term.waitText(t, mark, "Reload failed")
+	// The status row may first read "Reloading and validating the
+	// inputs...", and the renderer then rewrites only the cells after the
+	// shared " Reload", so wait for words it always writes whole.
+	term.waitText(t, mark, "still showing the earlier load")
 	mark = term.mark()
 	term.write(t, "k")
 	term.waitText(t, mark, "abandoned")
