@@ -200,7 +200,9 @@ BSD-style licensed:
 the Go distribution's. `tools/release.sh notices` generates it from the
 modules linked into the built executable, so a module only a test or tool
 imports never appears; CI and every release build fail when it is stale.
-The release archive and the Arch package install it beside `LICENSE`.
+The release archive, the Arch package, and the Nix package, under
+`share/doc/xunhen`, install it beside `LICENSE`; the Nix checks fail if
+either file is missing.
 `go mod verify` checks every module against `go.sum` in CI.
 
 `tools/vulncheck` is a separate module that pins govulncheck v1.8.0 and its

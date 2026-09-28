@@ -16,14 +16,16 @@ buildGo127Module {
   pname = "xunhen";
   inherit version;
 
-  # Only what the build and its tests read. The fixtures stay in, because
-  # the tests compare every recovery with them.
+  # Only what the build, its tests, and the installed notices need. The
+  # fixtures stay in, because the tests compare every recovery with them.
   src = lib.fileset.toSource {
     root = ../.;
     fileset = lib.fileset.unions [
       ../go.mod
       ../go.sum
       ../VERSION
+      ../LICENSE
+      ../THIRD_PARTY_NOTICES.txt
       ../cmd
       ../internal
       ../testdata
@@ -58,6 +60,13 @@ buildGo127Module {
     runHook preCheck
     go test -count=1 -timeout=10m ./...
     runHook postCheck
+  '';
+
+  # The executable carries the Go runtime and third-party modules, whose
+  # licenses ask for their notices to travel with it; meta.license alone
+  # installs nothing.
+  postInstall = ''
+    install -Dm644 LICENSE THIRD_PARTY_NOTICES.txt -t $out/share/doc/xunhen
   '';
 
   meta = {

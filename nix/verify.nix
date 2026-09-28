@@ -24,6 +24,10 @@ runCommand "xunhen-verify-${xunhen.version}" { nativeBuildInputs = [ verifier ];
   # stdenv already sets pipefail; say so here, since tee must not hide a
   # failed verification.
   set -o pipefail
+  # The license and notices must be installed with the executable.
+  for notice in LICENSE THIRD_PARTY_NOTICES.txt; do
+    cmp ${xunhen}/share/doc/xunhen/$notice ${xunhen.src}/$notice
+  done
   verify \
     -binary ${lib.getExe xunhen} \
     -corpus ${xunhen.src}/testdata/undo \
