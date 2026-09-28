@@ -210,3 +210,26 @@ func TestVerifierJudgesArchives(t *testing.T) {
 		})
 	}
 }
+
+// The verifier refuses an archive larger than its limit before reading it.
+// A sparse file makes the size without the memory or disk it describes.
+func TestVerifierRefusesOversizedArchives(t *testing.T) {
+	t.Parallel()
+
+	c := testConfig("")
+	c.binary, c.archive = "", filepath.Join(t.TempDir(), layout.BinaryArchive(testVersion)+".tar.gz")
+	f, err := os.Create(c.archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Truncate(maxArchiveBytes + 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := checkArchive(c); err == nil || !strings.Contains(err.Error(), "larger than") {
+		t.Fatalf("checkArchive returned %v, want a refusal of the size", err)
+	}
+}

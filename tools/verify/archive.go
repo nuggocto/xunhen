@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -25,12 +26,9 @@ const maxArchiveBytes = 128 << 20
 // documented files with the documented modes, under a top directory named
 // for the expected version.
 func checkArchive(c config) (string, string, error) {
-	data, err := os.ReadFile(c.archive)
+	data, err := readArchive(c.archive)
 	if err != nil {
 		return "", "", err
-	}
-	if len(data) > maxArchiveBytes {
-		return "", "", fmt.Errorf("%s is larger than %d bytes", c.archive, maxArchiveBytes)
 	}
 	digest := sha256.Sum256(data)
 	name := filepath.Base(c.archive)
@@ -110,4 +108,34 @@ func checkSum(path, name, sum string) error {
 		return err
 	}
 	return fmt.Errorf("%s does not list %s", filepath.Base(path), name)
+}
+
+// readArchive reads a regular file of at most maxArchiveBytes. It checks
+// the size before reading and reads through a limit, so a larger file, or
+// one that grows while it is read, never gets past the limit into memory.
+func readArchive(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+
+	info, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("%s is not a regular file", path)
+	}
+	if info.Size() > maxArchiveBytes {
+		return nil, fmt.Errorf("%s is larger than %d bytes", path, maxArchiveBytes)
+	}
+	data, err := io.ReadAll(io.LimitReader(f, maxArchiveBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > maxArchiveBytes {
+		return nil, fmt.Errorf("%s grew past %d bytes while it was read", path, maxArchiveBytes)
+	}
+	return data, nil
 }
