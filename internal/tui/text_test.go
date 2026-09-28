@@ -3,7 +3,9 @@ package tui
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -75,8 +77,8 @@ func TestShellQuoting(t *testing.T) {
 // wide that it needs thousands of columns. The command is read back from
 // the drawn screen, under both width methods, because drawing escapes some
 // printable text, and an escape inside single quotes names other bytes.
-// Running those rows through bash, with printf in place of xunhen, checks
-// what a user would copy.
+// Running those rows through bash, redirection included, with a function in
+// place of xunhen that writes its arguments, checks what a user would copy.
 func TestExportInstructions(t *testing.T) {
 	t.Parallel()
 
@@ -126,8 +128,8 @@ func TestExportInstructions(t *testing.T) {
 				for _, row := range b.screen() {
 					rows = append(rows, strings.TrimRight(row, " "))
 				}
-				first := slices.Index(rows, "  xunhen show \\")
-				last := slices.IndexFunc(rows, func(row string) bool { return strings.HasSuffix(row, "> recovered.go") })
+				first := slices.Index(rows, "  (set -C; xunhen show \\")
+				last := slices.IndexFunc(rows, func(row string) bool { return strings.HasSuffix(row, "> recovered.go)") })
 				if first < 0 || last < first {
 					t.Fatalf("no command on the screen:\n%s", strings.Join(rows, "\n"))
 				}
@@ -137,22 +139,75 @@ func TestExportInstructions(t *testing.T) {
 					}
 				}
 
-				script := strings.Join(rows[first:last+1], "\n")
-				script = strings.Replace(script, "xunhen show", "printf '%s\\0'", 1)
-				script = strings.TrimSuffix(script, " > recovered.go")
-
-				ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-				defer cancel()
-				out, err := exec.CommandContext(ctx, bash, "-c", script).Output()
+				dir := t.TempDir()
+				runDrawn(t, bash, dir, strings.Join(rows[first:last+1], "\n"))
+				out, err := os.ReadFile(filepath.Join(dir, "recovered.go"))
 				if err != nil {
-					t.Fatalf("bash failed on the drawn command: %v\n%s", err, script)
+					t.Fatal(err)
 				}
 
-				want := append(slices.Clone(tt.inputs), "--node", "3", "--raw", "--final-newline=include")
+				want := slices.Concat([]string{"show"}, tt.inputs, []string{"--node", "3", "--raw", "--final-newline=include"})
 				if got := strings.Split(strings.TrimSuffix(string(out), "\x00"), "\x00"); !slices.Equal(got, want) {
-					t.Fatalf("bash received %q, want %q", got, want)
+					t.Fatalf("xunhen received %q, want %q", got, want)
 				}
 			})
 		}
+	}
+}
+
+// runDrawn runs the export command as drawn, in dir, with xunhen defined as
+// a bash function that writes its arguments, NUL-separated. A function
+// rather than a script avoids executing a file the test just wrote.
+func runDrawn(t *testing.T, bash, dir, command string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, bash, "-c", "xunhen() { printf '%s\\0' \"$@\"; }\n"+command)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("bash failed on the drawn command: %v\n%s\n%s", err, out, command)
+	}
+}
+
+// A shell empties a redirection target before the command starts, so the
+// suggested export must not replace an existing file: a source or base
+// named recovered.go would be lost before xunhen could read it. The command
+// has to fail with the file untouched and xunhen never run.
+func TestExportCommandKeepsExistingFiles(t *testing.T) {
+	t.Parallel()
+
+	bash, err := exec.LookPath("bash")
+	if err != nil {
+		t.Fatal("bash is required to run the export command")
+	}
+
+	command := strings.Join(exportLines(Labels{Inputs: []string{"--undo", "h.undo", "--base", "recovered.go"}}, 3), "\n")
+	start := strings.Index(command, "(set -C;")
+	end := strings.Index(command, "> recovered.go)")
+	if start < 0 || end < start {
+		t.Fatalf("no command in the instructions:\n%s", command)
+	}
+	command = command[start : end+len("> recovered.go)")]
+
+	dir := t.TempDir()
+	base := filepath.Join(dir, "recovered.go")
+	if err := os.WriteFile(base, []byte("package sample\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ran := filepath.Join(dir, "ran")
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, bash, "-c", "xunhen() { : > ran; }\n"+command)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("the command replaced an existing file:\n%s", out)
+	}
+	if data, err := os.ReadFile(base); err != nil || string(data) != "package sample\n" {
+		t.Fatalf("recovered.go now holds %q (%v)", data, err)
+	}
+	if _, err := os.Stat(ran); err == nil {
+		t.Fatal("xunhen ran although the redirection failed")
 	}
 }

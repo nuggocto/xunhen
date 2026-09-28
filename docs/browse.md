@@ -77,14 +77,21 @@ The browser never writes files. Press `e` for the command that saves the
 selected state, built from the inputs that loaded the history:
 
 ```sh
-xunhen show \
+(set -C; xunhen show \
   --undo history.undo \
   --base retry.go \
-  --node 42 --raw --final-newline=include > recovered.go
+  --node 42 --raw --final-newline=include > recovered.go)
 ```
 
 Each input flag gets its own line, so a search through 32 undo directories
 stays readable, and sideways scrolling reaches the end of the widest line.
+
+The command runs in a subshell with `set -C`, which makes the shell refuse
+to replace a file that already exists. A shell empties a redirection target
+before the command starts, so without it an input that happened to be named
+`recovered.go` would be lost before xunhen read it. Pick another name if the
+shell reports that `recovered.go` exists. The command is written for bash,
+zsh, or sh.
 
 `--final-newline=include` ends the file with a newline after the last line,
 as most source files do; `omit` leaves it off. The undo file does not record

@@ -93,7 +93,9 @@ func experiment() int { return 42 }
 ```
 
 xunhen never writes files itself. Redirect raw output, as above; `--raw`
-refuses to write to a terminal.
+refuses to write to a terminal. Never redirect onto the source or base: the
+shell empties the target before xunhen starts. `(set -C; xunhen show ... >
+FILE)` makes bash, zsh, or sh refuse any file that already exists.
 
 ### The same, from your own source file
 

@@ -75,7 +75,10 @@ var helpLines = []string{
 }
 
 // exportLines explains how to save the selected state with xunhen show, using
-// the arguments that loaded this history. Each input flag gets its own
+// the arguments that loaded this history. The command runs in a subshell
+// with noclobber: a shell truncates a redirection target before the command
+// starts, so without it the suggested command would empty an input that
+// happens to be named recovered.go and only then fail to verify it. Each input flag gets its own
 // continuation line, so 32 undo directories make 32 short lines rather than
 // one line thousands of columns wide.
 func exportLines(labels Labels, node history.NodeID) []string {
@@ -84,14 +87,18 @@ func exportLines(labels Labels, node history.NodeID) []string {
 		"",
 		"The browser does not write files. Quit, or use another shell, and run:",
 		"",
-		"  xunhen show \\",
+		"  (set -C; xunhen show \\",
 	}
 	for i := 0; i+1 < len(labels.Inputs); i += 2 {
 		lines = append(lines, "    "+shellQuote(labels.Inputs[i])+" "+shellQuote(labels.Inputs[i+1])+" \\")
 	}
 
 	return append(lines,
-		fmt.Sprintf("    --node %d --raw --final-newline=include > recovered.go", node),
+		fmt.Sprintf("    --node %d --raw --final-newline=include > recovered.go)", node),
+		"",
+		"set -C makes the shell refuse to replace a file that already exists, so",
+		"the redirection cannot empty an input or an earlier export; pick another",
+		"name if recovered.go is taken. The command is for bash, zsh, or sh.",
 		"",
 		"--final-newline sets how the file ends: include puts a newline after",
 		"the last line, as most source files have; omit leaves it off. The undo",
