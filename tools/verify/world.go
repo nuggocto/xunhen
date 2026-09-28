@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -191,9 +192,15 @@ func (w *world) installDecoys() error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), commandTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, filepath.Join(w.bin, "nvim"))
-	cmd.Env = w.env("dumb")
-	_ = cmd.Run() // A decoy always fails; what matters is the marker.
+	cmd, err := startRetrying(func() *exec.Cmd {
+		cmd := exec.CommandContext(ctx, filepath.Join(w.bin, "nvim"))
+		cmd.Env = w.env("dumb")
+		return cmd
+	})
+	if err != nil {
+		return fmt.Errorf("start a decoy program: %w", err)
+	}
+	_ = cmd.Wait() // A decoy always fails; what matters is the marker.
 	if _, err := os.Stat(w.marker); err != nil {
 		return fmt.Errorf("the decoy programs cannot run, so they could not detect a started program: %w", err)
 	}
@@ -225,26 +232,31 @@ type outcome struct {
 type runOptions struct {
 	dir    string   // working directory; root when empty
 	stdout *os.File // instead of a captured pipe, such as /dev/full
+	env    []string // added to the private environment
 }
 
 func (w *world) run(ctx context.Context, o runOptions, args ...string) (outcome, error) {
 	ctx, cancel := context.WithTimeout(ctx, commandTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, w.binary, args...)
-	cmd.Dir = o.dir
-	if cmd.Dir == "" {
-		cmd.Dir = w.root
-	}
-	cmd.Env = w.env("dumb")
-	cmd.Stdin = nil
 	var stdout, stderr capped
-	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	if o.stdout != nil {
-		cmd.Stdout = o.stdout
+	cmd, err := startRetrying(func() *exec.Cmd {
+		cmd := exec.CommandContext(ctx, w.binary, args...)
+		cmd.Dir = o.dir
+		if cmd.Dir == "" {
+			cmd.Dir = w.root
+		}
+		cmd.Env = append(w.env("dumb"), o.env...)
+		cmd.Stdin = nil
+		cmd.Stdout, cmd.Stderr = &stdout, &stderr
+		if o.stdout != nil {
+			cmd.Stdout = o.stdout
+		}
+		return cmd
+	})
+	if err == nil {
+		err = cmd.Wait()
 	}
-
-	err := cmd.Run()
 	var exit *exec.ExitError
 	switch {
 	case ctx.Err() != nil:
@@ -326,4 +338,24 @@ func readAll(path string) ([]byte, error) {
 	}
 	defer func() { _ = f.Close() }()
 	return io.ReadAll(io.LimitReader(f, maxOutput))
+}
+
+// maxStartAttempts bounds how often startRetrying tries one command.
+const maxStartAttempts = 20
+
+// startRetrying starts the command newCmd builds. Starting a file this
+// process wrote moments ago, such as a decoy or a test's wrapper script, can
+// fail with ETXTBSY: a child that another goroutine forks at that moment
+// briefly holds the file open for writing (golang.org/issue/22315). Only
+// that failure is retried, a bounded number of times, each with a new Cmd,
+// since a Cmd cannot be started twice.
+func startRetrying(newCmd func() *exec.Cmd) (*exec.Cmd, error) {
+	for attempt := 1; ; attempt++ {
+		cmd := newCmd()
+		err := cmd.Start()
+		if err == nil || !errors.Is(err, syscall.ETXTBSY) || attempt == maxStartAttempts {
+			return cmd, err
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }

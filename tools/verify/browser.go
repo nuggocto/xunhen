@@ -95,11 +95,14 @@ func (w *world) session(ctx context.Context, args []string, steps []step, status
 
 	ctx, cancel := context.WithTimeout(ctx, commandTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, w.binary, args...)
-	cmd.Dir = w.root
-	cmd.Env = w.env("xterm-256color")
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = pair.Slave, pair.Slave, pair.Slave
-	cmd.SysProcAttr = pty.Attach()
+	newCmd := func() *exec.Cmd {
+		cmd := exec.CommandContext(ctx, w.binary, args...)
+		cmd.Dir = w.root
+		cmd.Env = w.env("xterm-256color")
+		cmd.Stdin, cmd.Stdout, cmd.Stderr = pair.Slave, pair.Slave, pair.Slave
+		cmd.SysProcAttr = pty.Attach()
+		return cmd
+	}
 
 	t := &transcript{changed: make(chan struct{}, 1)}
 	done := make(chan struct{})
@@ -114,7 +117,8 @@ func (w *world) session(ctx context.Context, args []string, steps []step, status
 		<-done
 	}()
 
-	if err := cmd.Start(); err != nil {
+	cmd, err := startRetrying(newCmd)
+	if err != nil {
 		return err
 	}
 	// A wait looks at the output since the last key, so it cannot pass on
