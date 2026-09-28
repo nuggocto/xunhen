@@ -1,3 +1,9 @@
 testdata/undo/**/*.bin binary
 testdata/undo/**/*.undo binary
 testdata/undo/**/*.json text eol=lf
+
+# GitHub's language bar should show the program: Go, the Lua fixture driver,
+# and the Nix package. The shell scripts are build and release tooling, so
+# linguist leaves them out of the count; the files are unchanged otherwise.
+*.sh linguist-detectable=false
+packaging/aur/PKGBUILD.in linguist-detectable=false
