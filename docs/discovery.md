@@ -1,21 +1,21 @@
 # Finding a history from its source
 
-`--source PATH --undo-dir DIR` finds the undo file Neovim wrote for a source
-file, checks that it really belongs to that file, and hands it to `inspect`,
-`show`, or `diff`. This page describes the names xunhen looks for, where it
+Given a source file, xunhen finds the undo file Neovim wrote for it, checks
+that it really belongs to that file, and hands it to `inspect`, `show`,
+`diff`, or `browse`. This page describes the names xunhen looks for, where it
 looks, what counts as a match, and what happens when there is no single
 match. The explicit form, `--undo PATH` with `--base PATH`, stays available for
 copied, renamed, and orphaned histories.
 
 ```sh
-xunhen inspect --source ./retry.go --undo-dir ~/.local/state/nvim/undo
-xunhen show --source ./retry.go --undo-dir ~/.local/state/nvim/undo --node 42
-xunhen diff --source ./retry.go \
-  --undo-dir ~/.local/state/nvim/undo \
-  --undo-dir /backup/undo \
+export XUNHEN_UNDO_DIR=$HOME/.local/state/nvim/undo
+xunhen inspect ./retry.go
+xunhen show ./retry.go --node 42
+xunhen diff ./retry.go --undo-dir ~/.local/state/nvim/undo --undo-dir /backup/undo \
   --from 17 --to 42
 ```
 
+The file argument is short for `--source FILE`; the two are the same.
 In this mode the source file does two jobs: its path names the history, and
 its text is the base that reconstruction starts from.
 
@@ -63,10 +63,15 @@ which source the history belongs to.
 
 ## Where xunhen looks
 
-- **Only the directories you pass.** Each `--undo-dir` is one literal path:
+- **Only the directories you name.** Each `--undo-dir` is one literal path:
   commas are filename characters, not separators as in `'undodir'`. Repeat the
-  flag for more directories, up to 32. A relative path is relative to where
-  the command runs, so `--undo-dir .` means the current directory.
+  flag for more directories, up to 32. Without `--undo-dir`, xunhen searches
+  the directories `XUNHEN_UNDO_DIR` lists, separated by colons, with empty
+  entries skipped; a directory whose name holds a colon needs `--undo-dir`.
+  With neither, the command stops with a usage error. A relative path is
+  relative to where the command runs, so `--undo-dir .` means the current
+  directory. xunhen never reads Neovim's configuration or guesses a
+  directory.
 - **Only the derived names.** In each directory xunhen looks up the encoded
   name and nothing else. It never lists a directory and never descends into
   subdirectories, so a directory with thousands of unrelated histories costs

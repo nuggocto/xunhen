@@ -306,6 +306,7 @@ func (w *world) checkWalkthrough(ctx context.Context) (string, error) {
 	steps := []struct {
 		name     string
 		args     []string
+		env      []string
 		want     string
 		contains []string
 	}{
@@ -316,9 +317,12 @@ func (w *world) checkWalkthrough(ctx context.Context) (string, error) {
 		{name: "preview", args: append(append([]string{"show"}, from...), "--node", "2"), want: text + "\n"},
 		{name: "compare", args: append(append([]string{"diff"}, from...), "--from", "2", "--to", "3"), want: walkthroughDiff},
 		{name: "export", args: append(append([]string{"show"}, from...), "--node", "2", "--raw", "--final-newline=include"), want: text + "\n"},
+		// The everyday form: the source as a plain argument, and the undo
+		// directory from the environment instead of --undo-dir.
+		{name: "preview through XUNHEN_UNDO_DIR", args: []string{"show", "retry.go", "--node", "2"}, env: []string{"XUNHEN_UNDO_DIR=../undo"}, want: text + "\n"},
 	}
 	for _, step := range steps {
-		o, err := w.run(ctx, runOptions{dir: project}, step.args...)
+		o, err := w.run(ctx, runOptions{dir: project, env: step.env}, step.args...)
 		if err != nil {
 			return "", err
 		}

@@ -19,6 +19,16 @@ import (
 	"github.com/nuggocto/xunhen/internal/undofile"
 )
 
+// TestMain clears XUNHEN_UNDO_DIR, so the in-process tests see the same
+// environment on every machine. Tests of the variable run the built
+// command with an environment of their own.
+func TestMain(m *testing.M) {
+	if err := os.Unsetenv(undoDirEnv); err != nil {
+		panic(err)
+	}
+	os.Exit(m.Run())
+}
+
 func TestExecutable(t *testing.T) {
 	t.Parallel()
 
@@ -82,6 +92,7 @@ func TestExecutable(t *testing.T) {
 		exact        bool // stdout must equal out rather than contain it
 		stdoutFile   bool // redirect stdout to a regular file
 		fullDisk     bool // stdout is /dev/full, which fails every write
+		env          []string
 	}{
 		{name: "help", args: []string{"--help"}, out: "Usage:"},
 		{name: "stamped version", args: []string{"--version"}, out: "xunhen v0.0.0-test\ncommit: " + testCommit},
@@ -171,6 +182,36 @@ func TestExecutable(t *testing.T) {
 			status: 1,
 			err:    "no undo history",
 		},
+		{
+			name:  "source file with directories from XUNHEN_UNDO_DIR",
+			args:  []string{"show", "src/retry.go", "--node", "2", "--raw", "--final-newline=include"},
+			env:   []string{"XUNHEN_UNDO_DIR=undo"},
+			out:   "package sample\n\nfunc experiment() int { return 42 }\n",
+			exact: true,
+		},
+		{
+			name:  "several directories in XUNHEN_UNDO_DIR",
+			args:  []string{"diff", "src/retry.go", "--from", "2", "--to", "3"},
+			env:   []string{"XUNHEN_UNDO_DIR=empty::undo/"},
+			out:   experimentAgainstChoice,
+			exact: true,
+		},
+		// Searching the variable's missing directory would leave the search
+		// incomplete, so success shows it was not searched.
+		{
+			name:  "--undo-dir instead of XUNHEN_UNDO_DIR",
+			args:  []string{"diff", "src/retry.go", "--undo-dir", "undo", "--from", "2", "--to", "3"},
+			env:   []string{"XUNHEN_UNDO_DIR=missing"},
+			out:   experimentAgainstChoice,
+			exact: true,
+		},
+		{
+			name:   "source file with no undo directory anywhere",
+			args:   []string{"browse", "src/retry.go"},
+			env:    []string{"XUNHEN_UNDO_DIR="},
+			status: 2,
+			err:    "export XUNHEN_UNDO_DIR=$HOME/.local/state/nvim/undo",
+		},
 	}
 
 	for _, tt := range tests {
@@ -178,7 +219,7 @@ func TestExecutable(t *testing.T) {
 			command := exec.CommandContext(ctx, binary, tt.args...)
 			command.Dir = dir
 			// The installed command must not need editor or Go executables.
-			command.Env = []string{"PATH=", "HOME=" + dir, "LC_ALL=C"}
+			command.Env = append([]string{"PATH=", "HOME=" + dir, "LC_ALL=C"}, tt.env...)
 
 			var stdout, stderr bytes.Buffer
 			command.Stdout = &stdout

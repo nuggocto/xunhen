@@ -22,6 +22,21 @@ xunhen reads only what Neovim wrote to disk. Neovim writes an undo file when
 - Undo history groups changes into blocks. Each node is the buffer after
   one block, not after every keystroke.
 
+## `no undo directory to search for the source's history`
+
+```text
+xunhen: no undo directory to search for the source's history
+xunhen:   Pass --undo-dir DIR, or set XUNHEN_UNDO_DIR once, for example in your shell's startup file:
+xunhen:     export XUNHEN_UNDO_DIR=$HOME/.local/state/nvim/undo
+```
+
+A source file needs undo directories to search, and xunhen does not guess
+them. Set `XUNHEN_UNDO_DIR` to the directory `:echo &undodir` prints in
+Neovim, in your shell's startup file so every new terminal has it, or pass
+`--undo-dir DIR` on the command. Separate several directories with a colon.
+Under `sudo` or in a script, the variable may not be passed on; use
+`--undo-dir` there.
+
 ## `no undo history for this source path in the supplied directories`
 
 ```text
@@ -33,12 +48,14 @@ xunhen:   searched /home/me/.local/state/nvim/undo
 
 No file exists under the name Neovim would use. Check, in order:
 
-1. The directory. Run `:echo &undodir` in Neovim and pass each directory it
-   lists with its own `--undo-dir`. A `.` entry means the source's own
-   directory, where the name is `.retry.go.un~`.
+1. The directory. Run `:echo &undodir` in Neovim and check that
+   `XUNHEN_UNDO_DIR` lists each directory it prints, separated by colons, or
+   pass each with its own `--undo-dir`. A `.` entry means the source's own
+   directory, where the name is `.retry.go.un~`. The `searched` lines show
+   which directories were used.
 2. The path. Neovim names the history after the path the file had when it
    was written, through symbolic links. A moved or renamed source keeps its
-   history under the old name: pass the old path to `--source`, or find the
+   history under the old name: pass the old path as the file, or find the
    file with `ls ~/.local/state/nvim/undo | grep retry.go` and use `--undo`.
 3. Whether it was written at all; see the section above.
 
@@ -82,8 +99,9 @@ it.
 - A history written by `:wundo` of an unsaved buffer needs that unsaved text,
   which may exist nowhere else.
 
-With `--source`, the same problem reads `an undo history exists for this
-source path, but its reference text differs from the source`.
+When xunhen finds the history by the source file, the same problem reads
+`an undo history exists for this source path, but its reference text differs
+from the source`.
 
 ## `unsupported input` or `invalid input`
 

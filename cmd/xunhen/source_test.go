@@ -35,7 +35,15 @@ func TestInputModeRules(t *testing.T) {
 	}{
 		{name: "source with undo", args: []string{"inspect", "--source", "s", "--undo-dir", "d", "--undo", "u"}, status: exitUsage, diagnostic: "cannot be combined"},
 		{name: "source with base", args: []string{"show", "--source", "s", "--undo-dir", "d", "--base", "b", "--node", "1"}, status: exitUsage, diagnostic: "cannot be combined"},
-		{name: "source without a directory", args: []string{"diff", "--source", "s", "--from", "1", "--to", "2"}, status: exitUsage, diagnostic: "at least one --undo-dir"},
+		{name: "source without a directory", args: []string{"diff", "--source", "s", "--from", "1", "--to", "2"}, status: exitUsage, diagnostic: "export XUNHEN_UNDO_DIR="},
+		{name: "file without a directory", args: []string{"show", "s", "--node", "1"}, status: exitUsage, diagnostic: ":echo &undodir"},
+		{name: "file and source", args: []string{"inspect", "s", "--source", "t", "--undo-dir", "d"}, status: exitUsage, diagnostic: "give the source file once"},
+		{name: "file with undo", args: []string{"inspect", "--undo", "u", "s"}, status: exitUsage, diagnostic: "cannot be combined"},
+		{name: "two files", args: []string{"inspect", "s", "t", "--undo-dir", "d"}, status: exitUsage, diagnostic: "expected inspect FILE"},
+		{name: "empty file", args: []string{"inspect", "--undo-dir", "d", "--", ""}, status: exitUsage, diagnostic: "FILE cannot be empty"},
+		// After --, an argument that looks like a flag is the FILE, so the
+		// command gets as far as searching the missing directory.
+		{name: "file after --", args: []string{"inspect", "--undo-dir", "d", "--", "-s"}, status: exitFailure, diagnostic: "could not search"},
 		{name: "directory without a source", args: []string{"show", "--undo", "u", "--base", "b", "--undo-dir", "d", "--node", "1"}, status: exitUsage, diagnostic: "requires --source"},
 		{name: "repeated source", args: []string{"inspect", "--source", "s", "--source", "t", "--undo-dir", "d"}, status: exitUsage, diagnostic: "only once"},
 		{name: "empty source", args: []string{"inspect", "--source=", "--undo-dir", "d"}, status: exitUsage, diagnostic: "requires a path"},
@@ -136,6 +144,20 @@ func TestSourceCommands(t *testing.T) {
 			setup: func(w *sourceWorld) []string {
 				w.history("u2", "abandoned-branch")
 				return []string{"show", "--source", w.source, "--undo-dir", w.dir("u1"), "--undo-dir", w.dir("u2"), "--node", "2", "--raw", "--final-newline=include"}
+			},
+		},
+		{
+			name: "recover with FILE before the flags", stdout: experiment,
+			setup: func(w *sourceWorld) []string {
+				w.history("u2", "abandoned-branch")
+				return []string{"show", w.source, "--undo-dir", w.dir("u1"), "--undo-dir", w.dir("u2"), "--node", "2", "--raw", "--final-newline=include"}
+			},
+		},
+		{
+			name: "compare with FILE after the flags", stdout: experimentAgainstChoice,
+			setup: func(w *sourceWorld) []string {
+				w.history("u1", "abandoned-branch")
+				return []string{"diff", "--undo-dir", w.dir("u1"), "--from", "2", "--to", "3", w.source}
 			},
 		},
 		{

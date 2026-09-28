@@ -6,8 +6,8 @@ two of them without typing node IDs. It reads the same inputs as `show` and
 `diff`:
 
 ```sh
+xunhen browse retry.go          # with XUNHEN_UNDO_DIR set, or add --undo-dir DIR
 xunhen browse --undo history.undo --base retry.go
-xunhen browse --source retry.go --undo-dir ~/.local/state/nvim/undo
 ```
 
 Like `show` and `diff`, the browser needs a base that verifies against the

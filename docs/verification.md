@@ -26,6 +26,7 @@ breaking the behavior it guards makes it fail; the mutations listed under
 | Every exit from the browser restores the terminal and stops the worker | `TestBrowserUnderATerminal`, `TestWorkerShutdown` |
 | Limits admit exactly their ceiling | `TestDecodeLimitBoundaries`, `TestReplayEntryBoundaries`, `TestSearchByteLimit`, `TestSearchDirectoryLimit`, `TestHistoryBoundsAndCancellation`, `TestReadFileAcceptsOnlyRegularFiles` |
 | Resource use stays within the documented targets | [Performance](performance.md), `TestCacheHoldsTheLargestPair`, `TestCompareDoesNotCopyStates` |
+| A source file's history is looked up only in directories the user named, with `--undo-dir` or `XUNHEN_UNDO_DIR` | `TestInputModeRules`, `TestSourceCommands` (FILE before and after the flags), `TestExecutable` (the variable, several directories, `--undo-dir` taking its place, and neither), and `tools/verify`'s walkthrough |
 | The export command on screen names the same files once pasted into a shell | `TestShellQuoting`, `TestExportInstructions` (read back from the drawn screen under both width methods) |
 | A release is exactly its commit, with the version its tag names | `TestResolveRefusesUnidentifiedSources`, `TestResolveIdentifiesTheCommit`, `TestEnvironmentRules`, `TestBuildEnvironmentIsExplicit`, `TestModuleRules` |
 | Release archives are reproducible and hold only regular files with fixed modes, owners, and times | `TestWriteIsDeterministic`, `TestWriteRejectsBadNames`, `TestReadRejectsUnsafeArchives`, `TestReadRejectsTrailingData`, `tools/reproduce.sh` in CI |

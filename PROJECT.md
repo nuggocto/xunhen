@@ -245,6 +245,7 @@ xunhen show --undo /path/to/undo-file --base ./retry.go --node 42
 xunhen diff --undo /path/to/undo-file --base ./retry.go --from 17 --to 42
 xunhen browse --undo /path/to/undo-file --base ./retry.go
 xunhen browse --source ./retry.go --undo-dir /path/to/undo-directory
+xunhen browse ./retry.go    # with XUNHEN_UNDO_DIR=/path/to/undo-directory
 ```
 
 `inspect` should report the recognized format, validated history relationships,
@@ -279,10 +280,14 @@ substitute for ancestry. Syntax highlighting and word-level diffs can wait.
 ### CLI contract
 
 The explicit `--undo` mode remains available for copied or orphaned histories.
-The convenience `--source` mode uses only explicitly supplied `--undo-dir`
-locations, which may be repeated. Do not read editor configuration or launch
-Neovim to discover directories. Conflicting input modes are usage errors.
-Discovery must report zero or multiple matches rather than choose silently.
+The convenience `--source` mode, which a plain FILE argument also selects,
+uses only undo directories the user supplies: repeated `--undo-dir` flags, or
+else the colon-separated `XUNHEN_UNDO_DIR` environment variable, set once in
+the shell. With neither, the command is a usage error that shows how to set
+the variable. Do not read editor configuration, fall back to a default
+directory, or launch Neovim to discover directories. Conflicting input modes
+are usage errors. Discovery must report zero or multiple matches rather than
+choose silently.
 
 Use stdout for command results and stderr for diagnostics. Add `--help` to
 each command and `--version` to the executable. Version output includes the

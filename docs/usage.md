@@ -97,42 +97,52 @@ refuses to write to a terminal.
 
 ### The same, from your own source file
 
-With your own files, name the source and the undo directory from
-Neovim's `'undodir'`, and xunhen finds the history by the source's path:
+With your own files, xunhen finds the history by the source file's path.
+First tell it where Neovim keeps undo files. `:echo &undodir` in Neovim
+prints the directory; set the variable in your shell's startup file so it
+lasts:
 
 ```sh
-xunhen inspect --source retry.go --undo-dir ~/.local/state/nvim/undo
-xunhen show --source retry.go --undo-dir ~/.local/state/nvim/undo --node 2
-xunhen diff --source retry.go --undo-dir ~/.local/state/nvim/undo --from 2 --to 3
-xunhen browse --source retry.go --undo-dir ~/.local/state/nvim/undo
+export XUNHEN_UNDO_DIR=$HOME/.local/state/nvim/undo
+```
+
+Then give the source file as the argument:
+
+```sh
+xunhen inspect retry.go
+xunhen show retry.go --node 2
+xunhen diff retry.go --from 2 --to 3
+xunhen browse retry.go
 ```
 
 The source file must still hold the text the undo file was written against,
-which is normally true until you edit it again outside Neovim. Run
-`:echo &undodir` in Neovim to see your undo directory; the path above is a
-common default, not a rule.
+which is normally true until you edit it again outside Neovim.
 
 ## Commands
 
 ```text
-xunhen inspect --undo PATH
-xunhen show    --undo PATH --base PATH --node ID [--raw --final-newline=include|omit]
-xunhen diff    --undo PATH --base PATH --from ID --to ID
-xunhen browse  --undo PATH --base PATH
+xunhen inspect FILE
+xunhen show    FILE --node ID [--raw --final-newline=include|omit]
+xunhen diff    FILE --from ID --to ID
+xunhen browse  FILE
 xunhen help [COMMAND]
 xunhen version
 ```
 
-Every command that takes `--undo` also accepts `--source PATH --undo-dir DIR`
-instead; `inspect` never needs a base. `xunhen help COMMAND` and
-`xunhen COMMAND --help` print each command's full help.
+FILE is the source file. Its path finds the history in the undo
+directories, and its text is the base the states are rebuilt from. Instead
+of FILE, every command also accepts the undo file directly, with a matching
+copy of the text: `--undo PATH --base PATH`, where `inspect` needs no
+`--base`. `xunhen help COMMAND` and `xunhen COMMAND --help` print each
+command's full help.
 
-| Flag | Commands | Meaning |
+| Argument | Commands | Meaning |
 | --- | --- | --- |
-| `--undo PATH` | all four | The undo file. Symbolic links are followed; it must be a regular file. |
-| `--base PATH` | show, diff, browse | A copy of the text the undo file was written against. |
-| `--source PATH` | all four | Find the history by this file's path. The file is also the base. |
-| `--undo-dir DIR` | with `--source` | An undo directory to search. Repeat it for more, up to 32. Commas are part of the path, unlike in `'undodir'`. |
+| `FILE` | all four | Find the history by this file's path; the file is also the base. Flags may come before or after it; put `--` before a name that starts with a dash. |
+| `--undo-dir DIR` | with `FILE` | An undo directory to search. Repeat it for more, up to 32. Commas are part of the path, unlike in `'undodir'`. It replaces `XUNHEN_UNDO_DIR` for that command. |
+| `--source PATH` | all four | Same as `FILE`. |
+| `--undo PATH` | all four | The undo file, instead of `FILE`. Symbolic links are followed; it must be a regular file. |
+| `--base PATH` | show, diff, browse | A copy of the text the `--undo` file was written against. |
 | `--node ID` | show | The state to rebuild. IDs are the numbers `inspect` prints; 0 is the retained root. |
 | `--from ID`, `--to ID` | diff | The left and right states of the comparison. |
 | `--raw` | show | Write the exact UTF-8 text instead of escaped display text. Refused when stdout is a terminal. |
@@ -140,15 +150,22 @@ instead; `inspect` never needs a base. `xunhen help COMMAND` and
 | `-h`, `--help` | all | Show help. It must be the only argument. |
 | `--version` | top level | Same as `xunhen version`. |
 
-`--source` cannot be combined with `--undo` or `--base`. Each flag may be
-given once, except `--undo-dir`. Node IDs are plain decimal numbers.
+`FILE` cannot be combined with `--undo` or `--base`. Each flag may be given
+once, except `--undo-dir`. Node IDs are plain decimal numbers.
 
-### How `--source` finds a history
+### Where xunhen looks for the history
+
+With `FILE`, xunhen searches the undo directories you give with
+`--undo-dir`. Without `--undo-dir`, it searches the ones `XUNHEN_UNDO_DIR`
+lists, separated by colons as in `PATH`, such as
+`XUNHEN_UNDO_DIR=$HOME/.local/state/nvim/undo:/backup/undo`. With neither, it
+stops with a usage error that shows how to set the variable. It never reads
+Neovim's configuration or guesses a directory.
 
 Neovim names an undo file after the source's full path, with every `/`
 replaced by `%`, as in `%home%me%src%retry.go`. xunhen resolves the source
 path the way Neovim does, looks only at that name (and at `.retry.go.un~`
-when the source's own directory is one of the `--undo-dir` arguments), and
+when the source's own directory is one of the searched directories), and
 never lists or descends into directories. A candidate counts only after it
 decodes, validates, and matches the source text. No match, several matches,
 and an unreadable directory are all errors that list every candidate;

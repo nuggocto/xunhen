@@ -40,30 +40,36 @@ Until then, build it from a clone with Go 1.27.1:
 
 ## Usage
 
-Open the history of a file in the browser:
+Tell xunhen once where Neovim keeps undo files. `:echo &undodir` in Neovim
+prints the directory; the usual one is:
 
 ```sh
-xunhen browse --source retry.go --undo-dir ~/.local/state/nvim/undo
+export XUNHEN_UNDO_DIR=$HOME/.local/state/nvim/undo   # in ~/.bashrc, ~/.zshrc, or fish's config
 ```
 
-Use your own `'undodir'`; `:echo &undodir` in Neovim prints it. The tree on
-the left holds every retained state; the selected one shows on the right.
-Move with the arrows or `j` and `k`, compare two states with `space` to pin
-one and `d` to diff it with the selection, and press `e` for the command
+Then open the history of a file in the browser:
+
+```sh
+xunhen browse retry.go
+```
+
+The tree on the left holds every retained state; the selected one shows on the
+right. Move with the arrows or `j` and `k`, compare two states with `space` to
+pin one and `d` to diff it with the selection, and press `e` for the command
 that saves the selected state to a file. `?` lists every key, and `q` quits.
 
 The same work is available as plain commands, for scripts or terminals the
 browser cannot use:
 
 ```sh
-xunhen inspect --source retry.go --undo-dir ~/.local/state/nvim/undo
-xunhen show    --source retry.go --undo-dir ~/.local/state/nvim/undo --node 2
-xunhen diff    --source retry.go --undo-dir ~/.local/state/nvim/undo --from 2 --to 3
-xunhen show    --source retry.go --undo-dir ~/.local/state/nvim/undo --node 2 \
-               --raw --final-newline=include > recovered.go
+xunhen inspect retry.go
+xunhen show    retry.go --node 2
+xunhen diff    retry.go --from 2 --to 3
+xunhen show    retry.go --node 2 --raw --final-newline=include > recovered.go
 ```
 
-Or name the undo file and a matching copy of the source directly:
+`--undo-dir DIR` names the undo directory for one command instead of the
+variable. Or name the undo file and a matching copy of the source directly:
 
 ```sh
 xunhen show --undo history.undo --base retry.go --node 2
@@ -86,7 +92,7 @@ history from the test corpus and lists every flag and exit status.
 - [Usage](docs/usage.md): a recovery walkthrough, flags, exit codes, and output
 - [Troubleshooting](docs/troubleshooting.md): what each error means and what to do
 - [Browse](docs/browse.md): the terminal browser, its keys, and its memory use
-- [Discovery](docs/discovery.md): how `--source` finds a history
+- [Discovery](docs/discovery.md): how xunhen finds a source file's history
 - [Compatibility](docs/compatibility.md): the supported producer, text cases, and what stays stable
 - [Undo format](docs/undo-format.md): what is decoded and its limits
 - [Diff](docs/diff.md): the comparison algorithm

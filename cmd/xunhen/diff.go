@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 
 	"github.com/nuggocto/xunhen/internal/diff"
@@ -13,20 +14,23 @@ import (
 	"github.com/nuggocto/xunhen/internal/termtext"
 )
 
-const diffHelp = `Usage: xunhen diff --undo PATH --base PATH --from ID --to ID
-       xunhen diff --source PATH --undo-dir DIR... --from ID --to ID
+const diffHelp = `Usage: xunhen diff FILE --from ID --to ID
+       xunhen diff --undo PATH --base PATH --from ID --to ID
 
 Compare two retained buffer states line by line using a matching base file.
-  --undo PATH      Undo-file path
-  --base PATH      Matching source text (read-only)
-  --source PATH    Find the history by this source file's path; the file is
-                   also the base
-  --undo-dir DIR   Undo directory to search; repeat for more (at most 32)
+  FILE             Source file: its path finds the history, and its text is
+                   the base (same as --source FILE)
+  --undo-dir DIR   Undo directory to search for FILE's history; repeat for
+                   more (at most 32). Without it, the directories in
+                   XUNHEN_UNDO_DIR, separated by colons
+  --undo PATH      Undo-file path, instead of FILE
+  --base PATH      Matching source text for --undo (read-only)
+  --source PATH    Same as FILE
   --from ID        Left-hand retained sequence number; 0 is the root (required)
   --to ID          Right-hand retained sequence number (required)
   -h, --help       Show this help
 
-With --source, exactly one history in the supplied directories must match the
+With FILE, exactly one history in the searched directories must match the
 source text, as for show.
 
 Output is a unified diff with three lines of context and one-based line
@@ -59,7 +63,7 @@ func compareStates(ctx context.Context, args []string, stdout, stderr io.Writer)
 	lim := limits.Default()
 	options, err := parseDiffArgs(args, lim)
 	if err != nil {
-		return diagnostic(stderr, exitUsage, err.Error())
+		return usageFailure(stderr, err)
 	}
 
 	states, err := recoverStates(ctx, options.in, []history.NodeID{options.from, options.to}, lim)
@@ -85,13 +89,7 @@ func parseDiffArgs(args []string, lim limits.Limits) (diffOptions, error) {
 	nodeFlag(flags, "from", &options.from, &options.hasFrom)
 	nodeFlag(flags, "to", &options.to, &options.hasTo)
 
-	if err := parseFlags(flags, args); err != nil {
-		return diffOptions{}, err
-	}
-	if flags.NArg() != 0 {
-		return diffOptions{}, usage("diff", true)
-	}
-	if err := options.in.check("diff", true, lim); err != nil {
+	if err := parseInputs(flags, options.in, args, "diff", true, lim, os.Getenv); err != nil {
 		return diffOptions{}, err
 	}
 	if !options.hasFrom || !options.hasTo {

@@ -13,16 +13,19 @@ import (
 	"github.com/nuggocto/xunhen/internal/tui"
 )
 
-const browseHelp = `Usage: xunhen browse --undo PATH --base PATH
-       xunhen browse --source PATH --undo-dir DIR...
+const browseHelp = `Usage: xunhen browse FILE
+       xunhen browse --undo PATH --base PATH
 
 Explore a history in the terminal: move through its branches, preview any
 retained state, and compare two of them.
-  --undo PATH      Undo-file path
-  --base PATH      Matching source text (read-only)
-  --source PATH    Find the history by this source file's path; the file is
-                   also the base
-  --undo-dir DIR   Undo directory to search; repeat for more (at most 32)
+  FILE             Source file: its path finds the history, and its text is
+                   the base (same as --source FILE)
+  --undo-dir DIR   Undo directory to search for FILE's history; repeat for
+                   more (at most 32). Without it, the directories in
+                   XUNHEN_UNDO_DIR, separated by colons
+  --undo PATH      Undo-file path, instead of FILE
+  --base PATH      Matching source text for --undo (read-only)
+  --source PATH    Same as FILE
   -h, --help       Show this help
 
 Keys: arrows or h/j/k/l move and scroll, tab switches panes, p previews the
@@ -36,7 +39,7 @@ keeps the earlier load. Inputs are never modified.
 
 browse needs a terminal on stdin and stdout and a TERM other than dumb.
 Without one it exits with status 1; inspect, show, and diff read the same
-history with the same input flags and print plain text instead.
+history with the same arguments and print plain text instead.
 
 Exit status: 0 success, 1 input/output failure, 2 invalid arguments,
 129 hangup, 130 interrupt, 143 termination.
@@ -50,7 +53,7 @@ func browse(ctx context.Context, args []string, stdin *os.File, stdout, stderr i
 	lim := limits.Default()
 	in, err := parseBrowseArgs(args, lim)
 	if err != nil {
-		return diagnostic(stderr, exitUsage, err.Error())
+		return usageFailure(stderr, err)
 	}
 
 	// Check the terminal before opening anything, so a redirected run fails
@@ -67,8 +70,7 @@ func browse(ctx context.Context, args []string, stdin *os.File, stdout, stderr i
 			"    xunhen inspect INPUTS                 list the nodes and their IDs",
 			"    xunhen show INPUTS --node ID          print one state",
 			"    xunhen diff INPUTS --from ID --to ID  compare two states",
-			"  INPUTS are the same --undo and --base, or --source and --undo-dir",
-			"  flags; inspect needs no --base.",
+			"  INPUTS are the same FILE, or --undo and --base; inspect needs no --base.",
 		})
 	}
 
@@ -99,14 +101,7 @@ func browse(ctx context.Context, args []string, stdin *os.File, stdout, stderr i
 func parseBrowseArgs(args []string, lim limits.Limits) (*inputs, error) {
 	flags := newFlags("browse")
 	in := registerInputs(flags, true)
-
-	if err := parseFlags(flags, args); err != nil {
-		return nil, err
-	}
-	if flags.NArg() != 0 {
-		return nil, usage("browse", true)
-	}
-	if err := in.check("browse", true, lim); err != nil {
+	if err := parseInputs(flags, in, args, "browse", true, lim, os.Getenv); err != nil {
 		return nil, err
 	}
 

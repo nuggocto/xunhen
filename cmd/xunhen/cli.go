@@ -31,16 +31,24 @@ Usage:
   xunhen [--help | --version]
   xunhen help [command]
   xunhen version
+  xunhen inspect FILE
+  xunhen show FILE --node ID [--raw --final-newline=include|omit]
+  xunhen diff FILE --from ID --to ID
+  xunhen browse FILE
+
+FILE is the source file whose history to find, and its text is the base the
+history is rebuilt from. The history is looked up in the undo directories
+given with --undo-dir, which may be repeated, or else in the ones
+XUNHEN_UNDO_DIR lists, separated by colons. Set it once in your shell:
+  export XUNHEN_UNDO_DIR=$HOME/.local/state/nvim/undo
+Neovim prints its own undo directory with :echo &undodir.
+
+To name a history directly, give the undo file and a matching copy of its
+text instead of FILE:
   xunhen inspect --undo PATH
-  xunhen show --undo PATH --base PATH --node ID [--raw --final-newline=include|omit]
+  xunhen show --undo PATH --base PATH --node ID
   xunhen diff --undo PATH --base PATH --from ID --to ID
   xunhen browse --undo PATH --base PATH
-
-Each command can also find the history from the source file instead:
-  xunhen inspect --source PATH --undo-dir DIR...
-  xunhen show --source PATH --undo-dir DIR... --node ID
-  xunhen diff --source PATH --undo-dir DIR... --from ID --to ID
-  xunhen browse --source PATH --undo-dir DIR...
 
 Available commands:
   help       Show help

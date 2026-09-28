@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"syscall"
 	"unicode/utf8"
@@ -15,24 +16,28 @@ import (
 	"github.com/nuggocto/xunhen/internal/termtext"
 )
 
-const showHelp = `Usage: xunhen show --undo PATH --base PATH --node ID [--raw --final-newline=include|omit]
-       xunhen show --source PATH --undo-dir DIR... --node ID [--raw ...]
+const showHelp = `Usage: xunhen show FILE --node ID [--raw --final-newline=include|omit]
+       xunhen show --undo PATH --base PATH --node ID [--raw ...]
 
 Reconstruct a retained buffer state using a matching base file.
-  --undo PATH             Undo-file path
-  --base PATH             Matching source text (read-only)
-  --source PATH           Find the history by this source file's path; the
-                          file is also the base
-  --undo-dir DIR          Undo directory to search; repeat for more (at most 32)
+  FILE                    Source file: its path finds the history, and its
+                          text is the base (same as --source FILE)
+  --undo-dir DIR          Undo directory to search for FILE's history; repeat
+                          for more (at most 32). Without it, the directories
+                          in XUNHEN_UNDO_DIR, separated by colons
+  --undo PATH             Undo-file path, instead of FILE
+  --base PATH             Matching source text for --undo (read-only)
+  --source PATH           Same as FILE
   --node ID               Retained sequence number; 0 is the root (required)
   --raw                   Write UTF-8/LF bytes to redirected stdout
   --final-newline POLICY  Required with --raw: include or omit
   -h, --help              Show this help
 
-With --source, exactly one history in the supplied directories must match the
+With FILE, exactly one history in the searched directories must match the
 source text; docs/discovery.md describes the names searched. Otherwise nothing
 is reconstructed, and the diagnostic lists every candidate and the explicit
---undo and --base form to use instead.
+--undo and --base form to use instead. Flags may come before or after FILE;
+put -- before a FILE whose name starts with a dash.
 
 Base files must be UTF-8/LF text without a BOM, NUL, or CRLF. Raw export also
 rejects a selected state with invalid UTF-8 or NUL, which retained edits can
@@ -63,7 +68,7 @@ func show(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	lim := limits.Default()
 	options, err := parseShowArgs(args, lim)
 	if err != nil {
-		return diagnostic(stderr, exitUsage, err.Error())
+		return usageFailure(stderr, err)
 	}
 
 	if options.raw {
@@ -113,14 +118,7 @@ func parseShowArgs(args []string, lim limits.Limits) (showOptions, error) {
 		return nil
 	}))
 
-	if err := parseFlags(flags, args); err != nil {
-		return showOptions{}, err
-	}
-
-	if flags.NArg() != 0 {
-		return showOptions{}, usage("show", true)
-	}
-	if err := options.in.check("show", true, lim); err != nil {
+	if err := parseInputs(flags, options.in, args, "show", true, lim, os.Getenv); err != nil {
 		return showOptions{}, err
 	}
 

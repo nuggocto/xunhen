@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"strings"
 	"syscall"
 
 	"github.com/nuggocto/xunhen/internal/discover"
@@ -15,13 +16,21 @@ import (
 	"github.com/nuggocto/xunhen/internal/undofile"
 )
 
-// inputs are the input flags shared by inspect, show, and diff. Either undo
-// (with base, for reconstruction) names the history explicitly, or source and
-// undoDirs find it.
+// inputs are the input arguments shared by every command. Either undo (with
+// base, for reconstruction) names the history explicitly, or source and
+// undoDirs find it. dirsFromEnv records that undoDirs came from
+// XUNHEN_UNDO_DIR rather than --undo-dir, for diagnostics.
 type inputs struct {
 	undo, base, source string
 	undoDirs           []string
+	dirsFromEnv        bool
 }
+
+// undoDirEnv names the environment variable listing the undo directories to
+// search, separated by colons, when a source comes without --undo-dir. It
+// saves typing the same --undo-dir on every command, and it is still the
+// user's own choice: xunhen never guesses where the editor keeps history.
+const undoDirEnv = "XUNHEN_UNDO_DIR"
 
 // registerInputs adds the input flags to a command. withBase adds --base, which
 // only reconstructing commands accept.
@@ -46,6 +55,74 @@ func registerInputs(flags *flag.FlagSet, withBase bool) *inputs {
 	return in
 }
 
+// parseInputs parses a command's arguments: its flags and at most one FILE
+// argument, which means --source FILE. Flags may come before or after FILE,
+// and every argument after "--" is a FILE, so a source whose name starts
+// with a dash still works. A source without --undo-dir searches the
+// directories XUNHEN_UNDO_DIR lists. getenv reads the environment.
+func parseInputs(flags *flag.FlagSet, in *inputs, args []string, command string, withBase bool, lim limits.Limits, getenv func(string) string) error {
+	files, err := parseArgs(flags, args)
+	if err != nil {
+		return err
+	}
+
+	switch {
+	case len(files) > 1:
+		return usage(command, withBase)
+	case len(files) == 1 && in.source != "":
+		return errors.New("give the source file once, as FILE or with --source")
+	case len(files) == 1 && (in.undo != "" || in.base != ""):
+		return errors.New("a FILE argument cannot be combined with --undo or --base")
+	case len(files) == 1 && files[0] == "":
+		return errors.New("FILE cannot be empty")
+	case len(files) == 1:
+		in.source = files[0]
+	}
+
+	if in.source != "" && len(in.undoDirs) == 0 {
+		in.undoDirs, in.dirsFromEnv = splitUndoDirs(getenv(undoDirEnv)), true
+	}
+
+	return in.check(command, withBase, lim)
+}
+
+// splitUndoDirs reads XUNHEN_UNDO_DIR: directories separated by colons, as
+// in PATH. Empty entries are skipped, so an unset or empty variable lists
+// nothing. A directory whose name holds a colon needs --undo-dir.
+func splitUndoDirs(value string) []string {
+	var dirs []string
+	for dir := range strings.SplitSeq(value, ":") {
+		if dir != "" {
+			dirs = append(dirs, dir)
+		}
+	}
+
+	return dirs
+}
+
+// parseArgs parses flags that may come before and after positional
+// arguments, and returns the positional ones. A FlagSet stops at the first
+// argument that is not a flag, so parsing resumes after each one; after
+// "--", every argument is positional. Each round consumes at least one
+// argument, so the loop ends.
+func parseArgs(flags *flag.FlagSet, args []string) ([]string, error) {
+	var positional []string
+	for {
+		if err := parseFlags(flags, args); err != nil {
+			return nil, err
+		}
+		rest := flags.Args()
+		if len(rest) == 0 {
+			return positional, nil
+		}
+		if consumed := len(args) - len(rest); consumed > 0 && args[consumed-1] == "--" {
+			return append(positional, rest...), nil
+		}
+		positional = append(positional, rest[0])
+		args = rest[1:]
+	}
+}
+
 // usage is the error for an invocation that names no usable input form.
 func usage(command string, withBase bool) error {
 	explicit := "--undo PATH"
@@ -53,9 +130,27 @@ func usage(command string, withBase bool) error {
 		explicit += " --base PATH"
 	}
 
-	return fmt.Errorf("expected %s %s, or %s --source PATH --undo-dir DIR; see 'xunhen %s --help'",
-		command, explicit, command, command)
+	return fmt.Errorf("expected %s FILE, %s %s, or %s --source PATH --undo-dir DIR; see 'xunhen %s --help'",
+		command, command, explicit, command, command)
 }
+
+// hintError is a usage error that explains how to fix itself, one
+// diagnostic line per entry.
+type hintError struct {
+	lines []string
+}
+
+func (e *hintError) Error() string {
+	return strings.Join(e.lines, " ")
+}
+
+// noUndoDirs is the usage error for a source with no directory to search.
+var noUndoDirs = &hintError{lines: []string{
+	"no undo directory to search for the source's history",
+	"  Pass --undo-dir DIR, or set " + undoDirEnv + " once, for example in your shell's startup file:",
+	"    export " + undoDirEnv + "=$HOME/.local/state/nvim/undo",
+	"  Neovim prints its undo directory with :echo &undodir. Separate several with a colon.",
+}}
 
 // check applies the input rules before any file is opened.
 func (in *inputs) check(command string, withBase bool, lim limits.Limits) error {
@@ -66,7 +161,9 @@ func (in *inputs) check(command string, withBase bool, lim limits.Limits) error 
 		}
 		return errors.New("--source cannot be combined with --undo")
 	case in.source != "" && len(in.undoDirs) == 0:
-		return errors.New("--source requires at least one --undo-dir")
+		return noUndoDirs
+	case len(in.undoDirs) > lim.SearchDirs && in.dirsFromEnv:
+		return fmt.Errorf("%s lists %d directories; at most %d can be searched", undoDirEnv, len(in.undoDirs), lim.SearchDirs)
 	case len(in.undoDirs) > lim.SearchDirs:
 		return fmt.Errorf("at most %d --undo-dir directories can be searched", lim.SearchDirs)
 	case in.source == "" && len(in.undoDirs) != 0:
@@ -76,6 +173,20 @@ func (in *inputs) check(command string, withBase bool, lim limits.Limits) error 
 	}
 
 	return nil
+}
+
+// usageFailure reports an invalid invocation with status 2. A hintError
+// gets one diagnostic line per line of its explanation.
+func usageFailure(stderr io.Writer, err error) int {
+	var hint *hintError
+	if !errors.As(err, &hint) {
+		return diagnostic(stderr, exitUsage, err.Error())
+	}
+	for _, line := range hint.lines {
+		diagnostic(stderr, exitUsage, line)
+	}
+
+	return exitUsage
 }
 
 // searcher runs a discovery search. Commands pass discover.Search; tests pass

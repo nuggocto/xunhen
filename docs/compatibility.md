@@ -101,8 +101,10 @@ exact buffer lines, never the original file's bytes.
 
 From version 1.0.0 on, these stay compatible for every 1.x release:
 
-- The command names, their flags, and the two input forms: `--undo` with
-  `--base`, and `--source` with `--undo-dir`.
+- The command names, their flags, and the input forms: a source file,
+  given as the argument or with `--source`, searched in `--undo-dir`
+  directories or else in the colon-separated `XUNHEN_UNDO_DIR`; and `--undo`
+  with `--base`.
 - The exit statuses in [usage.md](usage.md#exit-status).
 - The bytes `show --raw` writes for a given state and final-newline policy.
 - The format of `diff`: unified hunks with three lines of context, headed

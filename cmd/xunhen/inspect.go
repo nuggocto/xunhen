@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"io"
+	"os"
 	"strconv"
 
 	"github.com/nuggocto/xunhen/internal/discover"
@@ -12,16 +13,21 @@ import (
 	"github.com/nuggocto/xunhen/internal/undofile"
 )
 
-const inspectHelp = `Usage: xunhen inspect --undo PATH
-       xunhen inspect --source PATH --undo-dir DIR...
+const inspectHelp = `Usage: xunhen inspect FILE
+       xunhen inspect --undo PATH
 
 Describe a persisted Neovim undo history without source text or Neovim.
-  --undo PATH      Explicit undo-file path (symlinks are followed)
-  --source PATH    Find the history by this source file's path instead
-  --undo-dir DIR   Undo directory to search; repeat for more (at most 32)
+  FILE             Find the history by this source file's path (same as
+                   --source FILE)
+  --undo-dir DIR   Undo directory to search for FILE's history; repeat for
+                   more (at most 32). Without it, the directories in
+                   XUNHEN_UNDO_DIR, separated by colons
+  --undo PATH      Explicit undo-file path, instead of FILE (symlinks are
+                   followed)
+  --source PATH    Same as FILE
   -h, --help       Show this help
 
-With --source, the history must sit at the name Neovim gives it in one of the
+With FILE, the history must sit at the name Neovim gives it in one of the
 directories, as docs/discovery.md describes; subdirectories are not searched.
 When the source text matches the history, the association is verified. When
 the source is missing, unsupported, or different, a single valid history is
@@ -57,7 +63,7 @@ func inspect(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	lim := limits.Default()
 	in, err := parseInspectArgs(args, lim)
 	if err != nil {
-		return diagnostic(stderr, exitUsage, err.Error())
+		return usageFailure(stderr, err)
 	}
 
 	l, err := load(ctx, in, needs{}, lim, discover.Search)
@@ -76,14 +82,7 @@ func inspect(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 func parseInspectArgs(args []string, lim limits.Limits) (*inputs, error) {
 	flags := newFlags("inspect")
 	in := registerInputs(flags, false)
-
-	if err := parseFlags(flags, args); err != nil {
-		return nil, err
-	}
-	if flags.NArg() != 0 {
-		return nil, usage("inspect", false)
-	}
-	if err := in.check("inspect", false, lim); err != nil {
+	if err := parseInputs(flags, in, args, "inspect", false, lim, os.Getenv); err != nil {
 		return nil, err
 	}
 

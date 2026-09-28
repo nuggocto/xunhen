@@ -27,10 +27,10 @@ func TestCommandResponses(t *testing.T) {
 		{name: "version flag", args: []string{"--version"}, out: "go: " + runtime.Version()},
 		{name: "version command", args: []string{"version"}, out: "commit:"},
 		{name: "version help", args: []string{"help", "version"}, out: "Usage: xunhen version"},
-		{name: "inspection help", args: []string{"help", "inspect"}, out: "Usage: xunhen inspect --undo PATH"},
+		{name: "inspection help", args: []string{"help", "inspect"}, out: "Usage: xunhen inspect FILE"},
 		{name: "show help topic", args: []string{"help", "show"}, out: "Usage: xunhen show"},
 		{name: "browse help topic", args: []string{"help", "browse"}, out: "Usage: xunhen browse"},
-		{name: "browse without inputs", args: []string{"browse"}, status: 2, err: "expected browse --undo PATH --base PATH"},
+		{name: "browse without inputs", args: []string{"browse"}, status: 2, err: "expected browse FILE"},
 		// The paths do not exist. Reaching the terminal check first means no
 		// input was opened, and nothing full-screen was written.
 		{name: "browse without a terminal", args: []string{"browse", "--undo", "u", "--base", "b"}, status: 1, err: "browse needs an interactive terminal"},
@@ -211,10 +211,17 @@ func TestCommandArgumentContract(t *testing.T) {
 			)
 		}
 
+		// A positional argument is the source file, which clashes with
+		// --undo and with a --source already given.
+		extra := "cannot be combined"
+		if c.mode == "source" {
+			extra = "give the source file once"
+		}
 		tests = append(tests,
 			contractCase{name: label + "/help among flags", args: with("--help"), status: exitUsage, diagnostic: "must be used alone"},
 			contractCase{name: label + "/repeated flag", args: with(c.valid[0], c.valid[1]), status: exitUsage, diagnostic: "only once"},
-			contractCase{name: label + "/trailing positional", args: with("extra"), status: exitUsage, diagnostic: "expected " + c.name},
+			contractCase{name: label + "/trailing positional", args: with("extra"), status: exitUsage, diagnostic: extra},
+			contractCase{name: label + "/two positionals", args: with("extra", "more"), status: exitUsage, diagnostic: "expected " + c.name},
 			contractCase{name: label + "/leading positional", args: slices.Concat([]string{c.name, "extra"}, c.valid), status: exitUsage},
 			contractCase{name: label + "/unknown flag", args: with("--bogus"), status: exitUsage},
 			contractCase{name: label + "/unsafe flag", args: with("--bad\n\x1b[2J"), status: exitUsage},
@@ -263,14 +270,19 @@ func TestCommandArgumentContract(t *testing.T) {
 				return
 			}
 
-			// A usage error is one escaped diagnostic line and no result.
+			// A usage error is escaped diagnostic lines and no result.
 			diagnostic := stderr.String()
-			if stdout.Len() != 0 || !strings.HasPrefix(diagnostic, "xunhen: ") || strings.Count(diagnostic, "\n") != 1 {
-				t.Fatalf("stdout = %q, stderr = %q; want one diagnostic line", stdout.String(), diagnostic)
+			if stdout.Len() != 0 || !strings.HasSuffix(diagnostic, "\n") {
+				t.Fatalf("stdout = %q, stderr = %q; want only diagnostic lines", stdout.String(), diagnostic)
 			}
-			for _, char := range strings.TrimSuffix(diagnostic, "\n") {
-				if char < 0x20 || char > 0x7e {
-					t.Fatalf("diagnostic contains unsafe character %U: %q", char, diagnostic)
+			for line := range strings.SplitSeq(strings.TrimSuffix(diagnostic, "\n"), "\n") {
+				if !strings.HasPrefix(line, "xunhen: ") {
+					t.Fatalf("diagnostic line %q lacks the xunhen: prefix", line)
+				}
+				for _, char := range line {
+					if char < 0x20 || char > 0x7e {
+						t.Fatalf("diagnostic contains unsafe character %U: %q", char, diagnostic)
+					}
 				}
 			}
 			if !strings.Contains(diagnostic, tt.diagnostic) {

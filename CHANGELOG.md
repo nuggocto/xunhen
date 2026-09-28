@@ -19,9 +19,10 @@ says which behavior stays fixed within a major version.
 - `xunhen diff` compares two retained states as a unified diff.
 - `xunhen browse` explores a history in the terminal: a branch tree, a
   preview of each state, comparisons, and the command that exports a state.
-- `--source FILE --undo-dir DIR` finds a history by its source file's path in
-  the undo directories you name, and reports missing or ambiguous matches
-  instead of guessing.
+- Every command takes the source file as its argument, as in
+  `xunhen browse retry.go`, and finds its history by the file's path in the
+  undo directories you name with `--undo-dir` or once in `XUNHEN_UNDO_DIR`.
+  Missing or ambiguous matches are reported instead of guessed.
 - Release archives for Linux on x86-64 with checksums and a provenance
   record, a Nix flake for NixOS, and an AUR recipe.
 

@@ -25,6 +25,20 @@ commit: 0123456789abcdef0123456789abcdef01234567
 go: go1.27.1
 ```
 
+## After installing
+
+Tell xunhen where Neovim keeps undo files, once, in your shell's startup
+file (`~/.bashrc`, `~/.zshrc`, or `~/.config/fish/config.fish`):
+
+```sh
+export XUNHEN_UNDO_DIR=$HOME/.local/state/nvim/undo
+```
+
+That is Neovim's default; `:echo &undodir` in Neovim prints yours, and a
+list of several is separated by colons. Then `xunhen browse retry.go` opens
+the history of `retry.go`. xunhen needs nothing else: no configuration file,
+and it never reads Neovim's. [usage.md](usage.md) walks through a recovery.
+
 ## Release archive
 
 Each GitHub release holds `xunhen_VERSION_linux_amd64.tar.gz`, the source
