@@ -126,14 +126,11 @@ draft's assets, checks them against `SHA256SUMS.txt` and `provenance.json`
 and the tag's commit, and only then publishes the draft. It never builds
 anything, so the published bytes are the verified ones.
 
-Two repository settings protect this path:
-
-- Give the environment named `release` required reviewers. The publish
-  job runs in it, so publishing waits for a maintainer's approval. GitHub
-  creates the environment, unprotected, the first time the job runs.
-- Turn on immutable releases. GitHub then refuses to change a published
-  release's assets or move its tag. Staging already follows the order that
-  requires: create the draft, attach every asset, then publish.
+Starting the workflow by hand is the approval, and only accounts with
+write access to the repository can start it. Turn on immutable releases in
+the repository settings: GitHub then refuses to change a published release's
+assets or move its tag. Staging already follows the order that requires:
+create the draft, attach every asset, then publish.
 
 Only the stage and publish jobs can write to the repository, and neither
 runs on pull requests or executes repository code. Pull requests run only

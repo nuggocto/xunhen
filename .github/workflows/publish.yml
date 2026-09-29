@@ -2,8 +2,8 @@ name: Publish release
 
 # Publishes a draft release that release.yml staged, after checking its
 # assets again. It never builds anything: the published bytes are the ones
-# that were built, verified, and staged. The release environment should
-# require a maintainer's approval; docs/releasing.md describes the setup.
+# that were built, verified, and staged. Running it by hand is the approval:
+# only accounts with write access to the repository can start it.
 #
 # With rehearsal set, it runs every check against a rehearsal-COMMIT draft
 # and then deletes that draft instead of publishing it.
@@ -27,7 +27,6 @@ jobs:
     name: Publish the staged release
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    environment: release
     permissions:
       contents: write
     env:
