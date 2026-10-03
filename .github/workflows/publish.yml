@@ -1,9 +1,10 @@
 name: Publish release
 
 # Publishes a draft release that release.yml staged, after checking its
-# assets again. It never builds anything: the published bytes are the ones
-# that were built, verified, and staged. Running it by hand is the approval:
-# only accounts with write access to the repository can start it.
+# assets again. It never builds anything: the published bytes must equal the
+# archive artifact of the successful Release run that built and verified
+# them. Running it by hand is the approval: only accounts with write access
+# to the repository can start it.
 #
 # With rehearsal set, it runs every check against a rehearsal-COMMIT draft
 # and then deletes that draft instead of publishing it.
@@ -29,6 +30,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: write
+      actions: read
     env:
       RELEASE: ${{ inputs.release }}
       REHEARSAL: ${{ inputs.rehearsal }}
@@ -72,6 +74,29 @@ jobs:
           for archive in xunhen_*.tar.gz; do
             want=$(jq -r --arg name "$archive" '.artifacts[] | select(.name == $name) | .sha256' provenance.json)
             [[ $want == "$(sha256sum "$archive" | cut -d' ' -f1)" ]] || fail "provenance.json disagrees about $archive"
+          done
+
+          # Anyone who can edit the draft can replace an archive together
+          # with SHA256SUMS.txt and provenance.json, and every check above
+          # would still pass. A workflow run's artifact cannot be replaced,
+          # so the draft must hold exactly the bytes of the archive artifact
+          # of a successful Release run for this commit: a run on shrek for a
+          # rehearsal, or a tag push for a release. Release runs on a push
+          # only for a tag, and only the tag equal to v and the commit's
+          # VERSION passes it, so the commit names that run.
+          if [[ $REHEARSAL == true ]]; then
+            filter=(--event workflow_dispatch --branch shrek)
+          else
+            filter=(--event push)
+          fi
+          run=$(gh run list --workflow release.yml --commit "$commit" "${filter[@]}" \
+            --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          [[ -n $run ]] || fail "no successful Release run built $RELEASE at $commit"
+          gh run download "$run" --name archive --dir ../verified
+          [[ $(find ../verified -type f -printf '%f\n' | sort) == $(printf '%s\n' "${expected[@]}" | sort) ]] ||
+            fail "the archive artifact of run $run holds other files than the release's four"
+          for file in "${expected[@]}"; do
+            cmp -s "$file" "../verified/$file" || fail "$file differs from the one Release run $run built and verified"
           done
       - name: Publish
         if: ${{ !inputs.rehearsal }}

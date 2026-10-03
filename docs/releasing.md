@@ -123,8 +123,17 @@ draft and deletes it instead of publishing.
 Staging leaves a draft. Look at it, then run **Publish release**
 (`.github/workflows/publish.yml`) by hand with the tag as `release`. It downloads the
 draft's assets, checks them against `SHA256SUMS.txt` and `provenance.json`
-and the tag's commit, and only then publishes the draft. It never builds
-anything, so the published bytes are the verified ones.
+and the tag's commit, then compares all four, byte for byte, with the
+`archive` artifact of the successful **Release** run for that tag and
+commit. Only then does it publish the draft. It never builds anything, so
+the published bytes are the verified ones.
+
+The comparison with the run's artifact matters because a draft's assets
+can be edited: someone could replace an archive along with
+`SHA256SUMS.txt` and `provenance.json`, and the draft would still agree
+with itself. The artifact cannot be changed after the run. Workflow
+artifacts expire after the repository's retention period, 90 days by
+default, so publish the draft before then.
 
 Starting the workflow by hand is the approval, and only accounts with
 write access to the repository can start it. Turn on immutable releases in
