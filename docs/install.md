@@ -6,7 +6,8 @@ below installs the same program, built from the same tagged source.
 
 > **No release has been published yet.** The commands below are the ones the
 > first release will use, with `1.0.0` standing for its version. Until then,
-> build from a clone as [CONTRIBUTING.md](../CONTRIBUTING.md) describes.
+> build from a clone as
+> [CONTRIBUTING.md](https://github.com/nuggocto/xunhen/blob/shrek/CONTRIBUTING.md) describes.
 
 | Channel | Needs | Root? |
 | --- | --- | --- |
@@ -171,7 +172,8 @@ makepkg --syncdeps --install
 - **Remove:** `sudo pacman -R xunhen`.
 
 The recipe builds the same static executable as the release archive,
-without cgo. [packaging/aur/PKGBUILD.in](../packaging/aur/PKGBUILD.in)
+without cgo.
+[packaging/aur/PKGBUILD.in](https://github.com/nuggocto/xunhen/blob/shrek/packaging/aur/PKGBUILD.in)
 explains why it departs from Arch's PIE build flags.
 
 ## Go source

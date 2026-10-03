@@ -112,7 +112,8 @@ xunhen: base.txt: unsupported input: base text: CRLF base text
 ```
 
 - A format other than 3, or a Vim or encrypted undo file, is not supported.
-  [compatibility.md](compatibility.md) lists the one verified producer.
+  [compatibility.md](https://github.com/nuggocto/xunhen/blob/shrek/docs/compatibility.md)
+  lists the one verified producer.
 - `invalid input` or `truncated input` with a byte offset means the file is
   not a complete undo file: copied while Neovim was writing it, cut short, or
   something else entirely. Copy it again while the editor is idle.

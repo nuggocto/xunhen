@@ -171,8 +171,8 @@ when the source's own directory is one of the searched directories), and
 never lists or descends into directories. A candidate counts only after it
 decodes, validates, and matches the source text. No match, several matches,
 and an unreadable directory are all errors that list every candidate;
-nothing is chosen by order or date. [discovery.md](discovery.md) has the
-details.
+nothing is chosen by order or date.
+[discovery.md](https://github.com/nuggocto/xunhen/blob/shrek/docs/discovery.md) has the details.
 
 ### The terminal browser
 
@@ -195,7 +195,8 @@ comparison. It needs a terminal on stdin and stdout and a `TERM` other than
 | `?` | Help |
 | `q`, ctrl+c, ctrl+z | Quit, interrupt, suspend |
 
-[browse.md](browse.md) describes the browser in full.
+[browse.md](https://github.com/nuggocto/xunhen/blob/shrek/docs/browse.md) describes the browser
+in full.
 
 ## Exit status
 
@@ -231,16 +232,17 @@ numbers, headed `--- node FROM` and `+++ node TO`. Identical states print
 nothing. The undo file records neither state's final newline, so the diff
 never reports one.
 
-The [compatibility guide](compatibility.md#stability-within-v1) says which
-of these contracts stay fixed within v1.
+The
+[compatibility guide](https://github.com/nuggocto/xunhen/blob/shrek/docs/compatibility.md#stability-within-v1)
+says which of these contracts stay fixed within v1.
 
 ## Text the base may hold
 
 A base or source file must be UTF-8 with LF line endings and no byte-order
 mark or NUL. A lone CR is part of a line. CRLF, Latin-1, and other text is
 refused with the reason; `inspect` still works on those histories. The
-[compatibility guide](compatibility.md#text-and-history-cases) lists every
-case.
+[compatibility guide](https://github.com/nuggocto/xunhen/blob/shrek/docs/compatibility.md#text-and-history-cases)
+lists every case.
 
 ## Limits
 

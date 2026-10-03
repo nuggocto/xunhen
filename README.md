@@ -91,21 +91,22 @@ history from the test corpus and lists every flag and exit status.
 - [Install](docs/install.md): every channel, checksums, upgrades, and removal
 - [Usage](docs/usage.md): a recovery walkthrough, flags, exit codes, and output
 - [Troubleshooting](docs/troubleshooting.md): what each error means and what to do
-- [Browse](docs/browse.md): the terminal browser, its keys, and its memory use
-- [Discovery](docs/discovery.md): how xunhen finds a source file's history
-- [Compatibility](docs/compatibility.md): the supported producer, text cases, and what stays stable
-- [Undo format](docs/undo-format.md): what is decoded and its limits
-- [Diff](docs/diff.md): the comparison algorithm
-- [Performance](docs/performance.md): workloads, measurements, and targets
-- [Verification](docs/verification.md): what each test guards and how to run the checks
-- [Releasing](docs/releasing.md): versions, reproducible archives, and packages
+- [Browse](https://github.com/nuggocto/xunhen/blob/shrek/docs/browse.md): the terminal browser, its keys, and its memory use
+- [Discovery](https://github.com/nuggocto/xunhen/blob/shrek/docs/discovery.md): how xunhen finds a source file's history
+- [Compatibility](https://github.com/nuggocto/xunhen/blob/shrek/docs/compatibility.md): the supported producer, text cases, and what stays stable
+- [Undo format](https://github.com/nuggocto/xunhen/blob/shrek/docs/undo-format.md): what is decoded and its limits
+- [Diff](https://github.com/nuggocto/xunhen/blob/shrek/docs/diff.md): the comparison algorithm
+- [Performance](https://github.com/nuggocto/xunhen/blob/shrek/docs/performance.md): workloads, measurements, and targets
+- [Verification](https://github.com/nuggocto/xunhen/blob/shrek/docs/verification.md): what each test guards and how to run the checks
+- [Releasing](https://github.com/nuggocto/xunhen/blob/shrek/docs/releasing.md): versions, reproducible archives, and packages
 - [Changelog](CHANGELOG.md)
 
 ## Development
 
-[CONTRIBUTING.md](CONTRIBUTING.md) covers building, the checks, the fixture
-corpus, and adding a decoder. Please report bugs with the issue form, and
-never attach a real undo file: it keeps text you deleted, secrets included.
+[CONTRIBUTING.md](https://github.com/nuggocto/xunhen/blob/shrek/CONTRIBUTING.md)
+covers building, the checks, the fixture corpus, and adding a decoder.
+Please report bugs with the issue form, and never attach a real undo file:
+it keeps text you deleted, secrets included.
 
 Licensed under [Apache-2.0](LICENSE). The executable includes third-party
 modules whose licenses are in [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt).

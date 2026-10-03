@@ -2,7 +2,8 @@
 
 User-visible changes to xunhen, newest first. Each release lists only the
 categories it has entries for: Added, Changed, Fixed, Removed, Deprecated,
-and Security. [docs/compatibility.md](docs/compatibility.md#stability-within-v1)
+and Security.
+[docs/compatibility.md](https://github.com/nuggocto/xunhen/blob/shrek/docs/compatibility.md#stability-within-v1)
 says which behavior stays fixed within a major version.
 
 ## [Unreleased]
