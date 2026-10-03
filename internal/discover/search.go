@@ -84,10 +84,9 @@ type Scope struct {
 
 // Load is a validated history found by a search, with its source association.
 type Load struct {
-	Path     string
-	Identity input.Identity
-	File     *undofile.DecodedFile
-	History  *history.History
+	Path    string
+	File    *undofile.DecodedFile
+	History *history.History
 
 	// Base is the verified source text, or nil when the association is
 	// unverified; Err then says why.
@@ -303,7 +302,7 @@ func (s *search) load(d *input.Dir, name, path string, entry input.Entry) error 
 		return s.failed(path, identity, err)
 	}
 
-	loaded := &Load{Path: path, Identity: identity, File: file, History: h, Err: s.req.BaseErr}
+	loaded := &Load{Path: path, File: file, History: h, Err: s.req.BaseErr}
 	if s.req.Base != nil {
 		loaded.Base, loaded.Err = s.req.Base.Verify(file)
 	} else if loaded.Err == nil {
@@ -332,8 +331,7 @@ func (s *search) failed(path string, identity input.Identity, err error) error {
 	}
 
 	outcome := Unexamined
-	var problem *undofile.InputError
-	if errors.As(err, &problem) {
+	if problem, ok := errors.AsType[*undofile.InputError](err); ok {
 		switch problem.Kind {
 		case undofile.Invalid, undofile.Truncated, undofile.Unsupported:
 			outcome = Rejected

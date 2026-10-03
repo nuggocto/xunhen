@@ -206,8 +206,8 @@ func (in *inputs) check(command string, withBase bool, lim limits.Limits) error 
 // usageFailure reports an invalid invocation with status 2. A hintError
 // gets one diagnostic line per line of its explanation.
 func usageFailure(stderr io.Writer, err error) int {
-	var hint *hintError
-	if !errors.As(err, &hint) {
+	hint, ok := errors.AsType[*hintError](err)
+	if !ok {
 		return diagnostic(stderr, exitUsage, err.Error())
 	}
 	for _, line := range hint.lines {
@@ -316,7 +316,7 @@ func loadFromSource(ctx context.Context, in *inputs, need needs, lim limits.Limi
 		base, baseErr = undofile.PrepareBase(ctx, in.source, lines, lim)
 	}
 	if baseErr != nil && need.base {
-		return nil, &sourceError{path: in.source, err: baseErr}
+		return nil, &sourceError{err: baseErr}
 	}
 
 	result, err := search(ctx, discover.Request{
@@ -408,8 +408,7 @@ func isFatal(err error) bool {
 // sourceError reports a source that cannot serve as the base for
 // reconstruction.
 type sourceError struct {
-	path string
-	err  error
+	err error
 }
 
 func (e *sourceError) Error() string {
@@ -422,12 +421,10 @@ func (e *sourceError) Unwrap() error { return e.err }
 // Search and source failures get several lines: what was searched, what each
 // candidate turned out to be, and how to continue with explicit paths.
 func operationError(stderr io.Writer, err error) int {
-	var searchErr *discover.SearchError
-	var sourceErr *sourceError
-	switch {
-	case errors.As(err, &searchErr):
+	if searchErr, ok := errors.AsType[*discover.SearchError](err); ok {
 		return explainSearch(stderr, searchErr)
-	case errors.As(err, &sourceErr):
+	}
+	if sourceErr, ok := errors.AsType[*sourceError](err); ok {
 		lines := []string{
 			sourceErr.Error(),
 			"  Undo files are found by the source's path, but reconstruction also needs",
@@ -436,9 +433,8 @@ func operationError(stderr io.Writer, err error) int {
 			"    xunhen show --undo PATH --base COPY --node ID",
 		}
 		return diagnostics(stderr, lines)
-	default:
-		return diagnostic(stderr, exitFailure, err.Error())
 	}
+	return diagnostic(stderr, exitFailure, err.Error())
 }
 
 func explainSearch(stderr io.Writer, e *discover.SearchError) int {
