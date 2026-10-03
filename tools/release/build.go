@@ -12,7 +12,9 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
+	"regexp"
 	"runtime/debug"
 	"slices"
 	"strings"
@@ -290,11 +292,26 @@ func sourceFiles(s *source) []tarball.File {
 	return files
 }
 
-// checkDocs confirms every file the binary archive names is in the commit.
+// markdownLink matches the target of an inline Markdown link.
+var markdownLink = regexp.MustCompile(`\]\(([^)\s]+)\)`)
+
+// checkDocs confirms every file the binary archive names is in the commit,
+// and that their relative links lead only to one another: someone who
+// unpacks the archive has nothing else. Anything outside it needs a URL.
 func checkDocs(s *source) error {
 	for _, name := range layout.BinaryDocs {
-		if _, ok := s.file(name); !ok {
+		data, ok := s.file(name)
+		if !ok {
 			return fmt.Errorf("the commit has no %s, which the binary archive carries", name)
+		}
+		for _, m := range markdownLink.FindAllSubmatch(data, -1) {
+			target, _, _ := strings.Cut(string(m[1]), "#")
+			if target == "" || strings.Contains(target, "://") || strings.HasPrefix(target, "mailto:") {
+				continue
+			}
+			if !slices.Contains(layout.BinaryDocs, path.Join(path.Dir(name), target)) {
+				return fmt.Errorf("%s links to %s, which the binary archive does not carry; link to it by URL", name, m[1])
+			}
 		}
 	}
 	return nil

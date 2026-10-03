@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/nuggocto/xunhen/tools/internal/layout"
 )
 
 // repo is a throwaway git repository. Commands pass their identity, disable
@@ -322,6 +324,44 @@ func TestResolveIdentifiesTheCommit(t *testing.T) {
 				if f.executable != (f.path == "run.sh") {
 					t.Fatalf("%s executable = %v", f.path, f.executable)
 				}
+			}
+		})
+	}
+}
+
+// Someone who unpacks the binary archive has only the files in it, so a
+// relative link from a shipped document must lead to another shipped one.
+// Each case gives one document a link; the others hold none.
+func TestCheckDocs(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name, file, text, want string
+	}{
+		{name: "links between shipped documents", file: "docs/usage.md", text: "[a](install.md#go-source) [b](../README.md) [c](#limits)"},
+		{name: "a link by URL", file: "README.md", text: "[a](https://github.com/nuggocto/xunhen/blob/shrek/docs/browse.md)"},
+		{name: "a guide the archive lacks", file: "docs/usage.md", text: "[a](browse.md)", want: "browse.md"},
+		{name: "a file outside docs", file: "docs/install.md", text: "[a](../CONTRIBUTING.md)", want: "../CONTRIBUTING.md"},
+		{name: "a missing document", file: "docs/usage.md", want: "has no docs/usage.md"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			s := &source{}
+			for _, name := range layout.BinaryDocs {
+				switch {
+				case name != tt.file:
+					s.files = append(s.files, treeFile{path: name, data: []byte("text")})
+				case tt.text != "":
+					s.files = append(s.files, treeFile{path: name, data: []byte(tt.text)})
+				}
+			}
+			err := checkDocs(s)
+			switch {
+			case tt.want == "" && err != nil:
+				t.Fatal(err)
+			case tt.want != "" && (err == nil || !strings.Contains(err.Error(), tt.want)):
+				t.Fatalf("checkDocs returned %v, want an error about %q", err, tt.want)
 			}
 		})
 	}
