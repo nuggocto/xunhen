@@ -179,10 +179,12 @@ explains why it departs from Arch's PIE build flags.
 With Go 1.27.1 or later:
 
 ```sh
-go install github.com/nuggocto/xunhen/cmd/xunhen@v1.0.0
+CGO_ENABLED=0 go install github.com/nuggocto/xunhen/cmd/xunhen@v1.0.0
 ```
 
 This installs `$(go env GOPATH)/bin/xunhen`, usually `~/go/bin/xunhen`.
+`CGO_ENABLED=0` makes it the same static executable as the other channels:
+with a C compiler installed, Go otherwise links it against the C library.
 `xunhen version` reports the module version, and `commit: unknown`, because
 Go records no commit for a module download. Remove it with
 `rm "$(go env GOPATH)/bin/xunhen"`.

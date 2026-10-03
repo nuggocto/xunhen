@@ -36,7 +36,7 @@ No release has been published yet. Once it is, xunhen installs from:
 - [Go source](docs/install.md#go-source), with `go install`.
 
 Until then, build it from a clone with Go 1.27.1:
-`go build -o bin/xunhen ./cmd/xunhen`.
+`CGO_ENABLED=0 go build -trimpath -o bin/xunhen ./cmd/xunhen`.
 
 ## Usage
 

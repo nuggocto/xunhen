@@ -11,8 +11,13 @@ other way of installing Go 1.27.1 works too. Neovim is not needed.
 ```sh
 git clone https://github.com/nuggocto/xunhen.git
 cd xunhen
-go build -o bin/xunhen ./cmd/xunhen
+CGO_ENABLED=0 go build -trimpath -o bin/xunhen ./cmd/xunhen
 ```
+
+`CGO_ENABLED=0` and `-trimpath` give the static executable the releases
+ship, which `tools/verify` checks for. With a C compiler installed, Go
+enables cgo by default and links the executable against the C library, and
+the verifier rejects it. `mise run build` runs the same command.
 
 The checks CI runs:
 

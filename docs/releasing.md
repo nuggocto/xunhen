@@ -242,8 +242,9 @@ the package.
 
 These run once a candidate tag exists, outside this workflow:
 
-- `go install github.com/nuggocto/xunhen/cmd/xunhen@vX.Y.Z` from the public
-  module proxy, and its `xunhen version` output.
+- `CGO_ENABLED=0 go install github.com/nuggocto/xunhen/cmd/xunhen@vX.Y.Z`
+  from the public module proxy, as `docs/install.md` gives it, and its
+  `xunhen version` output.
 - Fetching the published source archive through the AUR recipe, rather than
   a local copy.
 - Installation on the Debian, Ubuntu, Alpine, NixOS, and Arch environments
