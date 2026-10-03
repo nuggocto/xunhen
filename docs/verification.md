@@ -33,7 +33,7 @@ breaking the behavior it guards makes it fail; the mutations listed under
 | A release reads the objects its commit ID names, even when `refs/replace` substitutes others | `TestResolveIgnoresReplacements` |
 | The release tool's tests run no git hooks from the user's template or configuration | `TestRepoRunsNoHooks` |
 | Release archives are reproducible and hold only regular files with fixed modes, owners, and times | `TestWriteIsDeterministic`, `TestWriteRejectsBadNames`, `TestReadRejectsUnsafeArchives`, `TestReadRejectsDamagedStreams`, `TestReadRejectsHiddenHeaders`, `tools/reproduce.sh` in CI |
-| Every channel's executable passes the same artifact checks | `tools/verify` in CI, the release workflow, the Nix checks, and the AUR recipe's `check()`; `TestVerifierJudgesExecutables` and `TestVerifierJudgesArchives` confirm it fails wrong executables and damaged archives |
+| Every channel's executable passes the same artifact checks | `tools/verify` in CI, the release workflow, the Nix checks, and the AUR recipe's `check()`; `TestVerifierJudgesExecutables` and `TestVerifierJudgesArchives` confirm it fails wrong executables and damaged archives; `TestVerifierRefusesUnreadableArchives` that it refuses oversized files and FIFOs without blocking |
 
 `TestCorpusThroughTheCommand`, `TestReplayOracle`, and `TestPreviewsMatchNeovim`
 read the stored Neovim corpus, so every `go test ./...` runs the oracle

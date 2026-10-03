@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -211,25 +212,73 @@ func TestVerifierJudgesArchives(t *testing.T) {
 	}
 }
 
-// The verifier refuses an archive larger than its limit before reading it.
-// A sparse file makes the size without the memory or disk it describes.
-func TestVerifierRefusesOversizedArchives(t *testing.T) {
+// The verifier refuses an archive it should not read before reading it. A
+// sparse file makes an oversized archive without the memory or disk it
+// describes. A FIFO with no writer would block a plain open in the kernel,
+// out of reach of a timeout or SIGTERM, so each case must return promptly.
+func TestVerifierRefusesUnreadableArchives(t *testing.T) {
 	t.Parallel()
 
-	c := testConfig("")
-	c.binary, c.archive = "", filepath.Join(t.TempDir(), layout.BinaryArchive(testVersion)+".tar.gz")
-	f, err := os.Create(c.archive)
-	if err != nil {
-		t.Fatal(err)
+	name := layout.BinaryArchive(testVersion) + ".tar.gz"
+	fifo := func(t *testing.T, path string) {
+		t.Helper()
+		if err := syscall.Mkfifo(path, 0o600); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if err := f.Truncate(maxArchiveBytes + 1); err != nil {
-		t.Fatal(err)
+	tests := []struct {
+		name  string
+		setup func(t *testing.T, c *config)
+		want  string
+	}{
+		{name: "an archive over the size limit", setup: func(t *testing.T, c *config) {
+			f, err := os.Create(c.archive)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := f.Truncate(maxArchiveBytes + 1); err != nil {
+				t.Fatal(err)
+			}
+			if err := f.Close(); err != nil {
+				t.Fatal(err)
+			}
+		}, want: "larger than"},
+		{name: "a FIFO archive", setup: func(t *testing.T, c *config) { fifo(t, c.archive) }, want: "not a regular file"},
+		{name: "a symbolic link to a FIFO archive", setup: func(t *testing.T, c *config) {
+			target := filepath.Join(filepath.Dir(c.archive), "pipe")
+			fifo(t, target)
+			if err := os.Symlink(target, c.archive); err != nil {
+				t.Fatal(err)
+			}
+		}, want: "not a regular file"},
+		{name: "a FIFO checksum file", setup: func(t *testing.T, c *config) {
+			if err := os.WriteFile(c.archive, []byte("archive"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			c.sums = filepath.Join(filepath.Dir(c.archive), "SHA256SUMS.txt")
+			fifo(t, c.sums)
+		}, want: "not a regular file"},
 	}
-	if err := f.Close(); err != nil {
-		t.Fatal(err)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			c := testConfig("")
+			c.binary, c.archive = "", filepath.Join(t.TempDir(), name)
+			tt.setup(t, &c)
 
-	if _, _, err := checkArchive(c); err == nil || !strings.Contains(err.Error(), "larger than") {
-		t.Fatalf("checkArchive returned %v, want a refusal of the size", err)
+			done := make(chan error, 1)
+			go func() {
+				_, _, err := checkArchive(c)
+				done <- err
+			}()
+			select {
+			case err := <-done:
+				if err == nil || !strings.Contains(err.Error(), tt.want) {
+					t.Fatalf("checkArchive returned %v, want an error about %q", err, tt.want)
+				}
+			case <-time.After(10 * time.Second):
+				t.Fatal("checkArchive is still blocked after 10s")
+			}
+		})
 	}
 }

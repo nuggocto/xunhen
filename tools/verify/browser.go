@@ -129,6 +129,8 @@ func (w *world) session(ctx context.Context, args []string, steps []step, status
 		if s.send != "" {
 			mark = t.mark()
 			if _, err := pair.Master.WriteString(s.send); err != nil {
+				_ = cmd.Process.Kill()
+				_ = cmd.Wait()
 				return err
 			}
 		}

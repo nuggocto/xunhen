@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 
 	"github.com/nuggocto/xunhen/tools/internal/layout"
 	"github.com/nuggocto/xunhen/tools/internal/tarball"
@@ -81,6 +82,7 @@ func checkArchive(c config) (string, string, error) {
 	}
 	path := filepath.Join(dir, layout.Executable)
 	if err := os.WriteFile(path, exe.Data, 0o755); err != nil {
+		_ = os.RemoveAll(dir)
 		return "", "", err
 	}
 	detail := fmt.Sprintf(" (sha256 %x, %d files, executable sha256 %x)", digest, len(a.Files), sha256.Sum256(exe.Data))
@@ -114,19 +116,12 @@ func checkSum(path, name, sum string) error {
 // the size before reading and reads through a limit, so a larger file, or
 // one that grows while it is read, never gets past the limit into memory.
 func readArchive(path string) ([]byte, error) {
-	f, err := os.Open(path)
+	f, info, err := openRegular(path)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = f.Close() }()
 
-	info, err := f.Stat()
-	if err != nil {
-		return nil, err
-	}
-	if !info.Mode().IsRegular() {
-		return nil, fmt.Errorf("%s is not a regular file", path)
-	}
 	if info.Size() > maxArchiveBytes {
 		return nil, fmt.Errorf("%s is larger than %d bytes", path, maxArchiveBytes)
 	}
@@ -138,4 +133,23 @@ func readArchive(path string) ([]byte, error) {
 		return nil, fmt.Errorf("%s grew past %d bytes while it was read", path, maxArchiveBytes)
 	}
 	return data, nil
+}
+
+// openRegular opens a regular file for reading. The open does not block:
+// opening a FIFO with no writer would otherwise wait in the kernel, where
+// neither a timeout nor SIGTERM's cancellation reaches it.
+func openRegular(path string) (*os.File, os.FileInfo, error) {
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return nil, nil, err
+	}
+	info, err := f.Stat()
+	if err == nil && !info.Mode().IsRegular() {
+		err = fmt.Errorf("%s is not a regular file", path)
+	}
+	if err != nil {
+		_ = f.Close()
+		return nil, nil, err
+	}
+	return f, info, nil
 }

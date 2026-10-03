@@ -57,7 +57,7 @@ func verify(ctx context.Context, c config) []result {
 	if err != nil {
 		return append(results, result{name: "setup", err: err})
 	}
-	defer func() { _ = os.RemoveAll(w.root) }()
+	defer w.remove()
 
 	before, err := fingerprint(w.root)
 	if err != nil {
@@ -100,7 +100,7 @@ func verify(ctx context.Context, c config) []result {
 	return results
 }
 
-func newWorld(binary, corpus string) (*world, error) {
+func newWorld(binary, corpus string) (_ *world, err error) {
 	info, err := os.Stat(binary)
 	if err != nil {
 		return nil, err
@@ -119,6 +119,7 @@ func newWorld(binary, corpus string) (*world, error) {
 	}
 	root, err := filepath.EvalSymlinks(dir)
 	if err != nil {
+		_ = os.RemoveAll(dir)
 		return nil, err
 	}
 	w := &world{
@@ -131,6 +132,11 @@ func newWorld(binary, corpus string) (*world, error) {
 		// up as a changed input.
 		marker: root + ".ran",
 	}
+	defer func() {
+		if err != nil {
+			w.remove()
+		}
+	}()
 	for _, d := range []string{w.home, w.bin} {
 		if err := os.Mkdir(d, 0o755); err != nil {
 			return nil, err
@@ -146,6 +152,12 @@ func newWorld(binary, corpus string) (*world, error) {
 		return nil, err
 	}
 	return w, nil
+}
+
+// remove deletes the world and the marker beside it.
+func (w *world) remove() {
+	_ = os.RemoveAll(w.root)
+	_ = os.Remove(w.marker)
 }
 
 // copyCorpus copies each fixture's files read-only, so the executable only
@@ -330,9 +342,10 @@ func sameFingerprint(before, after map[string]string) error {
 	return nil
 }
 
-// readAll reads a small file the verifier wrote or copied.
+// readAll reads a small regular file: one the verifier wrote or copied, or
+// the go.sum and SHA256SUMS.txt it was given.
 func readAll(path string) ([]byte, error) {
-	f, err := os.Open(path)
+	f, _, err := openRegular(path)
 	if err != nil {
 		return nil, err
 	}
