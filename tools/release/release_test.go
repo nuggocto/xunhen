@@ -11,9 +11,11 @@ import (
 	"time"
 )
 
-// repo is a throwaway git repository. Commands pass their identity and
-// disable signing on the command line, so the user's configuration cannot
-// change what the tests see.
+// repo is a throwaway git repository. Commands pass their identity, disable
+// signing and hooks on the command line, and drop the variables that would
+// point git at another repository; the repository starts from no template.
+// So neither the user's git setup nor a git hook running the tests can
+// change what they see or touch.
 type repo struct {
 	t   *testing.T
 	dir string
@@ -22,7 +24,7 @@ type repo struct {
 func newRepo(t *testing.T, files map[string]string) *repo {
 	t.Helper()
 	r := &repo{t: t, dir: t.TempDir()}
-	r.git("init", "-q", "-b", "main")
+	r.git("init", "-q", "--template=", "-b", "main")
 	r.write(files)
 	r.commit("first")
 	return r
@@ -32,9 +34,9 @@ func (r *repo) git(args ...string) string {
 	r.t.Helper()
 	ctx, cancel := context.WithTimeout(r.t.Context(), 30*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", append([]string{"-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false"}, args...)...)
+	cmd := exec.CommandContext(ctx, "git", append([]string{"-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false", "-c", "core.hooksPath=/dev/null"}, args...)...)
 	cmd.Dir = r.dir
-	cmd.Env = append(os.Environ(),
+	cmd.Env = append(gitEnv(),
 		"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1",
 		"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@example.invalid",
 		"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@example.invalid",
@@ -128,6 +130,148 @@ func TestResolveRefusesUnidentifiedSources(t *testing.T) {
 			_, err := resolve(t.Context(), r.dir, tt.tag)
 			if err == nil || !strings.Contains(err.Error(), tt.want) {
 				t.Fatalf("resolve returned %v, want an error about %q", err, tt.want)
+			}
+		})
+	}
+}
+
+// state is everything about a repository that work in another one must not
+// change: HEAD, the index entries, and the working tree's changes.
+func (r *repo) state() string {
+	r.t.Helper()
+	return r.git("rev-parse", "HEAD") + "\n" + r.git("ls-files", "--stage") + "\n" +
+		r.git("status", "--porcelain=v1", "--untracked-files=all")
+}
+
+// GIT_DIR, GIT_WORK_TREE, and GIT_INDEX_FILE take precedence over a
+// command's working directory, and a git hook that runs the tests or a
+// release exports some of them. Pointed at another repository, they must
+// change neither what resolve reads nor that repository's commits, index,
+// or uncommitted work. The cases set process-wide variables, so they cannot
+// run in parallel.
+func TestGitIgnoresAnotherRepositorysVariables(t *testing.T) {
+	tests := []struct {
+		name string
+		env  func(outside string) map[string]string
+	}{
+		{name: "a shell's GIT_DIR and GIT_WORK_TREE", env: func(outside string) map[string]string {
+			return map[string]string{"GIT_DIR": filepath.Join(outside, ".git"), "GIT_WORK_TREE": outside}
+		}},
+		{name: "a pre-commit hook's GIT_DIR and GIT_INDEX_FILE", env: func(outside string) map[string]string {
+			return map[string]string{"GIT_DIR": filepath.Join(outside, ".git"), "GIT_INDEX_FILE": filepath.Join(outside, ".git", "index")}
+		}},
+		{name: "GIT_INDEX_FILE alone", env: func(outside string) map[string]string {
+			return map[string]string{"GIT_INDEX_FILE": filepath.Join(outside, ".git", "index")}
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			outside := newRepo(t, map[string]string{"VERSION": "9.9.9\n", "notes.txt": "committed\n"})
+			outside.write(map[string]string{"staged.txt": "staged\n"})
+			outside.git("add", "staged.txt")
+			outside.write(map[string]string{"notes.txt": "changed\n", "draft.txt": "untracked\n"})
+			before := outside.state()
+			for name, value := range tt.env(outside.dir) {
+				t.Setenv(name, value)
+			}
+
+			r := newRepo(t, map[string]string{"VERSION": "1.0.0\n", "main.go": "package main\n"})
+			s, err := resolve(t.Context(), r.dir, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if version, _ := s.file("VERSION"); string(version) != "1.0.0\n" {
+				t.Fatalf("resolve read VERSION %q from another repository", version)
+			}
+			if after := outside.state(); after != before {
+				t.Fatalf("the other repository changed from\n%s\nto\n%s", before, after)
+			}
+		})
+	}
+}
+
+// git replace makes git show another object in place of one, under the
+// original's ID, without changing the working tree. A release must read the
+// objects its commit ID names, whatever refs/replace says.
+func TestResolveIgnoresReplacements(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		replace func(t *testing.T, r *repo)
+	}{
+		{name: "a replaced file", replace: func(t *testing.T, r *repo) {
+			other := filepath.Join(t.TempDir(), "other.go")
+			if err := os.WriteFile(other, []byte("package replaced\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			r.git("replace", r.git("rev-parse", "HEAD:main.go"), r.git("hash-object", "-w", other))
+		}},
+		{name: "a replaced commit", replace: func(t *testing.T, r *repo) {
+			head := r.git("rev-parse", "HEAD")
+			r.write(map[string]string{"main.go": "package replaced\n"})
+			r.commit("other")
+			other := r.git("rev-parse", "HEAD")
+			r.git("reset", "-q", "--hard", head)
+			r.git("replace", head, other)
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			r := newRepo(t, map[string]string{"VERSION": "1.0.0\n", "main.go": "package main\n"})
+			head := r.git("rev-parse", "HEAD")
+			tt.replace(t, r)
+
+			s, err := resolve(t.Context(), r.dir, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if data, _ := s.file("main.go"); s.commit != head || string(data) != "package main\n" {
+				t.Fatalf("resolved %s with main.go %q, want %s with its own main.go", s.commit, data, head)
+			}
+		})
+	}
+}
+
+// A user's git template or configuration can install hooks, which the
+// helper's commits would run. The tests must run none: a hook can do
+// anything, anywhere. The cases set process-wide variables, so they cannot
+// run in parallel.
+func TestRepoRunsNoHooks(t *testing.T) {
+	tests := []struct {
+		name string
+		env  func(hooks string) map[string]string
+	}{
+		{name: "a template with hooks", env: func(hooks string) map[string]string {
+			return map[string]string{"GIT_TEMPLATE_DIR": filepath.Dir(hooks)}
+		}},
+		{name: "core.hooksPath from the environment", env: func(hooks string) map[string]string {
+			return map[string]string{"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "core.hooksPath", "GIT_CONFIG_VALUE_0": hooks}
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			canary := filepath.Join(t.TempDir(), "ran")
+			hooks := filepath.Join(t.TempDir(), "template", "hooks")
+			if err := os.MkdirAll(hooks, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			script := "#!/bin/sh\necho \"$0\" >> '" + canary + "'\n"
+			for _, name := range []string{"pre-commit", "commit-msg", "post-commit", "post-checkout"} {
+				if err := os.WriteFile(filepath.Join(hooks, name), []byte(script), 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			for name, value := range tt.env(hooks) {
+				t.Setenv(name, value)
+			}
+
+			r := newRepo(t, map[string]string{"VERSION": "1.0.0\n"})
+			r.write(map[string]string{"main.go": "package main\n"})
+			r.commit("second")
+			if ran, err := os.ReadFile(canary); err == nil {
+				t.Fatalf("hooks ran: %s", ran)
 			}
 		})
 	}

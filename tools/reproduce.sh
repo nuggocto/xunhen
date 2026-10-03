@@ -14,6 +14,13 @@
 # the fact.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# GIT_DIR, GIT_INDEX_FILE, and the like, which a git hook exports, would
+# point every git command here at another repository than this checkout.
+# A replacement under refs/replace would show other contents under the
+# commit's own object IDs.
+# shellcheck disable=SC2046 # one variable name per word
+unset $(git rev-parse --local-env-vars)
+export GIT_NO_REPLACE_OBJECTS=1
 
 tag=()
 if [[ ${1:-} == -tag ]]; then
@@ -50,8 +57,9 @@ checkouts=("$work/a" "$work/b/a/much/longer/path/to/a/second/checkout")
 names=(first second)
 for i in 0 1; do
 	checkout=${checkouts[$i]}
-	git clone --quiet --no-local . "$checkout"
-	git -C "$checkout" checkout --quiet --detach "$commit"
+	# No template and no hooks: the clones hold only the commit's files.
+	git -c core.hooksPath=/dev/null clone --quiet --no-local --template= . "$checkout"
+	git -c core.hooksPath=/dev/null -C "$checkout" checkout --quiet --detach "$commit"
 	echo "reproduce: ${names[$i]} build in a clone at a ${#checkout}-character path"
 	(cd "$checkout" && GOCACHE="$work/cache-$i" tools/release.sh build "${tag[@]}" -out "$out/${names[$i]}")
 done

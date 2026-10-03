@@ -7,8 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -218,6 +220,29 @@ func readTree(ctx context.Context, root, commit string) ([]treeFile, error) {
 	return files, nil
 }
 
+// repositoryEnv lists the variables that make git read another repository,
+// index, object store, or configuration than the one in its working
+// directory: the list "git rev-parse --local-env-vars" prints. A git hook
+// exports some of them, so a release run from a hook, or with them left set
+// in a shell, would otherwise read some other repository's commit. Dropping
+// GIT_NO_REPLACE_OBJECTS with the rest is safe: git always runs with
+// --no-replace-objects.
+var repositoryEnv = []string{
+	"GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_CONFIG", "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT",
+	"GIT_OBJECT_DIRECTORY", "GIT_DIR", "GIT_WORK_TREE", "GIT_IMPLICIT_WORK_TREE", "GIT_GRAFT_FILE",
+	"GIT_INDEX_FILE", "GIT_NO_REPLACE_OBJECTS", "GIT_REPLACE_REF_BASE", "GIT_PREFIX",
+	"GIT_SHALLOW_FILE", "GIT_COMMON_DIR",
+}
+
+// gitEnv is this process's environment without repositoryEnv, so git finds
+// the repository from its working directory alone.
+func gitEnv() []string {
+	return slices.DeleteFunc(os.Environ(), func(entry string) bool {
+		name, _, _ := strings.Cut(entry, "=")
+		return slices.Contains(repositoryEnv, name)
+	})
+}
+
 // maxGitOutput bounds what one git command may print; the largest is the
 // batch of every blob, which maxTreeBytes already bounds.
 const maxGitOutput = maxTreeBytes + 1<<20
@@ -226,8 +251,12 @@ func git(ctx context.Context, dir string, stdin io.Reader, args ...string) ([]by
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "git", args...)
+	// A replacement under refs/replace shows another object under the
+	// original's ID, so a release would carry the commit's name with other
+	// contents.
+	cmd := exec.CommandContext(ctx, "git", append([]string{"--no-replace-objects"}, args...)...)
 	cmd.Dir = dir
+	cmd.Env = gitEnv()
 	cmd.Stdin = stdin
 	var stdout, stderr limitedBuffer
 	stdout.max, stderr.max = maxGitOutput, 64<<10
