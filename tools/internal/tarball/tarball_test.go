@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"io"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -197,7 +198,7 @@ func TestReadRejectsDamagedStreams(t *testing.T) {
 			data[len(data)-8] ^= 0xff
 			return data
 		}, want: "checksum"},
-		{name: "data after the tar end marker", data: padded, want: "end of the tar archive"},
+		{name: "data after the tar end marker", data: padded, want: "account for"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -207,6 +208,77 @@ func TestReadRejectsDamagedStreams(t *testing.T) {
 			_, err := Read(struct{ io.Reader }{bytes.NewReader(tt.data())})
 			if err == nil || !strings.Contains(err.Error(), tt.want) {
 				t.Fatalf("Read returned %v, want an error about %q", err, tt.want)
+			}
+		})
+	}
+}
+
+// archive/tar consumes GNU long-name headers inside Next, so neither an
+// entry count nor a header check sees them. Each case places such headers
+// around one ordinary file: before an entry they make a format Write never
+// produces, after the last entry they leave blocks no entry accounts for,
+// and many of them are bounded by the size of the uncompressed stream.
+func TestReadRejectsHiddenHeaders(t *testing.T) {
+	t.Parallel()
+
+	// blocks writes headers with archive/tar and returns the raw blocks,
+	// without the end marker.
+	blocks := func(t *testing.T, headers ...*tar.Header) []byte {
+		t.Helper()
+		var raw bytes.Buffer
+		tw := tar.NewWriter(&raw)
+		for _, h := range headers {
+			if err := tw.WriteHeader(h); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := tw.Write(bytes.Repeat([]byte("x"), int(h.Size))); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := tw.Flush(); err != nil {
+			t.Fatal(err)
+		}
+		return raw.Bytes()
+	}
+	gzipped := func(t *testing.T, parts ...[]byte) []byte {
+		t.Helper()
+		var out bytes.Buffer
+		zw := gzip.NewWriter(&out)
+		for _, p := range append(parts, make([]byte, 2*blockSize)) {
+			if _, err := zw.Write(p); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := zw.Close(); err != nil {
+			t.Fatal(err)
+		}
+		return out.Bytes()
+	}
+
+	start := blocks(t,
+		&tar.Header{Name: "top/", Typeflag: tar.TypeDir, Mode: ModeDir, ModTime: epoch},
+		&tar.Header{Name: "top/x", Typeflag: tar.TypeReg, Mode: ModeFile, ModTime: epoch, Size: 3})
+	// A file with a long name in GNU format is a long-name header, a block
+	// holding the name, and the file's own header block.
+	gnu := blocks(t, &tar.Header{Name: "top/" + strings.Repeat("a", 120), Typeflag: tar.TypeReg, Mode: ModeFile, ModTime: epoch, Format: tar.FormatGNU})
+	longName, gnuFile := gnu[:len(gnu)-blockSize], gnu[len(gnu)-blockSize:]
+
+	tests := []struct {
+		name  string
+		parts [][]byte
+		limit int64
+		want  string
+	}{
+		{name: "a long-name header before a file", parts: [][]byte{start, longName, gnuFile}, limit: maxStreamBytes, want: "tar format"},
+		{name: "a long-name header after the last file", parts: [][]byte{start, longName}, limit: maxStreamBytes, want: "account for"},
+		{name: "more long-name headers than the stream holds", parts: append([][]byte{start}, append(slices.Repeat([][]byte{longName}, 100), gnuFile)...), limit: 64 << 10, want: errStreamTooLarge.Error()},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := read(bytes.NewReader(gzipped(t, tt.parts...)), tt.limit)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("read returned %v, want an error about %q", err, tt.want)
 			}
 		})
 	}

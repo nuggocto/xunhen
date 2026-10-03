@@ -33,6 +33,14 @@ const (
 	maxEntries    = 4096
 	maxEntryBytes = 64 << 20
 	maxTotalBytes = 256 << 20
+
+	// maxStreamBytes bounds the uncompressed tar stream as a whole: every
+	// file's contents, one header block and up to one block of padding per
+	// entry, and the end marker. archive/tar reads GNU long-name and PAX
+	// headers inside Next without returning them, so they escape the entry
+	// and size counts; only a bound on the stream itself covers them.
+	maxStreamBytes = maxTotalBytes + (maxEntries+2)*2*blockSize
+	blockSize      = 512
 )
 
 // File is one regular file of an archive. Name is relative to the archive's
@@ -144,6 +152,14 @@ func (a *Archive) Lookup(name string) (File, bool) {
 // directories, entries whose parent directory is missing, owners other than
 // 0, any other mode, differing times, and oversized contents.
 func Read(r io.Reader) (*Archive, error) {
+	return read(r, maxStreamBytes)
+}
+
+// errStreamTooLarge reports a tar stream longer than read's limit.
+var errStreamTooLarge = errors.New("the uncompressed archive is too large")
+
+// read is Read with the bound on the uncompressed tar stream as a parameter.
+func read(r io.Reader, limit int64) (*Archive, error) {
 	// gzip reads straight from a ByteReader without buffering ahead, so
 	// whatever follows the gzip member is still in br afterwards.
 	br := bufio.NewReader(r)
@@ -159,7 +175,12 @@ func Read(r io.Reader) (*Archive, error) {
 	a := &Archive{}
 	seen := map[string]bool{}
 	total := int64(0)
-	tr := tar.NewReader(zr)
+	stream := &boundedReader{r: zr, left: limit}
+	tr := tar.NewReader(stream)
+	// accounted is the length of the stream Write would make for the entries
+	// read so far: a header block and the padded contents for each, and the
+	// two-block end marker.
+	accounted := int64(2 * blockSize)
 	for count := 0; ; count++ {
 		header, err := tr.Next()
 		if errors.Is(err, io.EOF) {
@@ -171,6 +192,7 @@ func Read(r io.Reader) (*Archive, error) {
 		if count == maxEntries {
 			return nil, fmt.Errorf("archive has more than %d entries", maxEntries)
 		}
+		accounted += blockSize + (header.Size+blockSize-1)/blockSize*blockSize
 
 		name, err := a.entryName(header)
 		if err != nil {
@@ -209,15 +231,19 @@ func Read(r io.Reader) (*Archive, error) {
 	if a.Prefix == "" {
 		return nil, errors.New("archive is empty")
 	}
-	// Read the gzip member to its end, which checks its CRC and length:
-	// the tar reader stops at the end-of-archive marker and would leave
-	// the trailer unread. Nothing may follow that marker inside the member,
-	// and nothing may follow the member: either would be data that a tar
-	// reader ignores and a checksum still covers.
-	if n, err := io.Copy(io.Discard, io.LimitReader(zr, 1<<20)); err != nil {
+	// Read the gzip member to its end, through the same count, which also
+	// checks its CRC and length: the tar reader stops at the end marker and
+	// leaves the trailer unread. The whole uncompressed stream must then be
+	// exactly what the entries account for, however far the tar reader read
+	// ahead. Anything more is a GNU or PAX header that archive/tar consumed
+	// without returning an entry, or data after the end marker: bytes a tar
+	// reader ignores and a checksum still covers. Nothing may follow the
+	// member either.
+	if _, err := io.Copy(io.Discard, stream); err != nil {
 		return nil, fmt.Errorf("read the end of the gzip stream: %w", err)
-	} else if n != 0 {
-		return nil, errors.New("data follows the end of the tar archive")
+	}
+	if read := limit - stream.left; read != accounted {
+		return nil, fmt.Errorf("the tar stream is %d bytes, but its entries and end marker account for %d", read, accounted)
 	}
 	if _, err := br.ReadByte(); !errors.Is(err, io.EOF) {
 		return nil, errors.New("data follows the gzip stream")
@@ -260,12 +286,36 @@ func (a *Archive) checkHeader(header *tar.Header) error {
 		return fmt.Errorf("archive entry %q has a different time", header.Name)
 	case len(header.PAXRecords) != 0:
 		return fmt.Errorf("archive entry %q has extended attributes", header.Name)
+	case header.Format != tar.FormatUSTAR:
+		// Write emits plain USTAR headers. Any other format means a GNU or
+		// PAX header came before this entry.
+		return fmt.Errorf("archive entry %q uses the %v tar format", header.Name, header.Format)
 	case header.Typeflag == tar.TypeDir && header.Mode != ModeDir:
 		return fmt.Errorf("archive directory %q has mode %04o", header.Name, header.Mode)
 	case header.Typeflag == tar.TypeReg && header.Mode != ModeFile && header.Mode != ModeExecutable:
 		return fmt.Errorf("archive file %q has mode %04o", header.Name, header.Mode)
 	}
 	return nil
+}
+
+// boundedReader returns errStreamTooLarge once more than left bytes would
+// be read, rather than the io.EOF a LimitReader returns, which a tar reader
+// would report as a truncated archive.
+type boundedReader struct {
+	r    io.Reader
+	left int64
+}
+
+func (b *boundedReader) Read(p []byte) (int, error) {
+	if b.left <= 0 {
+		return 0, errStreamTooLarge
+	}
+	if int64(len(p)) > b.left {
+		p = p[:b.left]
+	}
+	n, err := b.r.Read(p)
+	b.left -= int64(n)
+	return n, err
 }
 
 // checkName accepts a relative slash-separated name whose components are
