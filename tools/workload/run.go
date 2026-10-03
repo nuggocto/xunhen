@@ -88,32 +88,47 @@ func (r *runner) inputs() []string {
 	return []string{"--undo", "history.undo", "--base", "base.txt"}
 }
 
+// commandTimeout bounds one run of the measured command, as each browser
+// session is bounded, so a hang fails the run instead of stalling it.
+const commandTimeout = 10 * time.Minute
+
 // verify exports every probed state and compares it with the digest the
 // generator computed while building the history.
 func (r *runner) verify() error {
 	for _, p := range r.m.Probes {
-		args := append(append([]string{"show"}, r.inputs()...), "--node", strconv.Itoa(int(p.Node)), "--raw", "--final-newline=include")
-		cmd := exec.Command(r.bin, args...)
-		cmd.Dir = r.dir
-		stdout, err := cmd.StdoutPipe()
-		if err != nil {
+		if err := r.verifyProbe(p); err != nil {
 			return err
 		}
-		var stderr strings.Builder
-		cmd.Stderr = &stderr
-		if err := cmd.Start(); err != nil {
-			return err
-		}
-		h := sha256.New()
-		if _, err := io.Copy(h, bufio.NewReaderSize(stdout, 1<<20)); err != nil {
-			return err
-		}
-		if err := cmd.Wait(); err != nil {
-			return fmt.Errorf("node %d: %v: %s", p.Node, err, stderr.String())
-		}
-		if got := hex.EncodeToString(h.Sum(nil)); got != p.SHA256 {
-			return fmt.Errorf("node %d (%s) exported as %s, want %s", p.Node, p.Role, got, p.SHA256)
-		}
+	}
+	return nil
+}
+
+func (r *runner) verifyProbe(p probe) error {
+	ctx, cancel := context.WithTimeout(context.Background(), commandTimeout)
+	defer cancel()
+	args := append(append([]string{"show"}, r.inputs()...), "--node", strconv.Itoa(int(p.Node)), "--raw", "--final-newline=include")
+	cmd := exec.CommandContext(ctx, r.bin, args...)
+	cmd.Dir = r.dir
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	h := sha256.New()
+	if _, err := io.Copy(h, bufio.NewReaderSize(stdout, 1<<20)); err != nil {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		return err
+	}
+	if err := cmd.Wait(); err != nil {
+		return fmt.Errorf("node %d: %v: %s", p.Node, err, stderr.String())
+	}
+	if got := hex.EncodeToString(h.Sum(nil)); got != p.SHA256 {
+		return fmt.Errorf("node %d (%s) exported as %s, want %s", p.Node, p.Role, got, p.SHA256)
 	}
 	return nil
 }
@@ -144,15 +159,18 @@ func (r *runner) commands() error {
 				return err
 			}
 			floor := selfPeak()
-			cmd := exec.Command(r.bin, op.args...)
+			ctx, cancel := context.WithTimeout(context.Background(), commandTimeout)
+			cmd := exec.CommandContext(ctx, r.bin, op.args...)
 			cmd.Dir, cmd.Stdout = r.dir, devNull
 			var stderr strings.Builder
 			cmd.Stderr = &stderr
 			start := time.Now()
-			if err := cmd.Run(); err != nil {
+			err := cmd.Run()
+			elapsed := time.Since(start)
+			cancel()
+			if err != nil {
 				return fmt.Errorf("%s: %v: %s", op.name, err, stderr.String())
 			}
-			elapsed := time.Since(start)
 			usage := cmd.ProcessState.SysUsage().(*syscall.Rusage)
 			if err := r.record(op.name, i, elapsed, usage.Maxrss, floor); err != nil {
 				return err
@@ -172,7 +190,9 @@ func (r *runner) coldCommand(name string, args []string, i int, stdout *os.File)
 	if err := r.evict(); err != nil {
 		return err
 	}
-	cmd := exec.Command(r.bin, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), commandTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, r.bin, args...)
 	cmd.Dir, cmd.Stdout = r.dir, stdout
 	start := time.Now()
 	if err := cmd.Run(); err != nil {
@@ -348,7 +368,7 @@ func (r *runner) startBrowser() (*browserRun, error) {
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), commandTimeout)
 	cmd := exec.CommandContext(ctx, r.bin, append([]string{"browse"}, r.inputs()...)...)
 	cmd.Dir = r.dir
 	cmd.Env = append(os.Environ(), "TERM=xterm-256color")
@@ -500,8 +520,13 @@ func (b *browserRun) quit() error {
 	return nil
 }
 
+// stop ends a run on any path. Cancelling kills a browser still running,
+// and the wait reaps it unless quit already has.
 func (b *browserRun) stop() {
 	b.cancel()
+	if b.cmd.ProcessState == nil {
+		_ = b.cmd.Wait()
+	}
 	_ = b.term.Master.Close()
 	<-b.done
 }
