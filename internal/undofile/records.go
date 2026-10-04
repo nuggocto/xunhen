@@ -23,14 +23,12 @@ type SaveNumber struct {
 // Metadata describes the persisted reference buffer and navigation markers.
 // TimelineSequence is a timeline position and need not name a retained record.
 // Newest is meaningful for locating the reference only when NextRedo is absent.
+// The decoder validates the saved U line and its position but does not keep
+// them: nothing reads them.
 type Metadata struct {
 	Format    FormatInfo
 	BaseHash  [32]byte
 	BaseLines int32
-
-	SavedLine       string
-	SavedLineNumber int32
-	SavedColumn     int32
 
 	OldestRoot       Sequence
 	Newest           Sequence
@@ -42,15 +40,11 @@ type Metadata struct {
 	LastSave         SaveNumber
 }
 
-// Position uses Neovim's line, byte-column, and virtual-column coordinates.
-type Position struct {
-	Line, Column, Extra int32
-}
-
 // RecordInfo is a value copy of one change's metadata. Links describe logical
 // ancestry and the recorded sibling preference order, not chronological order.
-// The decoder validates the named marks and visual selection but does not keep
-// them: nothing reads them, and they took 344 of this struct's 408 bytes.
+// The decoder validates the cursor, named marks, and visual selection but does
+// not keep them: nothing reads them, and they took 360 of this struct's 408
+// bytes.
 type RecordInfo struct {
 	Offset          int64
 	Sequence        Sequence
@@ -59,11 +53,9 @@ type RecordInfo struct {
 	NextSibling     Sequence
 	PreviousSibling Sequence
 
-	Cursor              Position
-	CursorVirtualColumn int32
-	Flags               uint16
-	Time                int64
-	Save                SaveNumber
+	Flags uint16
+	Time  int64
+	Save  SaveNumber
 }
 
 // Entry is an oriented line-range swap. Bottom == 0 means the buffer's line
@@ -91,33 +83,13 @@ func (e Entry) Line(index int) (string, bool) {
 	return e.lines[index], true
 }
 
-// ExtmarkKind identifies the two native records serialized by this producer.
-type ExtmarkKind uint8
-
-// Native extmark record types, numbered as the producer serializes them.
-const (
-	Splice ExtmarkKind = iota
-	Move
-)
-
-// Extent preserves native signed coordinates without treating them as counts
-// for allocation or as the text entry's line range.
-type Extent struct {
-	Row, Column int32
-	Bytes       int64
-}
-
-// Extmark holds a splice's start/old/new or a move's start/extent/destination.
-type Extmark struct {
-	Kind            ExtmarkKind
-	Start, Old, New Extent
-}
-
 // Record is an immutable handle. Accessors never expose writable backing slices.
+// The decoder validates each native extmark record's type and framing and
+// keeps only their count: text recovery does not apply extmark movements.
 type Record struct {
 	info     RecordInfo
 	entries  []Entry
-	extmarks []Extmark
+	extmarks int
 }
 
 // Info returns a value copy.
@@ -127,7 +99,7 @@ func (r Record) Info() RecordInfo { return r.info }
 func (r Record) EntryCount() int { return len(r.entries) }
 
 // ExtmarkCount is the number of decoded native records.
-func (r Record) ExtmarkCount() int { return len(r.extmarks) }
+func (r Record) ExtmarkCount() int { return r.extmarks }
 
 // Entry returns a swap in persisted list order, or false for an invalid index.
 func (r Record) Entry(index int) (Entry, bool) {
@@ -136,15 +108,6 @@ func (r Record) Entry(index int) (Entry, bool) {
 	}
 
 	return r.entries[index], true
-}
-
-// Extmark returns a value copy, or false for an invalid index.
-func (r Record) Extmark(index int) (Extmark, bool) {
-	if index < 0 || index >= len(r.extmarks) {
-		return Extmark{}, false
-	}
-
-	return r.extmarks[index], true
 }
 
 // DecodedFile owns immutable records. Its zero value is not a decoded file.

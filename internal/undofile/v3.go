@@ -18,9 +18,9 @@ func (d *decoder) decodeV3() *DecodedFile {
 		d.fail(Invalid, 43, "base lines", "a Neovim buffer has at least one logical line")
 	}
 
-	meta.SavedLine = d.text("saved U line", "saved U line length")
-	meta.SavedLineNumber = d.nonnegative("saved U line number")
-	meta.SavedColumn = d.nonnegative("saved U column")
+	d.text("saved U line", "saved U line length")
+	d.nonnegative("saved U line number")
+	d.nonnegative("saved U column")
 
 	meta.OldestRoot = Sequence(d.nonnegative("oldest root"))
 	meta.Newest = Sequence(d.nonnegative("newest header"))
@@ -109,9 +109,8 @@ func (d *decoder) recordV3() Record {
 		d.fail(Invalid, f.offset()-4, "sequence", "zero is reserved for absent links")
 	}
 
-	info.Cursor = f.position(cursorFields)
-	info.CursorVirtualColumn = f.i32()
-	if info.CursorVirtualColumn < -1 {
+	f.position(cursorFields)
+	if f.i32() < -1 {
 		d.fail(Invalid, f.offset()-4, "cursor virtual column", "value below -1")
 	}
 
@@ -139,9 +138,9 @@ func (d *decoder) recordV3() Record {
 	}
 
 	for d.nextEntry("extmark entries") {
-		mark := d.extmarkV3()
+		d.extmarkV3()
 		if d.err == nil {
-			record.extmarks = append(record.extmarks, mark)
+			record.extmarks++
 		}
 	}
 
@@ -239,12 +238,11 @@ func (b *block) nonnegative(field string) int32 {
 	return v
 }
 
-func (b *block) position(field positionFields) Position {
-	return Position{
-		Line:   b.nonnegative(field.line),
-		Column: b.nonnegative(field.column),
-		Extra:  b.nonnegative(field.extra),
-	}
+// position validates a line, byte column, and virtual column.
+func (b *block) position(field positionFields) {
+	b.nonnegative(field.line)
+	b.nonnegative(field.column)
+	b.nonnegative(field.extra)
 }
 
 func (d *decoder) nextEntry(field string) bool {
@@ -270,7 +268,9 @@ func (d *decoder) nextEntry(field string) bool {
 	return true
 }
 
-func (d *decoder) extmarkV3() Extmark {
+// extmarkV3 validates one native extmark record's type and consumes its
+// fixed-size body, whose native-layout coordinates nothing reads.
+func (d *decoder) extmarkV3() {
 	offset := d.offset
 	kind := d.i32("extmark type")
 	if kind != 0 && kind != 1 {
@@ -279,20 +279,4 @@ func (d *decoder) extmarkV3() Extmark {
 
 	var body [48]byte
 	d.read(body[:], "native extmark")
-
-	var parts [3]Extent
-	for i := range parts {
-		parts[i] = Extent{
-			Row:    int32(binary.LittleEndian.Uint32(body[i*8:])),
-			Column: int32(binary.LittleEndian.Uint32(body[i*8+4:])),
-			Bytes:  int64(binary.LittleEndian.Uint64(body[24+i*8:])),
-		}
-	}
-
-	return Extmark{
-		Kind:  ExtmarkKind(kind),
-		Start: parts[0],
-		Old:   parts[1],
-		New:   parts[2],
-	}
 }

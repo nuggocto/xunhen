@@ -136,18 +136,6 @@ func TestDecodeNativeMove(t *testing.T) {
 		if record.EntryCount() != 2 || record.ExtmarkCount() != 1 {
 			t.Fatalf("move has %d text entries and %d extmarks", record.EntryCount(), record.ExtmarkCount())
 		}
-
-		mark, ok := record.Extmark(0)
-		want := undofile.Extmark{
-			Kind:  undofile.Move,
-			Start: undofile.Extent{},
-			Old:   undofile.Extent{Row: 1, Bytes: 6},
-			// Destination is measured after removing "first\n".
-			New: undofile.Extent{Row: 2, Bytes: 13},
-		}
-		if !ok || mark != want {
-			t.Fatalf("native move = %+v, want %+v", mark, want)
-		}
 	})
 }
 
