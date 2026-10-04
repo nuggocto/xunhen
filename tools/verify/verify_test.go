@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -280,5 +281,116 @@ func TestVerifierRefusesUnreadableArchives(t *testing.T) {
 				t.Fatal("checkArchive is still blocked after 10s")
 			}
 		})
+	}
+}
+
+// A run must bound what a broken executable prints and how long it holds
+// the verifier, and leave none of its processes running. A child's output
+// reaches the verifier through io.Copy, and a descendant that inherits the
+// output pipe keeps it open after the child exits, so each case runs a real
+// child: a script standing in for the executable.
+func TestRunBoundsTheChild(t *testing.T) {
+	t.Parallel()
+
+	head, err := exec.LookPath("head")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sleep, err := exec.LookPath("sleep")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name     string
+		script   string        // %[1]s is head, %[2]s sleep, %[3]s a file for a PID
+		deadline time.Duration // of the caller's context, when it has one
+		wantOut  int
+		wantErr  error // matched with errors.Is
+		wantText string
+	}{
+		{name: "output at the limit", script: fmt.Sprintf("%%[1]s -c %d /dev/zero", maxOutput), wantOut: maxOutput},
+		{name: "output past the limit", script: fmt.Sprintf("%%[1]s -c %d /dev/zero", maxOutput+1), wantText: "printed more than"},
+		{name: "a descendant holding the output open", script: "%[2]s 60 & echo $! > '%[3]s'", wantErr: exec.ErrWaitDelay},
+		{name: "the caller's deadline", script: "echo $$ > '%[3]s'; exec %[2]s 60", deadline: 200 * time.Millisecond, wantErr: context.DeadlineExceeded},
+		{name: "a descendant outliving the caller's deadline", script: "%[2]s 60 & echo $! > '%[3]s'; exec %[2]s 60", deadline: 200 * time.Millisecond, wantErr: context.DeadlineExceeded},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			pidFile := filepath.Join(dir, "pid")
+			// A sleep a failed case leaves behind must not outlive the test.
+			t.Cleanup(func() {
+				if data, err := os.ReadFile(pidFile); err == nil {
+					var pid int
+					if _, err := fmt.Sscan(string(data), &pid); err == nil && pid > 0 {
+						_ = syscall.Kill(pid, syscall.SIGKILL)
+					}
+				}
+			})
+			script := filepath.Join(dir, "xunhen")
+			body := "#!/bin/sh\n" + fmt.Sprintf(tt.script, head, sleep, pidFile) + "\n"
+			if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			w := &world{binary: script, root: dir, home: dir, bin: dir}
+
+			ctx := t.Context()
+			if tt.deadline > 0 {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(ctx, tt.deadline)
+				defer cancel()
+			}
+			start := time.Now()
+			out, err := w.run(ctx, runOptions{})
+			if elapsed := time.Since(start); elapsed > 10*time.Second {
+				t.Errorf("run returned after %v", elapsed.Round(time.Second))
+			}
+			switch {
+			case tt.wantErr != nil && !errors.Is(err, tt.wantErr):
+				t.Fatalf("run returned %v, want %v", err, tt.wantErr)
+			case tt.wantText != "" && (err == nil || !strings.Contains(err.Error(), tt.wantText)):
+				t.Fatalf("run returned %v, want an error about %q", err, tt.wantText)
+			case tt.wantErr == nil && tt.wantText == "" && err != nil:
+				t.Fatal(err)
+			case err == nil && len(out.stdout) != tt.wantOut:
+				t.Fatalf("captured %d bytes, want %d", len(out.stdout), tt.wantOut)
+			}
+
+			data, err := os.ReadFile(pidFile)
+			if err != nil {
+				return // the case starts no process of its own
+			}
+			var pid int
+			if _, err := fmt.Sscan(string(data), &pid); err != nil {
+				t.Fatal(err)
+			}
+			if !exits(pid, 5*time.Second) {
+				t.Fatalf("process %d is still running after the run returned", pid)
+			}
+		})
+	}
+}
+
+// exits reports whether process pid ends within limit. A killed process
+// whose parent already exited is reaped by another, so a zombie counts as
+// ended. Nothing signals the test when an unrelated process ends, so it
+// polls /proc.
+func exits(pid int, limit time.Duration) bool {
+	for deadline := time.Now().Add(limit); ; {
+		stat, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
+		if err != nil {
+			return true
+		}
+		// The state follows the parenthesized command name.
+		if i := bytes.LastIndexByte(stat, ')'); i >= 0 && bytes.HasPrefix(stat[i+1:], []byte(" Z")) {
+			return true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }

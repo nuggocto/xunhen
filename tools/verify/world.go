@@ -21,6 +21,12 @@ import (
 // replays a fixture of a few lines; a run that takes seconds is a hang.
 const commandTimeout = 30 * time.Second
 
+// waitDelay bounds how long a run waits for the child's output pipes to
+// close after the child exits or is killed. The executable starts no
+// processes, so only a broken one leaves a descendant holding them open;
+// run then ends it.
+const waitDelay = time.Second
+
 // maxOutput bounds what one run may print. The largest expected output is a
 // few kilobytes; anything near this is a failure in itself.
 const maxOutput = 4 << 20
@@ -247,8 +253,8 @@ type runOptions struct {
 	env    []string // added to the private environment
 }
 
-func (w *world) run(ctx context.Context, o runOptions, args ...string) (outcome, error) {
-	ctx, cancel := context.WithTimeout(ctx, commandTimeout)
+func (w *world) run(parent context.Context, o runOptions, args ...string) (outcome, error) {
+	ctx, cancel := context.WithTimeout(parent, commandTimeout)
 	defer cancel()
 
 	var stdout, stderr capped
@@ -259,6 +265,10 @@ func (w *world) run(ctx context.Context, o runOptions, args ...string) (outcome,
 			cmd.Dir = w.root
 		}
 		cmd.Env = append(w.env("dumb"), o.env...)
+		cmd.WaitDelay = waitDelay
+		// The child leads a process group of its own, so the run can end
+		// every process it started, not only the child.
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 		cmd.Stdin = nil
 		cmd.Stdout, cmd.Stderr = &stdout, &stderr
 		if o.stdout != nil {
@@ -268,9 +278,17 @@ func (w *world) run(ctx context.Context, o runOptions, args ...string) (outcome,
 	})
 	if err == nil {
 		err = cmd.Wait()
+		// The executable starts no processes, so anything left in the group
+		// belongs to a broken one, such as a descendant WaitDelay stopped
+		// waiting for. The kernel reuses the group's ID only after its PID
+		// counter wraps, so the signal reaches no other process. An empty
+		// group fails it with ESRCH, the usual case.
+		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 	}
 	var exit *exec.ExitError
 	switch {
+	case parent.Err() != nil:
+		return outcome{}, fmt.Errorf("xunhen %s: %w", strings.Join(args, " "), parent.Err())
 	case ctx.Err() != nil:
 		return outcome{}, fmt.Errorf("xunhen %s did not finish within %v", strings.Join(args, " "), commandTimeout)
 	case err != nil && !errors.As(err, &exit):
@@ -282,19 +300,24 @@ func (w *world) run(ctx context.Context, o runOptions, args ...string) (outcome,
 }
 
 // capped keeps at most maxOutput bytes and records whether more arrived.
+// The buffer is a named field: an embedded bytes.Buffer would give capped
+// its ReadFrom, which io.Copy calls instead of Write, and the child's
+// output would bypass the limit.
 type capped struct {
-	bytes.Buffer
+	buf      bytes.Buffer
 	overflow bool
 }
 
 func (c *capped) Write(p []byte) (int, error) {
-	if room := maxOutput - c.Len(); len(p) > room {
+	if room := maxOutput - c.buf.Len(); len(p) > room {
 		c.overflow = true
-		c.Buffer.Write(p[:max(room, 0)])
+		c.buf.Write(p[:max(room, 0)])
 		return len(p), nil
 	}
-	return c.Buffer.Write(p)
+	return c.buf.Write(p)
 }
+
+func (c *capped) String() string { return c.buf.String() }
 
 // fingerprint records every entry under root: kind, mode, size, time, and
 // the content hash of files. Any write, rename, creation, or removal

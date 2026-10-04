@@ -33,7 +33,7 @@ breaking the behavior it guards makes it fail; the mutations listed under
 | A release reads the objects its commit ID names, even when `refs/replace` substitutes others | `TestResolveIgnoresReplacements` |
 | The release tool's tests run no git hooks from the user's template or configuration | `TestRepoRunsNoHooks` |
 | Release archives are reproducible and hold only regular files with fixed modes, owners, and times | `TestWriteIsDeterministic`, `TestWriteRejectsBadNames`, `TestReadRejectsUnsafeArchives`, `TestReadRejectsDamagedStreams`, `TestReadRejectsHiddenHeaders`, `tools/reproduce.sh` in CI |
-| Every channel's executable passes the same artifact checks | `tools/verify` in CI, the release workflow, the Nix checks, and the AUR recipe's `check()`; `TestVerifierJudgesExecutables` and `TestVerifierJudgesArchives` confirm it fails wrong executables and damaged archives; `TestVerifierRefusesUnreadableArchives` that it refuses oversized files and FIFOs without blocking |
+| Every channel's executable passes the same artifact checks | `tools/verify` in CI, the release workflow, the Nix checks, and the AUR recipe's `check()`; `TestVerifierJudgesExecutables` and `TestVerifierJudgesArchives` confirm it fails wrong executables and damaged archives; `TestVerifierRefusesUnreadableArchives` that it refuses oversized files and FIFOs without blocking; `TestRunBoundsTheChild` that a run keeps its output and time limits when the child floods its output or leaves a process holding it open, and that no process the child started outlives the run |
 | Every relative link in a document the binary archive ships leads to another file in the archive | `TestCheckDocs`; every release build, including CI's, runs the check on the commit's documents |
 
 `TestCorpusThroughTheCommand`, `TestReplayOracle`, and `TestPreviewsMatchNeovim`
@@ -71,6 +71,9 @@ change was reverted:
 | The content pane draws no lines | `TestClusterWidthsFollowTheRenderer`, both cases |
 | The diff copies both states' line arrays again | `TestCompareDoesNotCopyStates`, both cases |
 | Anchoring's one-byte line counts wrap past 255 copies | `TestRepeatedLinesAreNotAnchors`, all three cases |
+| An output limit embeds `bytes.Buffer`, so `io.Copy` bypasses it | `TestRunBoundsTheChild` and `TestLimitedBufferThroughCopy`, the cases past the limit |
+| A verifier run waits for a descendant holding its output | `TestRunBoundsTheChild`, the case of a descendant holding the output |
+| A verifier run leaves the child's descendants running | `TestRunBoundsTheChild`, both descendant cases |
 
 ## Running the checks
 
