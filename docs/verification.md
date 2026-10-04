@@ -21,7 +21,7 @@ breaking the behavior it guards makes it fail; the mutations listed under
 | The screen measures text as the renderer does, and never with a column index built the other way | `TestClusterWidthsFollowTheRenderer`, `TestClip`, `FuzzClip` |
 | No command changes its inputs | `TestCommandsLeaveInputsUnchanged`, `TestBrowserLeavesInputsUnchanged`, `TestSearchWritesNothing`, `TestExecutable`, `TestInspectReadOnlyAndSafeOutput` |
 | Recovered text never reaches a diagnostic or a log | `TestCommandsLeaveInputsUnchanged`, `TestBrowserLeavesInputsUnchanged`, `TestBrowserUnderATerminal` (debugging variables) |
-| Long work stops at every cancellation check, with no partial result | `TestWorkStopsAtEveryCancellationCheck`, `TestSearchStopsAtEveryCancellationCheck`, `TestDecodeReaderFailures`, `TestHistoryBoundsAndCancellation`, `TestReplayCancellation`, `TestCancellation` (diff), `TestTreeIndexingStopsWhenCancelled`, `FuzzReconstruct` |
+| Long work stops at every cancellation check, with no partial result | `TestWorkStopsAtEveryCancellationCheck`, `TestSearchStopsAtEveryCancellationCheck`, `TestDecodeReaderFailures`, `TestDecodeStopsAfterCancellation` (inside long lists of empty entries or lines), `TestHistoryBoundsAndCancellation`, `TestReplayCancellation`, `TestCancellation` (diff), `TestTreeIndexingStopsWhenCancelled`, `FuzzReconstruct` |
 | Output failures end with status 1 and one diagnostic | `TestWriteFailures` (immediate and partway failures), `TestExecutable` (closed pipe, full device, interrupt while blocked) |
 | Every exit from the browser restores the terminal and stops the worker | `TestBrowserUnderATerminal`, `TestWorkerShutdown` |
 | Limits admit exactly their ceiling | `TestDecodeLimitBoundaries`, `TestReplayEntryBoundaries`, `TestSearchByteLimit`, `TestSearchDirectoryLimit`, `TestHistoryBoundsAndCancellation`, `TestReadFileAcceptsOnlyRegularFiles` |
@@ -74,6 +74,7 @@ change was reverted:
 | An output limit embeds `bytes.Buffer`, so `io.Copy` bypasses it | `TestRunBoundsTheChild` and `TestLimitedBufferThroughCopy`, the cases past the limit |
 | A verifier run waits for a descendant holding its output | `TestRunBoundsTheChild`, the case of a descendant holding the output |
 | A verifier run leaves the child's descendants running | `TestRunBoundsTheChild`, both descendant cases |
+| The decoder checks cancellation only between records and line text | `TestDecodeStopsAfterCancellation`, both cases |
 
 ## Running the checks
 

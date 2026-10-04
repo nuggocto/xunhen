@@ -162,7 +162,8 @@ func (d *decoder) entryV3() Entry {
 	d.lines += count
 
 	for range count {
-		if d.err != nil {
+		// An empty line has no text chunk, where text checks cancellation.
+		if d.cancelled() {
 			break
 		}
 
@@ -247,7 +248,7 @@ func (b *block) position(field positionFields) Position {
 }
 
 func (d *decoder) nextEntry(field string) bool {
-	if d.err != nil {
+	if d.cancelled() {
 		return false
 	}
 

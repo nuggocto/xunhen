@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/nuggocto/xunhen/internal/limits"
+	"github.com/nuggocto/xunhen/internal/synth"
 	"github.com/nuggocto/xunhen/internal/undofile"
 )
 
@@ -505,6 +506,67 @@ func TestDecodeReaderFailures(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Cancellation must stop decoding promptly wherever it lands, not only at
+// the next record or nonempty line. Each input is one record whose text
+// list holds no line text, and the reader cancels once decoding is inside
+// that list, so a decoder that notices stops long before the end.
+func TestDecodeStopsAfterCancellation(t *testing.T) {
+	t.Parallel()
+
+	const count = 20_000
+	tests := []struct {
+		name    string
+		entries []synth.Entry
+	}{
+		{name: "many empty entries", entries: make([]synth.Entry, count)},
+		{name: "one entry of many empty lines", entries: []synth.Entry{{Lines: make([]string, count)}}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			f := synth.File{
+				Nodes:  []synth.Node{{ID: 1, Entries: tt.entries}},
+				Oldest: 1, Newest: 1, LastSequence: 1, TimelineSequence: 1,
+				Reference: []string{""},
+			}
+			data, err := f.Bytes()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			reader := &countingReader{reader: bytes.NewReader(data), cancel: cancel, after: 2048}
+			file, err := undofile.Decode(ctx, "cancel", reader, limits.Default())
+			if file != nil || !errors.Is(err, context.Canceled) {
+				t.Fatalf("file = %v; error = %v, want %v", file, err, context.Canceled)
+			}
+			if reader.read == len(data) {
+				t.Fatalf("decoding read all %d bytes after cancellation", len(data))
+			}
+		})
+	}
+}
+
+// countingReader hands out at most 512 bytes per read, counts them, and
+// cancels once it has handed out the first after bytes.
+type countingReader struct {
+	reader io.Reader
+	cancel context.CancelFunc
+	after  int
+	read   int
+}
+
+func (r *countingReader) Read(p []byte) (int, error) {
+	n, err := r.reader.Read(p[:min(len(p), 512)])
+	r.read += n
+	if r.read >= r.after {
+		r.cancel()
+	}
+	return n, err
 }
 
 type errorReader struct{ err error }

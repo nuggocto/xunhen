@@ -15,8 +15,8 @@ import (
 
 // Decode reads at most InputBytes+1 bytes, owns all retained text, and returns
 // nil on every failure. No partial records can become an ordinary DecodedFile.
-// Cancellation is checked between records and text chunks; the caller owns
-// blocking I/O policy.
+// Cancellation is checked between records, entries, stored lines, and text
+// chunks; the caller owns blocking I/O policy.
 func Decode(ctx context.Context, source string, input io.Reader, lim limits.Limits) (*DecodedFile, error) {
 	if err := lim.Validate(); err != nil {
 		return nil, err
@@ -129,7 +129,8 @@ func (d *decoder) readError(err error, field string) {
 }
 
 // cancelled stores cancellation as the sticky error. Decoding checks it once
-// per record and text chunk rather than on every scalar field.
+// per record, entry, stored line, and text chunk rather than on every scalar
+// field, so no list of empty items runs on after cancellation.
 func (d *decoder) cancelled() bool {
 	if d.err == nil {
 		d.err = d.ctx.Err()
