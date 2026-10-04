@@ -106,6 +106,7 @@ func TestWriteFailures(t *testing.T) {
 		{name: "state to failing stdout", args: []string{"show", "--undo", undo, "--base", base, "--node", "2"}, other: "stderr", want: "cannot write output"},
 		{name: "diff to failing stdout", args: []string{"diff", "--undo", undo, "--base", base, "--from", "2", "--to", "3"}, other: "stderr", want: "cannot write output"},
 		{name: "diagnostic to failing stderr", args: []string{"unknown"}, failStderr: true, other: "stdout"},
+		{name: "usage hint to failing stderr", args: []string{"inspect", "source.go"}, failStderr: true, other: "stdout"},
 		{name: "raw state to failing stdout", args: []string{"show", "--undo", undo, "--base", base, "--node", "2", "--raw", "--final-newline=include"}, other: "stderr", want: "cannot write output"},
 		{name: "state failing partway", args: []string{"show", "--undo", undo, "--base", base, "--node", "2"}, accepted: 10, other: "stderr", want: "cannot write output"},
 		{name: "diff failing partway", args: []string{"diff", "--undo", undo, "--base", base, "--from", "2", "--to", "3"}, accepted: 20, other: "stderr", want: "cannot write output"},

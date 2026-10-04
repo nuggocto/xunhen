@@ -75,6 +75,7 @@ change was reverted:
 | A verifier run waits for a descendant holding its output | `TestRunBoundsTheChild`, the case of a descendant holding the output |
 | A verifier run leaves the child's descendants running | `TestRunBoundsTheChild`, both descendant cases |
 | The decoder checks cancellation only between records and line text | `TestDecodeStopsAfterCancellation`, both cases |
+| A multi-line usage hint keeps status 2 when stderr fails | `TestWriteFailures`, the usage hint case |
 
 ## Running the checks
 

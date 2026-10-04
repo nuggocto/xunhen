@@ -204,14 +204,17 @@ func (in *inputs) check(command string, withBase bool, lim limits.Limits) error 
 }
 
 // usageFailure reports an invalid invocation with status 2. A hintError
-// gets one diagnostic line per line of its explanation.
+// gets one diagnostic line per line of its explanation. If stderr fails,
+// the status is the output failure's, as for any other diagnostic.
 func usageFailure(stderr io.Writer, err error) int {
 	hint, ok := errors.AsType[*hintError](err)
 	if !ok {
 		return diagnostic(stderr, exitUsage, err.Error())
 	}
 	for _, line := range hint.lines {
-		diagnostic(stderr, exitUsage, line)
+		if status := diagnostic(stderr, exitUsage, line); status != exitUsage {
+			return status
+		}
 	}
 
 	return exitUsage
