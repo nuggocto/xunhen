@@ -972,38 +972,38 @@ production deployment path.
 
 #### 9.1 Build the static site in its own repository
 
-- [ ] Scaffold Astro inside the existing `../xunhen-front` repository, preserving its README/license history and `shrek` default branch.
-- [ ] Pin a supported Node/Astro setup and package-manager version, commit the lockfile, and document clean installation, local development, checks, and production builds.
-- [ ] Configure static output and `site: 'https://xunhen.org'`; keep the site independent of the Go build, source checkout, and a running Neovim instance.
-- [ ] Build the landing page with the purpose, recovery example, accurate limitations, synthetic TUI media, and installation sections for all v1 distribution channels.
-- [ ] Add Home and Changelog navigation tabs using accessible links to static routes, with an active-page state and the same shared layout, typography, colors, header, and footer.
-- [ ] Build `/changelog/` from checked-in Markdown entries that render the full user-facing notes locally, with validated version/date/category/link metadata, newest-first ordering, and stable release anchors.
-- [ ] Group each release's notes into Added, Changed, Fixed, Removed, Deprecated, and Security sections as applicable; omit empty categories and include compatibility/migration notes when needed.
-- [ ] Keep GitHub release links as secondary source/download actions, and provide a clear unreleased state before the first publication rather than empty or invented release entries.
-- [ ] Use public repository/release links and locally owned assets; keep the site free of undo-file uploads, editor functionality, server-side code, and embedded credentials.
-- [ ] Add readable mobile/desktop layouts, keyboard-accessible navigation, page metadata, canonical URLs, a favicon, and a useful static 404 page.
+- [x] Scaffold Astro inside the existing `../xunhen-front` repository, preserving its README/license history and `shrek` default branch.
+- [x] Pin a supported Node/Astro setup and package-manager version, commit the lockfile, and document clean installation, local development, checks, and production builds.
+- [x] Configure static output and `site: 'https://xunhen.org'`; keep the site independent of the Go build, source checkout, and a running Neovim instance.
+- [x] Build the landing page with the purpose, recovery example, accurate limitations, synthetic TUI media, and installation sections for all v1 distribution channels.
+- [x] Add Home and Changelog navigation tabs using accessible links to static routes, with an active-page state and the same shared layout, typography, colors, header, and footer.
+- [x] Build `/changelog/` from checked-in Markdown entries that render the full user-facing notes locally, with validated version/date/category/link metadata, newest-first ordering, and stable release anchors.
+- [x] Group each release's notes into Added, Changed, Fixed, Removed, Deprecated, and Security sections as applicable; omit empty categories and include compatibility/migration notes when needed.
+- [x] Keep GitHub release links as secondary source/download actions, and provide a clear unreleased state before the first publication rather than empty or invented release entries.
+- [x] Use public repository/release links and locally owned assets; keep the site free of undo-file uploads, editor functionality, server-side code, and embedded credentials.
+- [x] Add readable mobile/desktop layouts, keyboard-accessible navigation, page metadata, canonical URLs, a favicon, and a useful static 404 page.
 
 #### 9.2 Configure Pages and the domain
 
-- [ ] Inspect the existing Cloudflare zone, nameservers, DNS records, and any Pages project before configuring deployment; domain ownership alone does not establish hosting readiness.
-- [ ] Connect the `xunhen-front` repository to a Cloudflare Pages project with production branch `shrek`, repository-root builds, the pinned toolchain, `npm run build` for npm, and output directory `dist`.
-- [ ] Enable separate preview deployments and add frontend CI for a locked dependency install, content/type checks, and the static build.
-- [ ] Verify `xunhen.org` is an active Cloudflare zone in the Pages account and that its nameservers are correct; preserve unrelated records when adjusting DNS.
-- [ ] Add `xunhen.org` through the Pages custom-domain configuration, wait for domain/certificate activation, and verify HTTPS and HTTP-to-HTTPS behavior.
-- [ ] Define canonical handling for any enabled aliases without breaking preview URLs; keep preview deployments out of search indexes.
-- [ ] Document Pages build settings, production/preview behavior, the domain setup, and how to restore a previous successful deployment.
+- [x] Inspect the existing Cloudflare zone, nameservers, DNS records, and any Pages project before configuring deployment; domain ownership alone does not establish hosting readiness.
+- [x] Connect the `xunhen-front` repository to a Cloudflare Pages project with production branch `shrek`, repository-root builds, the pinned toolchain, `npm run build` for npm, and output directory `dist`.
+- [x] Enable separate preview deployments and add frontend CI for a locked dependency install, content/type checks, and the static build.
+- [x] Verify `xunhen.org` is an active Cloudflare zone in the Pages account and that its nameservers are correct; preserve unrelated records when adjusting DNS.
+- [x] Add `xunhen.org` through the Pages custom-domain configuration, wait for domain/certificate activation, and verify HTTPS and HTTP-to-HTTPS behavior.
+- [x] Define canonical handling for any enabled aliases without breaking preview URLs; keep preview deployments out of search indexes.
+- [x] Document Pages build settings, production/preview behavior, the domain setup, and how to restore a previous successful deployment.
 
 #### 9.3 Verify the site and release handoff
 
-- [ ] Exercise the built site locally and on a Pages preview at desktop and mobile sizes, including Home/Changelog navigation, keyboard access, release anchors, browser back/forward, the 404 route, and any copy controls.
-- [ ] Verify that complete categorized release notes are readable on-site, the changelog uses the shared landing-page design, and every release anchor resolves to the expected version.
-- [ ] Check that core content and installation instructions remain usable without client JavaScript, and that media has appropriate text alternatives.
-- [ ] Verify browser console/network failures, missing assets, broken links, and accidental private fixture content before production publication.
-- [ ] Deploy the accurate pre-release site to `https://xunhen.org` and verify domain/TLS behavior, canonical metadata, responsive layout, and production links.
-- [ ] Define a release-content update checklist that uses published application versions and tested install instructions, with no invented release dates or premature stable-download claims.
-- [ ] Verify a website rollback and document how to correct stale version/install links independently of the CLI release.
+- [x] Exercise the built site locally and on a Pages preview at desktop and mobile sizes, including Home/Changelog navigation, keyboard access, release anchors, browser back/forward, the 404 route, and any copy controls.
+- [x] Verify that complete categorized release notes are readable on-site, the changelog uses the shared landing-page design, and every release anchor resolves to the expected version.
+- [x] Check that core content and installation instructions remain usable without client JavaScript, and that media has appropriate text alternatives.
+- [x] Verify browser console/network failures, missing assets, broken links, and accidental private fixture content before production publication.
+- [x] Deploy the accurate pre-release site to `https://xunhen.org` and verify domain/TLS behavior, canonical metadata, responsive layout, and production links.
+- [x] Define a release-content update checklist that uses published application versions and tested install instructions, with no invented release dates or premature stable-download claims.
+- [x] Verify a website rollback and document how to correct stale version/install links independently of the CLI release.
 
-- [ ] **Phase 9 complete:** the separate static site is live on `xunhen.org`, its pages and deployment path pass browser checks, and the stable-release content handoff is documented.
+- [x] **Phase 9 complete:** the separate static site is live on `xunhen.org`, its pages and deployment path pass browser checks, and the stable-release content handoff is documented.
 
 ### Phase 10 — Release candidate and packaged-artifact QA
 
