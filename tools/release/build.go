@@ -328,6 +328,7 @@ func goCommand(ctx context.Context, dir string, env []string, args ...string) ([
 	cmd := exec.CommandContext(ctx, "go", args...)
 	cmd.Dir = dir
 	cmd.Env = env
+	cmd.WaitDelay = waitDelay
 	var stdout, stderr limitedBuffer
 	stdout.max, stderr.max = maxGoOutput, 1<<20
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr

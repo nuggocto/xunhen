@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"io"
 	"maps"
 	"os"
 	"os/exec"
@@ -450,6 +451,45 @@ func TestModuleRules(t *testing.T) {
 			err := checkModule(t.Context(), dir, buildEnv(os.Getenv))
 			if err == nil || !strings.Contains(err.Error(), tt.want) {
 				t.Fatalf("checkModule returned %v, want an error about %q", err, tt.want)
+			}
+		})
+	}
+}
+
+// A child's output reaches the buffer through io.Copy from a pipe, an
+// *os.File, as os/exec copies it. io.Copy prefers the destination's
+// ReadFrom to its Write, so the limit must hold on that path too.
+func TestLimitedBufferThroughCopy(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		size         int
+		wantOverflow bool
+	}{
+		{name: "under the limit", size: 7},
+		{name: "at the limit", size: 8},
+		{name: "past the limit", size: 9, wantOverflow: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			path := filepath.Join(t.TempDir(), "output")
+			if err := os.WriteFile(path, []byte(strings.Repeat("x", tt.size)), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			f, err := os.Open(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = f.Close() }()
+
+			b := limitedBuffer{max: 8}
+			if _, err := io.Copy(&b, f); err != nil {
+				t.Fatal(err)
+			}
+			if kept := len(b.Bytes()); kept != min(tt.size, 8) || b.overflow != tt.wantOverflow {
+				t.Fatalf("kept %d bytes with overflow %t, want %d and %t", kept, b.overflow, min(tt.size, 8), tt.wantOverflow)
 			}
 		})
 	}

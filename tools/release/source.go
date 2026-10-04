@@ -258,6 +258,7 @@ func git(ctx context.Context, dir string, stdin io.Reader, args ...string) ([]by
 	cmd.Dir = dir
 	cmd.Env = gitEnv()
 	cmd.Stdin = stdin
+	cmd.WaitDelay = waitDelay
 	var stdout, stderr limitedBuffer
 	stdout.max, stderr.max = maxGitOutput, 64<<10
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
@@ -276,17 +277,28 @@ func gitLine(ctx context.Context, dir string, args ...string) (string, error) {
 }
 
 // limitedBuffer keeps at most max bytes and records whether more arrived.
+// The buffer is a named field: an embedded bytes.Buffer would give
+// limitedBuffer its ReadFrom, which io.Copy calls instead of Write, and a
+// command's output would bypass the limit.
 type limitedBuffer struct {
-	bytes.Buffer
+	buf      bytes.Buffer
 	max      int
 	overflow bool
 }
 
 func (b *limitedBuffer) Write(p []byte) (int, error) {
-	if room := b.max - b.Len(); len(p) > room {
+	if room := b.max - b.buf.Len(); len(p) > room {
 		b.overflow = true
-		b.Buffer.Write(p[:max(room, 0)])
+		b.buf.Write(p[:max(room, 0)])
 		return len(p), nil
 	}
-	return b.Buffer.Write(p)
+	return b.buf.Write(p)
 }
+
+func (b *limitedBuffer) Bytes() []byte  { return b.buf.Bytes() }
+func (b *limitedBuffer) String() string { return b.buf.String() }
+
+// waitDelay bounds how long a command's output may stay open after the
+// command exits or is killed, as it can when a process it started inherits
+// the pipe and outlives it.
+const waitDelay = 5 * time.Second
