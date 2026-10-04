@@ -95,7 +95,7 @@ The tag starts `.github/workflows/release.yml`:
 | Release identity | `tools/release-identity.sh`: the tag is annotated, names the built commit, matches `VERSION`, is on `shrek`, and has a changelog section | read |
 | Release archives | `tools/reproduce.sh -tag`: two builds from fresh clones at different paths, compared byte for byte, then `tools/verify` on the archive | read |
 | Nix package | `nix flake check`: the sandboxed build and test suite, `tools/verify` on the packaged executable, and a NixOS machine that installs xunhen through `environment.systemPackages` | read |
-| Arch package | the recipe resolved against the exact source archive, linted with `namcap`, built with devtools in a clean chroot (its `check()` runs the tests and `tools/verify`), installed and verified again, upgraded, downgraded, and removed | read |
+| Arch package | the recipe resolved against the exact source archive, linted with `namcap`, built with devtools in a clean chroot (its `check()` runs the tests and `tools/verify`), installed and verified again, its installed documents compared with the archive's, upgraded, downgraded, and removed | read |
 | Stage | rechecks every hash, reads the release notes, creates a **draft** release with the four assets, downloads them again, and compares | write |
 
 Each job keeps its logs as a workflow artifact: the reproduction and
