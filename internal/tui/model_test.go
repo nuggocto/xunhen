@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"unicode"
@@ -589,13 +590,10 @@ func TestContentScrolling(t *testing.T) {
 	}{
 		{name: "top", shows: []string{"line 0001"}},
 		{name: "end shows the last line", keys: []string{"tab", "end"}, shows: []string{"line 1000"}, hides: []string{"line 0001"}},
-		{name: "page down", keys: []string{"tab", "pgdown"}, shows: []string{"line 0017"}, hides: []string{"line 0001"}},
 		{name: "scrolling up stops at the top", keys: []string{"tab", "up", "up", "pgup"}, shows: []string{"line 0001"}},
 		{name: "sideways scrolling reaches the end of a long line", keys: append([]string{"tab"}, repeated(40, "right")...), shows: []string{"- end"}, hides: []string{"line 0001"}},
 		{name: "dollar jumps to the end of the longest line", keys: []string{"tab", "$"}, shows: []string{"- end"}, hides: []string{"line 0001"}},
 		{name: "zero returns to the start", keys: []string{"tab", "$", "0"}, shows: []string{"line 0001"}},
-		// 56 rows of text end at line 1000 only if the view scrolled back up.
-		{name: "a taller terminal scrolls back to fill the screen", keys: []string{"tab", "end", "resize"}, shows: []string{"line 0945", "line 1000"}},
 	}
 
 	for _, tt := range tests {
@@ -605,13 +603,7 @@ func TestContentScrolling(t *testing.T) {
 			b := newBrowser(t, 100, 20)
 			b.loaded(load(t, loaderOf(chain([][]string{{"x"}, lines}))))
 			b.answer(b.work.last(t))
-			for _, k := range tt.keys {
-				if k == "resize" {
-					b.m.Update(tea.WindowSizeMsg{Width: 90, Height: 60})
-					continue
-				}
-				b.press(k)
-			}
+			b.press(tt.keys...)
 
 			for _, text := range tt.shows {
 				if !b.shows(text) {
@@ -625,6 +617,81 @@ func TestContentScrolling(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Paging and resizing are judged against the lines a fresh screen of the
+// same size shows, not against row numbers, so a change to the rows around
+// the content cannot break them while the scrolling still works.
+func TestContentPaging(t *testing.T) {
+	t.Parallel()
+
+	lines := make([]string, 1000)
+	for i := range lines {
+		lines[i] = fmt.Sprintf("line %04d", i+1)
+	}
+	open := func(t *testing.T, width, height int) *browser {
+		b := newBrowser(t, width, height)
+		b.loaded(load(t, loaderOf(chain([][]string{{"x"}, lines}))))
+		b.answer(b.work.last(t))
+		return b
+	}
+
+	tests := []struct {
+		name          string
+		width, height int // the terminal after the keys
+		keys          []string
+		ok            func(first, got []int) bool // first is the fresh screen
+	}{
+		{
+			name: "page down shows the next full screen", width: 100, height: 20,
+			keys: []string{"tab", "pgdown"},
+			ok: func(first, got []int) bool {
+				return len(got) == len(first) && got[0] == first[len(first)-1]+1
+			},
+		},
+		{
+			name: "a taller terminal scrolls back to fill the screen", width: 90, height: 60,
+			keys: []string{"tab", "end", "resize"},
+			ok: func(first, got []int) bool {
+				return len(got) == len(first) && got[len(got)-1] == len(lines)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			first := numbersShown(open(t, tt.width, tt.height))
+			if len(first) == 0 {
+				t.Fatal("the first screen shows no lines")
+			}
+			b := open(t, 100, 20)
+			for _, k := range tt.keys {
+				if k == "resize" {
+					b.m.Update(tea.WindowSizeMsg{Width: tt.width, Height: tt.height})
+					continue
+				}
+				b.press(k)
+			}
+			if got := numbersShown(b); !tt.ok(first, got) {
+				t.Fatalf("shows lines %v; a fresh screen shows %v", got, first)
+			}
+		})
+	}
+}
+
+var numberedLine = regexp.MustCompile(`line (\d{4})`)
+
+// numbersShown returns the numbers of the numbered lines on the screen, in
+// screen order.
+func numbersShown(b *browser) []int {
+	var numbers []int
+	for _, m := range numberedLine.FindAllStringSubmatch(strings.Join(b.screen(), "\n"), -1) {
+		n, _ := strconv.Atoi(m[1])
+		numbers = append(numbers, n)
+	}
+	return numbers
 }
 
 func repeated(n int, key string) []string {

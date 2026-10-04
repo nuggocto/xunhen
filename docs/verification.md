@@ -77,6 +77,7 @@ change was reverted:
 | A verifier run leaves the child's descendants running | `TestRunBoundsTheChild`, both descendant cases |
 | The decoder checks cancellation only between records and line text | `TestDecodeStopsAfterCancellation`, both cases |
 | A multi-line usage hint keeps status 2 when stderr fails | `TestWriteFailures`, the usage hint case |
+| Page down moves by one line, or by one line less or more than a screen | `TestContentPaging`, the page down case |
 
 ## Running the checks
 
