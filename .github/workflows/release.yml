@@ -263,14 +263,20 @@ jobs:
           docker exec arch sha256sum /usr/bin/xunhen | tee logs/executable.sha256
           docker exec --user builder arch go run ./tools/verify -binary /usr/bin/xunhen -version "v$VERSION" \
             -commit "$COMMIT" -go "$(docker exec arch go env GOVERSION)" 2>&1 | tee logs/verify-installed.log
-          # The installed documents must be exactly the verified archive's,
-          # whose relative links the release build checked. diff follows
-          # the links to the license files.
+      # The package must carry exactly the verified archive's documents,
+      # whose relative links the release build checked. It is unpacked
+      # rather than read after installing, because the image's pacman.conf
+      # skips extracting usr/share/doc. diff follows the links to the
+      # license files, which the package carries too.
+      - name: Compare the package's documents with the archive
+        run: |
+          set -o pipefail
           docker exec --env VERSION arch bash -c 'set -euo pipefail
-            shipped=$(mktemp -d)
+            shipped=$(mktemp -d) packaged=$(mktemp -d)
             tar -xzf "dist/xunhen_${VERSION}_linux_amd64.tar.gz" -C "$shipped" --strip-components=1
             rm "$shipped/xunhen"
-            diff -r "$shipped" /usr/share/doc/xunhen' | tee logs/installed-docs.diff
+            bsdtar -xf build/xunhen-[0-9]*.pkg.tar.zst -C "$packaged"
+            diff -r "$shipped" "$packaged/usr/share/doc/xunhen"' | tee logs/package-docs.diff
       # docs/install.md's upgrade and downgrade: a second package release
       # of the same source, then back to the first, then removal.
       - name: Upgrade, downgrade, and remove the package

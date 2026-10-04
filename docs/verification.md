@@ -35,7 +35,7 @@ breaking the behavior it guards makes it fail; the mutations listed under
 | Release archives are reproducible and hold only regular files with fixed modes, owners, and times | `TestWriteIsDeterministic`, `TestWriteRejectsBadNames`, `TestReadRejectsUnsafeArchives`, `TestReadRejectsDamagedStreams`, `TestReadRejectsHiddenHeaders`, `tools/reproduce.sh` in CI |
 | Every channel's executable passes the same artifact checks | `tools/verify` in CI, the release workflow, the Nix checks, and the AUR recipe's `check()`; `TestVerifierJudgesExecutables` and `TestVerifierJudgesArchives` confirm it fails wrong executables and damaged archives; `TestVerifierRefusesUnreadableArchives` that it refuses oversized files and FIFOs without blocking; `TestRunBoundsTheChild` that a run keeps its output and time limits when the child floods its output or leaves a process holding it open, and that no process the child started outlives the run |
 | Every relative link in a document the binary archive ships leads to another file in the archive | `TestCheckDocs`; every release build, including CI's, runs the check on the commit's documents |
-| The Arch package installs exactly the archive's documents, so the same links resolve | the release workflow's Arch job compares the installed `/usr/share/doc/xunhen` with the verified archive |
+| The Arch package carries exactly the archive's documents, so the same links resolve | the release workflow's Arch job unpacks the built package and compares its `/usr/share/doc/xunhen` with the verified archive |
 
 `TestCorpusThroughTheCommand`, `TestReplayOracle`, and `TestPreviewsMatchNeovim`
 read the stored Neovim corpus, so every `go test ./...` runs the oracle
