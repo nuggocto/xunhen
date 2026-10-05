@@ -37,7 +37,10 @@ sha256sums=('@SHA256@')
 _goenv() {
   export GOENV=off GOWORK=off GOTOOLCHAIN=local
   export GOPATH="$srcdir/gopath" GOMODCACHE="$srcdir/gomodcache"
-  export GOFLAGS="-trimpath -mod=readonly -modcacherw"
+  # -buildvcs=false here as well as in build(): the tests build the
+  # command too, and the clone the recipe lives in is a git repository of
+  # its own, not the source's.
+  export GOFLAGS="-trimpath -mod=readonly -modcacherw -buildvcs=false"
   export CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1
 }
 
