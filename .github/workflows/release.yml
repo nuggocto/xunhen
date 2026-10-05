@@ -168,6 +168,9 @@ jobs:
           ./result/bin/xunhen --version | tee "$logs/version.txt"
           nix path-info --closure-size --human-readable ./result | tee "$logs/path-info.txt"
           sha256sum ./result/bin/xunhen | tee "$logs/executable.sha256"
+          # The executable itself, for docs/qa.md's terminal checks of the
+          # Nix build; it is static, so it runs outside the store.
+          install -m755 ./result/bin/xunhen "$logs/xunhen"
       # docs/install.md's user-profile steps: install, remove, roll the
       # removal back, and remove again.
       - name: Install, roll back, and remove in a user profile
