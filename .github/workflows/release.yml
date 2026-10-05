@@ -150,8 +150,9 @@ jobs:
             sandbox = true
             system-features = nixos-test benchmark big-parallel kvm
       # Every check: the package build with the whole test suite, tools/verify
-      # against the packaged executable, and a NixOS machine that installs it
-      # through environment.systemPackages.
+      # against the packaged executable, a NixOS machine that adds and then
+      # removes it through environment.systemPackages, and the packaged
+      # executable on Linux 5.10 and a qemu64 CPU.
       - name: Check the flake
         shell: bash
         run: |
@@ -277,6 +278,26 @@ jobs:
             rm "$shipped/xunhen"
             bsdtar -xf build/xunhen-[0-9]*.pkg.tar.zst -C "$packaged"
             diff -r "$shipped" "$packaged/usr/share/doc/xunhen"' | tee logs/package-docs.diff
+      # A system whose pacman.conf extracts documentation gets
+      # /usr/share/doc/xunhen. Install again without the image's exclusion
+      # and follow every relative link the installed documents hold.
+      - name: Follow the installed documents' links
+        run: |
+          set -o pipefail
+          docker exec arch bash -c 'set -euo pipefail
+            sed "/^NoExtract.*usr\/share\/doc/d" /etc/pacman.conf >/tmp/pacman-docs.conf
+            pacman -U --noconfirm --config /tmp/pacman-docs.conf build/xunhen-[0-9]*.pkg.tar.zst >/dev/null
+            cd /usr/share/doc/xunhen
+            checked=0
+            while IFS= read -r doc; do
+              while IFS= read -r target; do
+                target=${target%%#*}
+                [[ -z $target || $target == *://* || $target == mailto:* ]] && continue
+                [[ -e $(dirname "$doc")/$target ]] || { echo "$doc links to $target, which is not installed"; exit 1; }
+                checked=$((checked + 1))
+              done < <(grep -o "\]([^)[:space:]]*)" "$doc" | sed "s/^](//; s/)\$//")
+            done < <(find . -name "*.md")
+            echo "$checked relative links resolve in $(pwd)"' | tee logs/installed-doc-links.txt
       # docs/install.md's upgrade and downgrade: a second package release
       # of the same source, then back to the first, then removal.
       - name: Upgrade, downgrade, and remove the package
@@ -305,9 +326,110 @@ jobs:
             build/*.pkg.tar.zst
           if-no-files-found: ignore
 
+  # docs/qa.md: the archive's executable installed and checked as an
+  # ordinary user in each pinned userland, traced for file, process, and
+  # network use, and driven in tmux and over SSH. tools/qa.sh runs every
+  # check from the archive itself; nothing here builds xunhen.
+  qa:
+    name: Candidate QA
+    needs: [validate, archive]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Fetch the release archives
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          name: archive
+          path: dist
+      - name: Install tmux
+        run: sudo apt-get install -y -q tmux >/dev/null
+      - name: Install, verify, and remove in Debian, Ubuntu, and Alpine
+        env:
+          QA_OUT: ${{ runner.temp }}/qa
+        run: tools/qa.sh userland dist
+      - name: Trace file, process, and network use
+        env:
+          QA_OUT: ${{ runner.temp }}/qa
+        run: tools/qa.sh isolation dist
+      - name: Drive the browser in tmux and over SSH
+        env:
+          QA_OUT: ${{ runner.temp }}/qa
+        run: |
+          mkdir -p "$RUNNER_TEMP/archive"
+          tar -xzf dist/xunhen_*_linux_amd64.tar.gz -C "$RUNNER_TEMP/archive" --strip-components=1
+          tools/qa.sh terminal "$RUNNER_TEMP/archive/xunhen" archive
+      - name: Keep the evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: qa-evidence
+          path: ${{ runner.temp }}/qa/
+          if-no-files-found: ignore
+
+  # The archive's own executable on the oldest kernel and CPU the release
+  # claims, in a virtual machine: nix/baseline-test.nix.
+  baseline:
+    name: Kernel and CPU baseline
+    needs: [validate, archive]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      VERSION: ${{ needs.validate.outputs.version }}
+      COMMIT: ${{ needs.validate.outputs.commit }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Fetch the release archives
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          name: archive
+          path: ${{ runner.temp }}/dist
+      - name: Allow access to KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install Nix
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24  # v31.11.1
+        with:
+          extra_nix_config: |
+            sandbox = true
+            system-features = nixos-test benchmark big-parallel kvm
+      - name: Boot Linux 5.10 on a qemu64 CPU and verify the archive's executable
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p "$RUNNER_TEMP/logs" "$RUNNER_TEMP/archive"
+          tar -xzf "$RUNNER_TEMP/dist/xunhen_${VERSION}_linux_amd64.tar.gz" -C "$RUNNER_TEMP/archive" --strip-components=1
+          go_version=$(jq -r .build.go "$RUNNER_TEMP/dist/provenance.json")
+          nix build -L --impure -f nix/archive-baseline.nix \
+            --argstr executable "$RUNNER_TEMP/archive/xunhen" --argstr version "$VERSION" \
+            --argstr commit "$COMMIT" --argstr goVersion "$go_version" 2>&1 | tee "$RUNNER_TEMP/logs/baseline.log"
+      - name: Keep the logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: baseline-logs
+          path: ${{ runner.temp }}/logs/
+          if-no-files-found: ignore
+
   stage:
     name: Stage the draft release
-    needs: [validate, archive, nix, arch]
+    needs: [validate, archive, nix, arch, qa, baseline]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     # The only job with write access here. It runs no repository code: it

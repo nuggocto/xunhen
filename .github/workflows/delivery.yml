@@ -1,0 +1,228 @@
+name: Check a published release
+
+# Checks a release that publish.yml made public, through the channels users
+# install from: the public download, the Go module proxy, the tagged flake,
+# and the AUR recipe resolved against the public source archive. It reads
+# only public URLs and builds nothing it publishes. docs/qa.md lists what
+# it shows and docs/releasing.md when to run it.
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: Published release tag, such as v1.0.0-rc.1
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  RELEASE: ${{ inputs.release }}
+  GH_TOKEN: ${{ github.token }}
+  GH_REPO: ${{ github.repository }}
+
+jobs:
+  identity:
+    name: Published release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      commit: ${{ steps.release.outputs.commit }}
+      go: ${{ steps.release.outputs.go }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # The public assets must be the bytes the Release run for the tag
+      # built and verified, and the release must be public, not a draft.
+      - name: Download the public assets and compare them with the verified build
+        id: release
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$*"; exit 1; }
+          [[ $RELEASE =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$ ]] || fail "$RELEASE is not a release tag"
+          [[ $(gh release view "$RELEASE" --json isDraft --jq .isDraft) == false ]] || fail "$RELEASE is not published"
+          version=${RELEASE#v}
+          base="https://github.com/$GH_REPO/releases/download/$RELEASE"
+          mkdir public
+          for name in "xunhen_${version}_linux_amd64.tar.gz" "xunhen_${version}_source.tar.gz" SHA256SUMS.txt provenance.json; do
+            curl -fsSL -o "public/$name" "$base/$name"
+          done
+          (cd public && sha256sum --check --strict SHA256SUMS.txt)
+          commit=$(gh api "repos/$GH_REPO/commits/$RELEASE" --jq .sha)
+          jq -e --arg tag "$RELEASE" --arg commit "$commit" '.tag == $tag and .source.commit == $commit' public/provenance.json >/dev/null ||
+            fail "provenance.json does not describe $RELEASE at $commit"
+          run=$(gh run list --workflow release.yml --commit "$commit" --event push --status success \
+            --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          [[ -n $run ]] || fail "no successful Release run built $RELEASE"
+          gh run download "$run" --name archive --dir verified
+          for file in public/*; do cmp "$file" "verified/${file#public/}"; done
+          echo "Public assets equal Release run $run's verified artifact."
+          { echo "version=$version"; echo "commit=$commit"; echo "go=$(jq -r .build.go public/provenance.json)"; } | tee -a "$GITHUB_OUTPUT"
+      - name: Keep the public assets
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: public
+          path: public/
+          if-no-files-found: error
+
+  # docs/install.md's release-archive steps, on the public download, in
+  # each pinned userland as an ordinary user.
+  archive:
+    name: Release archive
+    needs: identity
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ inputs.release }}
+          persist-credentials: false
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Fetch the public assets
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          name: public
+          path: public
+      - name: Install, verify, and remove in Debian, Ubuntu, and Alpine
+        env:
+          QA_OUT: ${{ runner.temp }}/qa
+        run: tools/qa.sh userland public
+      - name: Keep the evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: archive-evidence
+          path: ${{ runner.temp }}/qa/
+          if-no-files-found: ignore
+
+  # docs/install.md's Go source steps: the public module proxy, fresh caches.
+  go:
+    name: Go module install
+    needs: identity
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      VERSION: ${{ needs.identity.outputs.version }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
+        with:
+          go-version: ${{ needs.identity.outputs.go }}
+          cache: false
+      - name: Install from the module proxy and check the result
+        run: |
+          set -euo pipefail
+          export GOPATH="$RUNNER_TEMP/gopath" GOMODCACHE="$RUNNER_TEMP/gomodcache" GOCACHE="$RUNNER_TEMP/gocache"
+          export GOFLAGS= GOTOOLCHAIN=local
+          CGO_ENABLED=0 go install "github.com/nuggocto/xunhen/cmd/xunhen@$RELEASE"
+          bin="$(go env GOPATH)/bin/xunhen"
+          "$bin" version | tee version.txt
+          head -1 version.txt | grep -Fx "xunhen $RELEASE"
+          grep -Fx "commit: unknown" version.txt
+          go version -m "$bin" | tee buildinfo.txt
+          grep -E "^\s+mod\s+github.com/nuggocto/xunhen\s+$RELEASE\s" buildinfo.txt
+          grep -E "^\s+build\s+CGO_ENABLED=0$" buildinfo.txt
+          ! readelf -l "$bin" | grep -q "INTERP"
+          curl -fsSL -o undo "https://raw.githubusercontent.com/$GH_REPO/$RELEASE/testdata/undo/abandoned-branch/history.undo"
+          curl -fsSL -o base "https://raw.githubusercontent.com/$GH_REPO/$RELEASE/testdata/undo/abandoned-branch/base.bin"
+          printf 'package sample\n\nfunc experiment() int { return 42 }\n' >want
+          "$bin" show --undo undo --base base --node 2 --raw --final-newline=include >got
+          cmp got want
+          rm "$(go env GOPATH)/bin/xunhen"
+          test ! -e "$bin"
+
+  # docs/install.md's Nix steps against the public tagged flake.
+  nix:
+    name: Nix flake
+    needs: identity
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      VERSION: ${{ needs.identity.outputs.version }}
+    steps:
+      - name: Install Nix
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24  # v31.11.1
+        with:
+          extra_nix_config: |
+            sandbox = true
+      - name: Run, install, roll back, and remove from the public flake
+        shell: bash
+        run: |
+          set -euo pipefail
+          ref="github:$GH_REPO/$RELEASE"
+          nix run "$ref" -- --version | tee version.txt
+          head -1 version.txt | grep -Fx "xunhen v$VERSION"
+          bin="$HOME/.nix-profile/bin/xunhen"
+          nix profile add "$ref"
+          "$bin" --version | head -1 | grep -Fx "xunhen v$VERSION"
+          nix profile remove xunhen
+          test ! -e "$bin"
+          nix profile rollback
+          "$bin" --version | head -1 | grep -Fx "xunhen v$VERSION"
+          nix profile remove xunhen
+          test ! -e "$bin"
+          # The package's own artifact checks, built from the public flake.
+          nix build -L "$ref#checks.x86_64-linux.verify"
+          cat result
+
+  # The AUR recipe resolved against the public source archive, fetched by
+  # makepkg from its real URL, then installed on a system that extracts
+  # documentation, checked, and removed.
+  arch:
+    name: Arch recipe from the public source
+    needs: identity
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      VERSION: ${{ needs.identity.outputs.version }}
+      COMMIT: ${{ needs.identity.outputs.commit }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ inputs.release }}
+          persist-credentials: false
+      - name: Fetch the public assets
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          name: public
+          path: public
+      - name: Build, install, check, and remove the package
+        run: |
+          set -euo pipefail
+          image=$(jq -r .arch.image tools/qa-environments.json)
+          sha=$(awk -v n="xunhen_${VERSION}_source.tar.gz" '$2 == n { print $1 }' public/SHA256SUMS.txt)
+          docker run --rm -v "$PWD:/work" -w /work -e VERSION -e COMMIT -e GO="$(jq -r .build.go public/provenance.json)" -e SHA="$sha" "$image" bash -c '
+            set -euo pipefail
+            pacman -Syu --noconfirm --needed base-devel git go >/dev/null
+            useradd -m builder
+            install -d -o builder build
+            su builder -c "packaging/aur/resolve.sh -version $VERSION -commit $COMMIT -sha256 $SHA \
+              -maintainer \"xunhen delivery check\" -out build"
+            # makepkg downloads the source archive from the release URL.
+            su builder -c "cd build && makepkg --noconfirm"
+            sed "/^NoExtract.*usr\/share\/doc/d" /etc/pacman.conf >/tmp/pacman-docs.conf
+            pacman -U --noconfirm --config /tmp/pacman-docs.conf build/xunhen-[0-9]*.pkg.tar.zst
+            pacman -Qi xunhen
+            /usr/bin/xunhen --version
+            test -L /usr/share/doc/xunhen/LICENSE && test -s /usr/share/doc/xunhen/LICENSE
+            su builder -c "go run ./tools/verify -binary /usr/bin/xunhen -version v$VERSION -commit $COMMIT -go $GO"
+            pacman -R --noconfirm xunhen
+            test ! -e /usr/bin/xunhen && test ! -e /usr/share/doc/xunhen'
