@@ -8,6 +8,15 @@ says which behavior stays fixed within a major version.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-05
+
+### Changed
+
+- The release archive and the AUR package carry the README, changelog,
+  license, and third-party notices. The separate install, usage, and
+  troubleshooting guides are gone: the README covers installation and use,
+  and `xunhen help COMMAND` lists every flag.
+
 ## [1.0.0] - 2026-10-05
 
 The first stable release. It recovers states from the undo history Neovim

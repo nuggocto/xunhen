@@ -24,10 +24,10 @@ yay -S xunhen
 With flakes enabled:
 
 ```sh
-nix profile add github:nuggocto/xunhen/v1.0.0
+nix profile add github:nuggocto/xunhen/v1.0.1
 ```
 
-For NixOS, add `inputs.xunhen.url = "github:nuggocto/xunhen/v1.0.0"` to
+For NixOS, add `inputs.xunhen.url = "github:nuggocto/xunhen/v1.0.1"` to
 your flake. Pass `xunhen` into your configuration and add
 `xunhen.packages.x86_64-linux.default` to `environment.systemPackages`.
 
