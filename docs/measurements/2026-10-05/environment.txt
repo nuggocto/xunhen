@@ -1,0 +1,15 @@
+commit: 0be1f06ffd2e68300976c22476a848d8c2b0933c
+executable sha256: 2315888b811f6c1fa300207a47829544953741f2a87832ba4c9f36696a510c8d
+executable: supplied, /home/nuggocto/Documents/code/xunhen/.local/qa-input/v1.0.0-rc.1/archive/xunhen; the commit above built only the test binary and tools
+executable version: xunhen v1.0.0-rc.1 commit: 0be1f06ffd2e68300976c22476a848d8c2b0933c go: go1.27.1 
+toolchain: go version go1.27.1 linux/amd64
+build: GOOS=linux GOARCH=amd64 GOAMD64=v1 CGO_ENABLED=0 -trimpath
+cpu: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S, 32 threads
+memory: 62.1 GiB
+kernel: Linux 7.2.5-3-omarchy x86_64
+os: Omarchy 4.0.4
+cpufreq governor: performance
+platform profile: performance
+on mains power: 1
+GOMEMLIMIT: unset (the command sets 768 MiB)
+date: 2026-10-05T03:47:28+02:00

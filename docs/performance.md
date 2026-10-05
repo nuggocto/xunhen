@@ -3,7 +3,7 @@
 These are measurements of xunhen on synthetic workloads, taken on one named
 machine, and the targets they are held to. They are project targets for
 that machine, not guarantees for every input or computer. The raw samples
-are in [`measurements/2026-09-27`](measurements/2026-09-27), with the
+are in [`measurements/2026-10-05`](measurements/2026-10-05), with the
 environment they ran in and a summary of every operation.
 
 ## Reference machine
@@ -15,7 +15,7 @@ environment they ran in and a summary of every operation.
 | System | Omarchy 4.0.4, Linux 7.2.5 x86_64 |
 | Toolchain | Go 1.27.1 |
 | Build | `GOOS=linux GOARCH=amd64 GOAMD64=v1 CGO_ENABLED=0 go build -trimpath`, as releases are built |
-| Executable | SHA-256 `a1f0a93a9eaf6eb03aaa369e8f8a3c95b757d4fb3cc556c8464cd3ac424c54b4` |
+| Executable | the `v1.0.0-rc.1` release archive's, SHA-256 `2315888b811f6c1fa300207a47829544953741f2a87832ba4c9f36696a510c8d` |
 
 ## Workloads
 
@@ -39,6 +39,7 @@ only the Neovim corpus establishes what a real producer writes.
 | `changes-limit` | 1 | 8 | 560,001 | 560,000 | 560,000 | 100 | 76 B | 249.6 MiB |
 | `entries-limit` | 1 | 9 | 2 | 1,000,000 | 0 | 4,000,000 | 12 B | 17.2 MiB |
 | `lines-limit` | 1 | 10 | 2 | 1 | 1 | 3 | 16 MiB | 16.0 MiB |
+| `empty-lines` | 1 | 11 | 2 | 1 | 4,000,000 | 2 | 21 B | 15.3 MiB |
 
 `small` and `ordinary` are the everyday cases: a short session, and a
 thousand changes to a 3,000-line file with occasional branches. `deep` is
@@ -87,13 +88,13 @@ begins as a copy of its parent. Values at that floor mean "at most".
 
 | Operation | Target | Measured on `ordinary` | Status |
 | --- | --- | --- | --- |
-| Load, start to first drawn state | p95 under 500 ms | 20.0 ms end to end; 1.7 ms of it is loading | Met |
-| Uncached preview | p95 under 100 ms | 50 µs | Met |
+| Load, start to first drawn state | p95 under 500 ms | 20.2 ms end to end; 1.1 ms of it is loading | Met |
+| Uncached preview | p95 under 100 ms | 57 µs | Met |
 | Cached selection | p95 under 50 ms | 1 µs, plus at most one 16 ms frame to draw | Met |
-| Comparison, displayed result prepared | p95 under 250 ms | 237 µs | Met |
-| Cancellation of active work | under 100 ms | 6 µs; 28.5 ms slowest of any workload | Met |
-| Exit during active work | under 250 ms | none on `ordinary`, whose comparison ends first; 17.8 ms slowest of any workload | Met |
-| Peak resident memory | under 1 GiB for every workload | 820 MiB worst, on `shuffled` | Met |
+| Comparison, displayed result prepared | p95 under 250 ms | 365 µs | Met |
+| Cancellation of active work | under 100 ms | 6 µs; 21.3 ms slowest of any workload | Met |
+| Exit during active work | under 250 ms | none on `ordinary`, whose comparison ends first; 27.9 ms slowest of any workload | Met |
+| Peak resident memory | under 1 GiB for every workload | 818 MiB worst, on `shuffled` | Met |
 
 The first four targets are interaction budgets. A browser that answers a key
 within about 100 ms feels immediate, and 500 ms is the longest a user should
@@ -108,38 +109,38 @@ long a request would take.
 
 | Workload | Target | Measured |
 | --- | --- | --- |
-| Any near-limit workload | first state drawn within 1 s | 487 ms slowest (`changes-limit`, cold file cache) |
-| Any near-limit workload | uncached preview within 500 ms | 145 ms slowest (`entries-limit`) |
-| Any near-limit workload | comparison within 2 s | 835 ms slowest (`shuffled`) |
-| Every workload | peak resident memory under 1 GiB | 820 MiB (`shuffled`), 762 MiB (`changes-limit`), 726 MiB (`entries-limit`) |
+| Any near-limit workload | first state drawn within 1 s | 620 ms slowest (`changes-limit`, cold file cache) |
+| Any near-limit workload | uncached preview within 500 ms | 171 ms slowest (`changes-limit`) |
+| Any near-limit workload | comparison within 2 s | 849 ms slowest (`shuffled`) |
+| Every workload | peak resident memory under 1 GiB | 818 MiB (`shuffled`), 759 MiB (`entries-limit`), 739 MiB (`changes-limit`) |
 
 ## Results
 
 | Workload | First state | Uncached preview | Comparison | Cancelled halfway | Exit while comparing | Browser peak |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `small` | 19.8 ms | 14 µs | 54 µs | 2 µs | none | 17 MiB |
-| `ordinary` | 19.7 ms | 26 µs | 172 µs | 3 µs | none | 21 MiB |
-| `deep` | 120.1 ms | 7.8 ms | 8.9 ms | 7 µs | none | 232 MiB |
-| `wide` | 53.3 ms | 15 µs | 44 µs | 4 µs | none | 110 MiB |
-| `shuffled` | 387.0 ms | 48.3 ms | 817.2 ms | 24.5 ms | 7.7 ms | 820 MiB |
-| `repeated` | 119.3 ms | 12.0 ms | 158.5 ms | 16 µs | 2.1 ms | 282 MiB |
-| `replaced` | 119.6 ms | 14.2 ms | 89.6 ms | 14 µs | 2.1 ms | 427 MiB |
-| `changes-limit` | 437.3 ms | 101.1 ms | 114.0 ms | 27 µs | 3.0 ms | 762 MiB |
-| `entries-limit` | 253.3 ms | 135.0 ms | 198.7 ms | 6 µs | 2.9 ms | 726 MiB |
-| `lines-limit` | 169.9 ms | 109.2 ms | 217.2 ms | 221 µs | 3.0 ms | 366 MiB |
+| `small` | 20.0 ms | 10 µs | 34 µs | 2 µs | none | 17 MiB |
+| `ordinary` | 19.8 ms | 32 µs | 224 µs | 3 µs | none | 22 MiB |
+| `deep` | 120.3 ms | 7.8 ms | 10.1 ms | 9 µs | none | 187 MiB |
+| `wide` | 53.3 ms | 13 µs | 30 µs | 3 µs | none | 105 MiB |
+| `shuffled` | 453.5 ms | 48.6 ms | 835.4 ms | 196 µs | 7.9 ms | 818 MiB |
+| `repeated` | 119.0 ms | 11.8 ms | 165.7 ms | 20 µs | 2.2 ms | 278 MiB |
+| `replaced` | 119.8 ms | 12.3 ms | 98.8 ms | 41 µs | 1.7 ms | 423 MiB |
+| `changes-limit` | 468.9 ms | 137.3 ms | 160.1 ms | 47 µs | 1.9 ms | 739 MiB |
+| `entries-limit` | 253.0 ms | 135.6 ms | 206.9 ms | 7 µs | 15.1 ms | 759 MiB |
+| `lines-limit` | 185.9 ms | 116.7 ms | 228.0 ms | 443 µs | 2.1 ms | 313 MiB |
+| `empty-lines` | 136.6 ms | 24.0 ms | 51.9 ms | 4.8 ms | 2.8 ms | 416 MiB |
 
 Medians, from a warm file cache. "First state" is end to end: start, load,
 first preview, and drawing. Preview and comparison times are the worker's,
-from a cold application cache; a cached preview took at most 5 µs on every
+from a cold application cache; a cached preview took at most 6 µs on every
 workload. "None" under exit while comparing means every comparison finished
-before the quit took effect, and those exits, which had no work to stop,
-took at most 2.8 ms. The [summary](measurements/2026-09-27/summary.md) has every
+before the quit took effect. The [summary](measurements/2026-10-05/summary.md) has every
 operation with its sample count, 95th percentile where there are enough
 samples, slowest sample, and allocations, and the command timings.
 
 The command-line tools follow the same pattern. `inspect` of the 250 MiB
-`changes-limit` file takes 542 ms and 338 MiB, and `diff` of the shuffled
-pair takes 1.32 s and 785 MiB.
+`changes-limit` file takes 618 ms and 308 MiB, and `diff` of the shuffled
+pair takes 1.35 s and 782 MiB.
 
 ## Where the memory goes
 
@@ -158,7 +159,7 @@ then reloading, and every part of it has a place:
 | Queued work | under 1 KiB | At most one pending request, a few words; a finished result waiting for the view holds a state or comparison already counted above |
 
 The in-process measurement found 360 MiB live after the comparison and 596
-MiB live with a second load held as well. The rest of the 820 MiB peak is
+MiB live with a second load held as well. The rest of the 818 MiB peak is
 garbage not yet collected and runtime overhead: the command sets a 768 MiB
 soft limit on the Go heap, which is not a cap on resident memory. The cache
 itself stays within its budget; it is one of the smaller holders.
