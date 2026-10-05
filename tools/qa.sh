@@ -38,12 +38,14 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# scratch makes a temporary directory that is removed on exit.
+# scratch VAR makes a temporary directory, removed on exit, and stores its
+# path in VAR. It must run in the caller's shell, not in $(...), or the
+# registration is lost with the subshell.
 scratch() {
 	local dir
 	dir=$(mktemp -d)
 	cleanups+=("rm -rf '$dir'")
-	echo "$dir"
+	printf -v "$1" %s "$dir"
 }
 
 need() {
@@ -72,12 +74,16 @@ release() {
 	done
 }
 
-# evidence NAME creates and prints the directory for one check's records.
+# evidence NAME creates and prints a new directory for one run of a check,
+# NAME/DATE-PID, and points NAME/latest at it. Earlier runs stay, so a
+# rerun never removes the record of a first failure.
 evidence() {
-	local out=${QA_OUT:-$repo/.local/qa/$version}/$1
-	rm -rf "$out"
-	mkdir -p "$out"
-	echo "$out"
+	local base=${QA_OUT:-$repo/.local/qa/$version}/$1 run
+	run=$(date +%Y%m%dT%H%M%S)-$$
+	mkdir -p "$base"
+	mkdir "$base/$run" || fail "$base/$run already exists"
+	ln -sfn "$run" "$base/latest"
+	echo "$base/$run"
 }
 
 # identity records what was tested and with what, for the top of a log.
@@ -204,7 +210,7 @@ cmd_userland() {
 	need docker go
 	local out work
 	out=$(evidence userland)
-	work=$(scratch)
+	scratch work
 	mkdir "$work/corpus"
 	cp -r testdata/undo/. "$work/corpus/"
 	cp go.sum "$work/"
@@ -269,7 +275,7 @@ cmd_isolation() {
 	need docker
 	local out work image
 	out=$(evidence isolation)
-	work=$(scratch)
+	scratch work
 	extract "$archive" "$work/archive" >/dev/null
 	cp "$work/archive/xunhen" "$work/xunhen"
 	mkdir "$work/corpus"
@@ -398,6 +404,27 @@ settled() {
 	done
 }
 
+# row_marked PANE ROW MARK checks that the screen's line holding ROW also
+# holds MARK, and row_unmarked that it does not.
+row_marked() {
+	qtmux capture-pane -p -t "$1" | grep -F -- "$2" | grep -qF -- "$3"
+}
+row_unmarked() {
+	! row_marked "$@"
+}
+
+# until PANE CONDITION... waits up to 20 seconds for a command to succeed.
+until_true() {
+	local i
+	for ((i = 0; i < 200; i++)); do
+		"$@" && return 0
+		sleep 0.1
+	done
+	echo "timed out waiting for: $*" >&2
+	qtmux capture-pane -p -t "$2" >&2
+	return 1
+}
+
 check_screen_mode() {
 	[[ $(qtmux display-message -p -t "$1" '#{alternate_on}') == 0 ]] || {
 		echo "the alternate screen is still on"
@@ -417,7 +444,7 @@ cmd_terminal() {
 	archive=$executable
 	local out work
 	out=$(evidence "terminal-$label")
-	work=$(scratch)
+	scratch work
 	tmux_socket=xunhen-qa-$$
 	cleanups+=("tmux -L '$tmux_socket' kill-server 2>/dev/null")
 	cp -r testdata/undo/abandoned-branch "$work/fixture"
@@ -484,11 +511,17 @@ cmd_terminal() {
 		# A burst of keys ends on the node the last key selects.
 		qtmux send-keys -t qa:tree k j k j k j k || return 1
 		settled qa:tree "Previewing node 3" "chosen()" || return 1
-		# A reload that succeeds keeps the selected node.
+		# A reload that succeeds keeps the selected node and returns the pin
+		# to the reference, so pin node 2 first: a reload that never ran
+		# would leave the pin there.
 		qtmux send-keys -t qa:tree j || return 1
 		settled qa:tree "Previewing node 2" "experiment()" || return 1
+		qtmux send-keys -t qa:tree Space || return 1
+		until_true row_marked qa:tree "\`- 2" "[from]" || return 1
+		until_true row_unmarked qa:tree "[ref]" "[from]" || return 1
 		qtmux send-keys -t qa:tree r || return 1
-		wait_gone qa:tree "Reloading" || return 1
+		until_true row_marked qa:tree "[ref]" "[from]" || return 1
+		until_true row_unmarked qa:tree "\`- 2" "[from]" || return 1
 		settled qa:tree "Previewing node 2" "experiment()" || return 1
 		qtmux capture-pane -p -t qa:tree | grep -qF "Reload failed" && { echo "the reload failed"; return 1; }
 		qtmux send-keys -t qa:tree q || return 1
