@@ -43,8 +43,7 @@ type Metadata struct {
 // RecordInfo is a value copy of one change's metadata. Links describe logical
 // ancestry and the recorded sibling preference order, not chronological order.
 // The decoder validates the cursor, named marks, and visual selection but does
-// not keep them: nothing reads them, and they took 360 of this struct's 408
-// bytes.
+// not keep them: nothing reads them.
 type RecordInfo struct {
 	Offset          int64
 	Sequence        Sequence
@@ -62,10 +61,9 @@ type RecordInfo struct {
 // count plus one. Its range must be checked against actual text during replay.
 // Strings use buffer API bytes: embedded source NUL is NUL, not wire-format LF.
 type Entry struct {
-	Top             int32
-	Bottom          int32
-	LineCountAtSave int32
-	lines           []string
+	Top    int32
+	Bottom int32
+	lines  []string
 }
 
 // LineCount is the number of lines stored on this side of the swap.

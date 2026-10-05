@@ -182,9 +182,9 @@ func (h *History) invalid(r undofile.Record, field, detail string) error {
 }
 
 func (h *History) record(n node) undofile.Record {
-	// The decoded file owns large cursor/mark and edit metadata. Navigation
-	// stores only an index rather than retaining a second copy for every node.
-	// New checked each index; the root's -1 intentionally yields a zero record.
+	// The decoded file owns each record's links and edits. Navigation stores
+	// only an index rather than a second copy for every node. New checked
+	// each index; the root's -1 intentionally yields a zero record.
 	r, _ := h.file.Record(n.recordIndex)
 	return r
 }

@@ -149,10 +149,11 @@ func (d *decoder) recordV3() Record {
 
 func (d *decoder) entryV3() Entry {
 	entry := Entry{
-		Top:             int32(d.count("entry top", d.limits.StateLines)),
-		Bottom:          int32(d.count("entry bottom", d.limits.StateLines+1)),
-		LineCountAtSave: int32(d.count("entry saved line count", d.limits.StateLines)),
+		Top:    int32(d.count("entry top", d.limits.StateLines)),
+		Bottom: int32(d.count("entry bottom", d.limits.StateLines+1)),
 	}
+	// The buffer's line count when the change was saved: validated, unused.
+	d.count("entry saved line count", d.limits.StateLines)
 	if entry.Bottom != 0 && entry.Bottom <= entry.Top {
 		d.fail(Invalid, d.offset-8, "entry range", "bottom must follow top or be zero")
 	}

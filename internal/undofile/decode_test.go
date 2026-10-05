@@ -397,15 +397,22 @@ func needs(t *testing.T, data []byte) requirement {
 	for i := range meta.HeaderCount {
 		record, _ := file.Record(i)
 		need.entries += record.EntryCount() + record.ExtmarkCount()
+		// The decoder discards each entry's saved line count, so it is read
+		// from the bytes: an entry is its two-byte marker, then top, bottom,
+		// the saved line count, and the stored line count, four bytes each,
+		// then every stored line with its four-byte length.
+		pos := firstEntry(data, int(record.Info().Offset))
 		for j := range record.EntryCount() {
 			entry, _ := record.Entry(j)
 			state(int(entry.Top), "entry top")
 			state(int(entry.Bottom)-1, "entry bottom")
-			state(int(entry.LineCountAtSave), "entry saved line count")
+			state(int(int32(binary.BigEndian.Uint32(data[pos+10:]))), "entry saved line count")
+			pos += 18
 
 			need.storedLines += entry.LineCount()
 			for k := range entry.LineCount() {
 				line, _ := entry.Line(k)
+				pos += 4 + len(line)
 				if len(line) > need.lineBytes {
 					need.lineBytes, need.longestField = len(line), "entry line length"
 				}

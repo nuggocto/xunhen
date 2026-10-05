@@ -28,8 +28,8 @@ type Limits struct {
 }
 
 // Default returns the ceilings documented in docs/undo-format.md. The worst
-// synthetic inputs measured at these sizes, listed in PROJECT.md, kept one
-// command under 800 MiB of resident memory against a 1 GiB target.
+// synthetic inputs at these sizes, in docs/performance.md, keep one command
+// under its 1 GiB resident memory target.
 func Default() Limits {
 	return Limits{
 		InputBytes:  256 << 20,
