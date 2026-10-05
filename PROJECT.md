@@ -947,7 +947,7 @@ candidate; a maintainer can reproduce its build.
 - [x] Generate `.SRCINFO` with `makepkg --printsrcinfo` whenever the resolved recipe changes; lint the recipe/package and build with Arch devtools in a clean chroot.
 - [x] Document cloning/reviewing the AUR recipe and using `makepkg`/`pacman` without requiring an AUR helper; include upgrade, downgrade, and removal.
 - [x] Keep the AUR packaging Git repository and its required branch separate from the application repository; preserve `shrek` as the application default branch.
-- [ ] Resolve source-archive checksums after the application tag exists, then publish the generated recipe; do not retag the application to embed a checksum of its own archive.
+- [x] Resolve source-archive checksums after the application tag exists, then publish the generated recipe; do not retag the application to embed a checksum of its own archive.
 
 #### 8.5 Prepare the release workflow
 
@@ -961,7 +961,7 @@ candidate; a maintainer can reproduce its build.
 - [x] Define channel publication order: make the tested source tag/archive available, verify the tagged Nix outputs, resolve and validate the AUR recipe, then publish the AUR update.
 - [x] Keep any AUR publishing credentials confined to the maintainer's release path and out of ordinary build or pull-request jobs.
 
-- [ ] **Phase 8 complete:** the archive, Nix package, and AUR recipe have repeatable build/check paths, and the documentation covers installation and maintenance for each channel.
+- [x] **Phase 8 complete:** the archive, Nix package, and AUR recipe have repeatable build/check paths, and the documentation covers installation and maintenance for each channel.
 
 ### Phase 9 — Astro website and Cloudflare Pages
 
@@ -1052,24 +1052,24 @@ website, and a clear path for maintaining both.
 
 #### 11.1 Prepare the stable artifact
 
-- [ ] Select the reviewed release commit on `shrek`, finalize the changelog and support matrix, and create the `v1.0.0` tag without moving any published tag.
-- [ ] Build the stable-version assets through the release workflow and rerun artifact verification and installation/recovery smoke tests on those exact bytes.
-- [ ] Confirm `--version`, archive naming, checksums, module-install behavior, license notices, and provenance all refer to the stable version and correct commit.
-- [ ] Treat version stamping as an artifact change: passing QA on an `rc` executable alone does not verify the stable executable.
-- [ ] Verify the stable tag includes the intended Nix derivation and lock file; build/check its published flake and resolve the stable AUR source URL, checksum, recipe, and `.SRCINFO`.
+- [x] Select the reviewed release commit on `shrek`, finalize the changelog and support matrix, and create the `v1.0.0` tag without moving any published tag.
+- [x] Build the stable-version assets through the release workflow and rerun artifact verification and installation/recovery smoke tests on those exact bytes.
+- [x] Confirm `--version`, archive naming, checksums, module-install behavior, license notices, and provenance all refer to the stable version and correct commit.
+- [x] Treat version stamping as an artifact change: passing QA on an `rc` executable alone does not verify the stable executable.
+- [x] Verify the stable tag includes the intended Nix derivation and lock file; build/check its published flake and resolve the stable AUR source URL, checksum, recipe, and `.SRCINFO`.
 
 #### 11.2 Publish and verify delivery
 
-- [ ] Publish the GitHub release with the Linux/amd64 archive, checksums, provenance/dependency information, installation links, and release notes.
-- [ ] State supported producer formats/features, tested Linux environments, known limitations, and the read-only recovery contract in the release notes.
-- [ ] Download the public assets, verify their hashes against the tested artifacts, and repeat the install/version/recovery smoke from the published release.
-- [ ] Verify the public tagged `go install` path and user-local installation instructions.
-- [ ] Verify NixOS installation from the public `v1.0.0` flake reference, including the documented declarative configuration and correct version output.
-- [ ] Submit or update the maintained AUR package after the stable source archive is public, with the tested `PKGBUILD`, generated `.SRCINFO`, and packaging-source license.
-- [ ] Fetch the public AUR recipe into a fresh Arch build environment, build/install it, and rerun the version/recovery smoke; include its package URL in the release documentation.
-- [ ] Once the archive, tagged Nix package, and AUR recipe are verified publicly, deploy the matching v1 landing-page links and changelog entry from `xunhen-front` to Pages.
-- [ ] Check `https://xunhen.org` and its Changelog tab after deployment: read the complete categorized notes on-site, test release anchors and installation links, and confirm the version, date, limitations, and HTTPS behavior.
-- [ ] Keep prior version assets available for downgrade; never silently replace a published binary with different bytes.
+- [x] Publish the GitHub release with the Linux/amd64 archive, checksums, provenance/dependency information, installation links, and release notes.
+- [x] State supported producer formats/features, tested Linux environments, known limitations, and the read-only recovery contract in the release notes.
+- [x] Download the public assets, verify their hashes against the tested artifacts, and repeat the install/version/recovery smoke from the published release.
+- [x] Verify the public tagged `go install` path and user-local installation instructions.
+- [x] Verify NixOS installation from the public `v1.0.0` flake reference, including the documented declarative configuration and correct version output.
+- [x] Submit or update the maintained AUR package after the stable source archive is public, with the tested `PKGBUILD`, generated `.SRCINFO`, and packaging-source license.
+- [x] Fetch the public AUR recipe into a fresh Arch build environment, build/install it, and rerun the version/recovery smoke; include its package URL in the release documentation.
+- [x] Once the archive, tagged Nix package, and AUR recipe are verified publicly, deploy the matching v1 landing-page links and changelog entry from `xunhen-front` to Pages.
+- [x] Check `https://xunhen.org` and its Changelog tab after deployment: read the complete categorized notes on-site, test release anchors and installation links, and confirm the version, date, limitations, and HTTPS behavior.
+- [x] Keep prior version assets available for downgrade; never silently replace a published binary with different bytes.
 
 ## After v1
 
