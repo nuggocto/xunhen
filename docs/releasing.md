@@ -256,10 +256,27 @@ a `qemu64` CPU, the oldest the release claims.
 
 After publishing, run **Check a published release** (`delivery.yml`) with
 the tag. It checks the public download, `go install` from the module proxy,
-the tagged flake, and the AUR recipe built from the public source archive.
+the tagged flake and a NixOS machine with its package, and the AUR recipe:
+the published one for a stable release, which must be on the AUR by then,
+or one resolved against the public source archive for a candidate.
 
 Locally, `tools/qa.sh terminal EXECUTABLE LABEL` runs the tmux and SSH
 checks on the Nix and Arch executables, which the release run keeps in its
 `nix-logs` and `arch-results` artifacts, and `tools/measure.sh -binary
 EXECUTABLE` measures the candidate on the reference machine. A fix that
 changes an executable is a new candidate; a published tag never moves.
+
+## Maintenance
+
+- **A bug fix** is a new version: reproduce it with a synthetic input, add a
+  regression test, fix it, and release a new tag through the workflow
+  above. A published tag never moves and its assets are never replaced, so
+  older versions stay available for downgrades.
+- **A packaging-only fix to the AUR recipe**, with the application
+  unchanged, raises `-pkgrel` in `resolve.sh`, regenerates `.SRCINFO`,
+  builds the package again, and pushes it; the application tag stays.
+- **A toolchain or dependency change** runs every check again, including
+  `mise run vulncheck` and `mise run notices`, and updates `vendorHash` in
+  `nix/package.nix` when `go.sum` changes.
+- **The website** is corrected in `xunhen-front` without an application
+  release; its README has the rollback steps.

@@ -211,10 +211,11 @@ jobs:
           sha256sum ./package/bin/xunhen
           nix build -L --impure -f nix/released-nixos.nix --argstr ref "$ref"
 
-  # The AUR recipe resolved against the public source archive and built as
-  # a user does, in their own clone of the recipe, with makepkg fetching the
-  # archive from its real URL; then installed on a system that extracts
-  # documentation, checked, and removed.
+  # The published AUR recipe, cloned and built as a user does, with makepkg
+  # fetching the source archive from its release URL; then installed on a
+  # system that extracts documentation, checked, and removed. A stable
+  # release must be on the AUR. A candidate never is, so its recipe is
+  # resolved against the public source archive instead.
   arch:
     name: Arch recipe from the public source
     needs: identity
@@ -247,12 +248,22 @@ jobs:
             pacman -Syu --noconfirm --needed base-devel git go >/dev/null
             useradd -m builder
             clone=/home/builder/xunhen
-            # The recipe in a git repository the builder owns, as the
-            # clone in docs/install.md leaves it. No apostrophes in this
-            # script: it is one single-quoted argument.
-            su builder -c "git init -q -b master $clone && packaging/aur/resolve.sh -version $VERSION -commit $COMMIT -sha256 $SHA \
-              -maintainer \"xunhen delivery check\" -out $clone"
-            su builder -c "cd $clone && git add PKGBUILD .SRCINFO && git -c user.name=check -c user.email=check@example.invalid commit -q -m recipe"
+            # No apostrophes in this script: it is one single-quoted argument.
+            su builder -c "git clone -q https://aur.archlinux.org/xunhen.git $clone"
+            release=${VERSION%%-*} prerelease=
+            [[ $VERSION == *-* ]] && prerelease=${VERSION#*-}
+            pkgver=$release${prerelease//[.-]/}
+            if grep -qx "[[:space:]]*pkgver = $pkgver" $clone/.SRCINFO 2>/dev/null; then
+              echo "Building the published AUR recipe for $pkgver"
+            elif [[ -z $prerelease ]]; then
+              echo "The AUR has no recipe for $pkgver"
+              exit 1
+            else
+              echo "Candidate $VERSION: resolving its recipe against the public source archive"
+              su builder -c "packaging/aur/resolve.sh -version $VERSION -commit $COMMIT -sha256 $SHA \
+                -maintainer \"xunhen delivery check\" -out $clone"
+            fi
+            grep -E "pkgver|sha256sums|source" $clone/.SRCINFO
             # makepkg downloads the source archive from the release URL.
             su builder -c "cd $clone && makepkg --noconfirm"
             sed "/^NoExtract.*usr\/share\/doc/d" /etc/pacman.conf >/tmp/pacman-docs.conf
