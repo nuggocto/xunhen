@@ -217,8 +217,9 @@ jobs:
             pacman -Syu --noconfirm --needed base-devel git go >/dev/null
             useradd -m builder
             clone=/home/builder/xunhen
-            # The recipe in a git repository of the builder's own, as
-            # docs/install.md's "git clone https://aur.archlinux.org/xunhen.git" leaves it.
+            # The recipe in a git repository the builder owns, as the
+            # clone in docs/install.md leaves it. No apostrophes in this
+            # script: it is one single-quoted argument.
             su builder -c "git init -q -b master $clone && packaging/aur/resolve.sh -version $VERSION -commit $COMMIT -sha256 $SHA \
               -maintainer \"xunhen delivery check\" -out $clone"
             su builder -c "cd $clone && git add PKGBUILD .SRCINFO && git -c user.name=check -c user.email=check@example.invalid commit -q -m recipe"
