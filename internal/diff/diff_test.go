@@ -782,3 +782,30 @@ func BenchmarkCompare(b *testing.B) {
 		})
 	}
 }
+
+func TestHunkHeader(t *testing.T) {
+	t.Parallel()
+
+	// GNU unified headers: one-based starts, ",1" omitted, and an empty range
+	// named by the line before it.
+	tests := []struct {
+		name string
+		hunk diff.Hunk
+		want string
+	}{
+		{name: "insertion at the start", hunk: diff.Hunk{LeftStart: 0, LeftCount: 0, RightStart: 0, RightCount: 2}, want: "@@ -0,0 +1,2 @@"},
+		{name: "deletion after line four", hunk: diff.Hunk{LeftStart: 4, LeftCount: 3, RightStart: 4, RightCount: 0}, want: "@@ -5,3 +4,0 @@"},
+		{name: "single lines", hunk: diff.Hunk{LeftStart: 0, LeftCount: 1, RightStart: 0, RightCount: 1}, want: "@@ -1 +1 @@"},
+		{name: "several lines", hunk: diff.Hunk{LeftStart: 2, LeftCount: 3, RightStart: 2, RightCount: 4}, want: "@@ -3,3 +3,4 @@"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := tt.hunk.Header(); got != tt.want {
+				t.Fatalf("header = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

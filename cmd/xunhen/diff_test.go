@@ -72,30 +72,3 @@ func TestDiffRecovery(t *testing.T) {
 		})
 	}
 }
-
-func TestHunkRange(t *testing.T) {
-	t.Parallel()
-
-	// GNU unified headers: one-based starts, ",1" omitted, and an empty range
-	// named by the line before it.
-	tests := []struct {
-		name         string
-		start, count int
-		want         string
-	}{
-		{name: "empty at start", start: 0, count: 0, want: "0,0"},
-		{name: "empty after line four", start: 4, count: 0, want: "4,0"},
-		{name: "single line", start: 0, count: 1, want: "1"},
-		{name: "several lines", start: 2, count: 3, want: "3,3"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			if got := hunkRange(tt.start, tt.count); got != tt.want {
-				t.Fatalf("range = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}

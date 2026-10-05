@@ -342,7 +342,7 @@ func (m *model) comparisonRow(r, width, text int) string {
 	hunk, index := m.cmp.row(r)
 	h := m.cmp.hunks[hunk]
 	if index < 0 {
-		header := fmt.Sprintf("@@ -%s +%s @@", hunkRange(h.LeftStart, h.LeftCount), hunkRange(h.RightStart, h.RightCount))
+		header := h.Header()
 		return m.color(sgrCyan, m.pad(header, width))
 	}
 
@@ -362,18 +362,6 @@ func (m *model) comparisonRow(r, width, text int) string {
 		return m.color(sgrGreen, row)
 	}
 	return row
-}
-
-// hunkRange follows the unified header format that xunhen diff prints.
-func hunkRange(start, count int) string {
-	switch count {
-	case 0:
-		return fmt.Sprintf("%d,0", start)
-	case 1:
-		return strconv.Itoa(start + 1)
-	default:
-		return fmt.Sprintf("%d,%d", start+1, count)
-	}
 }
 
 // widestContent measures the visible content rows, to bound sideways

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"iter"
 	"slices"
+	"strconv"
 
 	"github.com/nuggocto/xunhen/internal/history"
 	"github.com/nuggocto/xunhen/internal/limits"
@@ -56,6 +57,24 @@ type Hunk struct {
 	// starts[i] is the display position of runs[i]'s first line, so Line
 	// finds any position with a binary search instead of a walk.
 	starts []int
+}
+
+// Header is the hunk's unified diff header, as GNU diff writes it: starts
+// are one-based, a one-line range omits its count, and an empty range names
+// the line before it.
+func (h Hunk) Header() string {
+	return "@@ -" + hunkRange(h.LeftStart, h.LeftCount) + " +" + hunkRange(h.RightStart, h.RightCount) + " @@"
+}
+
+func hunkRange(start, count int) string {
+	switch count {
+	case 0:
+		return strconv.Itoa(start) + ",0"
+	case 1:
+		return strconv.Itoa(start + 1)
+	default:
+		return strconv.Itoa(start+1) + "," + strconv.Itoa(count)
+	}
 }
 
 // Lines yields the hunk in display order. Within one change, every deleted

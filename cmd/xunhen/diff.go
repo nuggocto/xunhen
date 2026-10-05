@@ -3,10 +3,8 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"os"
-	"strconv"
 
 	"github.com/nuggocto/xunhen/internal/diff"
 	"github.com/nuggocto/xunhen/internal/history"
@@ -110,24 +108,11 @@ func writeDiff(out *output, d *diff.Diff, from, to history.NodeID) {
 
 	out.printf("--- node %d\n+++ node %d\n", from, to)
 	for _, h := range hunks {
-		out.printf("@@ -%s +%s @@\n", hunkRange(h.LeftStart, h.LeftCount), hunkRange(h.RightStart, h.RightCount))
+		out.printf("%s\n", h.Header())
 		for line := range h.Lines() {
 			out.text(" -+"[line.Op : line.Op+1])
 			out.text(termtext.EscapeDisplay(line.Text))
 			out.text("\n")
 		}
-	}
-}
-
-// hunkRange follows GNU unified headers: a one-line range omits its count, and
-// an empty range names the line before it.
-func hunkRange(start, count int) string {
-	switch count {
-	case 0:
-		return fmt.Sprintf("%d,0", start)
-	case 1:
-		return strconv.Itoa(start + 1)
-	default:
-		return fmt.Sprintf("%d,%d", start+1, count)
 	}
 }
