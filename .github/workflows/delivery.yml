@@ -179,6 +179,38 @@ jobs:
           nix build -L "$ref#checks.x86_64-linux.verify"
           cat result
 
+  # This checkout's NixOS test, user profile included, on the tag's package.
+  nixos:
+    name: NixOS with the public flake's package
+    needs: identity
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Allow access to KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install Nix
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24  # v31.11.1
+        with:
+          extra_nix_config: |
+            sandbox = true
+            system-features = nixos-test benchmark big-parallel kvm
+      - name: Install, roll back, and remove in a user profile and the system on NixOS
+        shell: bash
+        run: |
+          set -euo pipefail
+          ref="github:$GH_REPO/$RELEASE"
+          nix build -L --out-link package "$ref#xunhen"
+          ./package/bin/xunhen --version
+          sha256sum ./package/bin/xunhen
+          nix build -L --impure -f nix/released-nixos.nix --argstr ref "$ref"
+
   # The AUR recipe resolved against the public source archive and built as
   # a user does, in their own clone of the recipe, with makepkg fetching the
   # archive from its real URL; then installed on a system that extracts
