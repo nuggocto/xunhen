@@ -2,11 +2,15 @@
 # Measures the built command and browser on every workload that
 # tools/workload generates, and records the machine and build it ran on.
 #
-#   tools/measure.sh [OUTPUT_DIRECTORY]
+#   tools/measure.sh [-binary EXECUTABLE] [OUTPUT_DIRECTORY]
 #
 # The output directory, .local/measurements/DATE by default, receives the
 # executables, environment.txt, raw.jsonl with one JSON line per sample, and
 # summary.md. A relative directory is relative to the repository root.
+# -binary measures an existing executable, such as one extracted from a
+# release archive, end to end instead of building one; the in-process
+# measurements still use a test binary built from this checkout, so
+# environment.txt names both.
 # Workloads are regenerated each time, so every result names the recipe
 # version that produced its input. Compilation happens before any timing.
 # Each measured process may grow its data segment to 1.5 GiB, half again the
@@ -15,6 +19,12 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+supplied=
+if [[ ${1:-} == -binary ]]; then
+	[[ -n ${2:-} ]] || { echo "measure: -binary needs an executable" >&2; exit 2; }
+	supplied=$(realpath "$2")
+	shift 2
+fi
 out=${1:-.local/measurements/$(date +%Y%m%d-%H%M%S)}
 mkdir -p "$out" .local/workloads
 # Absolute paths, so a relative or absolute argument means the same place
@@ -24,13 +34,21 @@ workloads=$(cd .local/workloads && pwd)
 
 export GOENV=off GOWORK=off GOTOOLCHAIN=local GOFLAGS=-mod=readonly
 export GOOS=linux GOARCH=amd64 GOAMD64=v1 CGO_ENABLED=0
-go build -trimpath -o "$out/xunhen" ./cmd/xunhen
+if [[ -n $supplied ]]; then
+	install -m755 "$supplied" "$out/xunhen"
+else
+	go build -trimpath -o "$out/xunhen" ./cmd/xunhen
+fi
 go test -c -o "$out/tui.test" ./internal/tui
 go build -o "$out/workload" ./tools/workload
 
 {
 	echo "commit: $(git rev-parse HEAD)$(git diff --quiet HEAD -- . ':!.local' || echo ' with uncommitted changes')"
 	echo "executable sha256: $(sha256sum "$out/xunhen" | cut -d' ' -f1)"
+	if [[ -n $supplied ]]; then
+		echo "executable: supplied, $supplied; the commit above built only the test binary and tools"
+		echo "executable version: $("$out/xunhen" --version | tr '\n' ' ')"
+	fi
 	echo "toolchain: $(go version)"
 	echo "build: GOOS=$GOOS GOARCH=$GOARCH GOAMD64=$GOAMD64 CGO_ENABLED=$CGO_ENABLED -trimpath"
 	echo "cpu: $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2- | sed 's/^ //'), $(nproc) threads"
@@ -51,7 +69,7 @@ go build -o "$out/workload" ./tools/workload
 "$out/workload" generate -out "$workloads"
 
 ulimit -d $((1536 * 1024))
-for recipe in small ordinary deep wide shuffled repeated replaced changes-limit entries-limit lines-limit; do
+for recipe in small ordinary deep wide shuffled repeated replaced changes-limit entries-limit lines-limit empty-lines; do
 	case "$recipe" in
 	small | ordinary | deep | wide) samples=20 ;;
 	*) samples=5 ;;

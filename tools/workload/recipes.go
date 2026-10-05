@@ -99,6 +99,8 @@ var recipes = []recipe{
 		build: func(uint64) (*workload, error) { return manyEntries(1_000_000, 4_000_000), nil }},
 	{Name: "lines-limit", Version: 1, Seed: 10, Purpose: "three 16 MiB lines, one of them changed: the line-length limit",
 		build: func(seed uint64) (*workload, error) { return longLines(seed), nil }},
+	{Name: "empty-lines", Version: 1, Seed: 11, Purpose: "one entry storing 4,000,000 empty lines: the stored-line limit with no line text, where decoding and replay must still notice cancellation",
+		build: func(uint64) (*workload, error) { return emptyLines(4_000_000), nil }},
 }
 
 func findRecipe(name string) (recipe, bool) {
@@ -362,6 +364,24 @@ func manyEntries(entries, lines int) *workload {
 			Reference: reference,
 		},
 		probes:  []probe{digest(0, "root", reference[entries:]), digest(1, "reference", reference)},
+		compare: [2]int32{1, 0},
+	}
+}
+
+// emptyLines is one change whose single entry stores n empty lines in place
+// of a two-line reference, so the root is n empty lines.
+func emptyLines(n int) *workload {
+	reference := []string{"first reference line", "second reference line"}
+	root := make([]string, n)
+	return &workload{
+		file: synth.File{
+			Nodes: []synth.Node{{ID: 1, Time: 1_700_000_001, Entries: []synth.Entry{
+				{Top: 0, Bottom: 0, Lines: root},
+			}}},
+			Oldest: 1, Newest: 1, LastSequence: 1, TimelineSequence: 1,
+			Reference: reference,
+		},
+		probes:  []probe{digest(0, "root", root), digest(1, "reference", reference)},
 		compare: [2]int32{1, 0},
 	}
 }
