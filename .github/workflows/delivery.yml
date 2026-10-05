@@ -30,7 +30,7 @@ jobs:
     outputs:
       version: ${{ steps.release.outputs.version }}
       commit: ${{ steps.release.outputs.commit }}
-      go: ${{ steps.release.outputs.go }}
+      go-version: ${{ steps.release.outputs.go-version }}
     defaults:
       run:
         shell: bash
@@ -60,7 +60,9 @@ jobs:
           gh run download "$run" --name archive --dir verified
           for file in public/*; do cmp "$file" "verified/${file#public/}"; done
           echo "Public assets equal Release run $run's verified artifact."
-          { echo "version=$version"; echo "commit=$commit"; echo "go=$(jq -r .build.go public/provenance.json)"; } | tee -a "$GITHUB_OUTPUT"
+          # setup-go takes the version without its "go" prefix.
+          { echo "version=$version"; echo "commit=$commit"; echo "go-version=$(jq -r '.build.go | ltrimstr("go")' public/provenance.json)"; } |
+            tee -a "$GITHUB_OUTPUT"
       - name: Keep the public assets
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
@@ -121,7 +123,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
         with:
-          go-version: ${{ needs.identity.outputs.go }}
+          go-version: ${{ needs.identity.outputs.go-version }}
           cache: false
       - name: Install from the module proxy and check the result
         run: |
@@ -179,8 +181,9 @@ jobs:
           nix build -L "$ref#checks.x86_64-linux.verify"
           cat result
 
-  # The AUR recipe resolved against the public source archive, fetched by
-  # makepkg from its real URL, then installed on a system that extracts
+  # The AUR recipe resolved against the public source archive and built as
+  # a user does, in their own clone of the recipe, with makepkg fetching the
+  # archive from its real URL; then installed on a system that extracts
   # documentation, checked, and removed.
   arch:
     name: Arch recipe from the public source
@@ -209,20 +212,26 @@ jobs:
           set -euo pipefail
           image=$(jq -r .arch.image tools/qa-environments.json)
           sha=$(awk -v n="xunhen_${VERSION}_source.tar.gz" '$2 == n { print $1 }' public/SHA256SUMS.txt)
-          docker run --rm -v "$PWD:/work" -w /work -e VERSION -e COMMIT -e GO="$(jq -r .build.go public/provenance.json)" -e SHA="$sha" "$image" bash -c '
+          docker run --rm -v "$PWD:/work:ro" -w /work -e VERSION -e COMMIT -e SHA="$sha" "$image" bash -c '
             set -euo pipefail
             pacman -Syu --noconfirm --needed base-devel git go >/dev/null
             useradd -m builder
-            install -d -o builder build
-            su builder -c "packaging/aur/resolve.sh -version $VERSION -commit $COMMIT -sha256 $SHA \
-              -maintainer \"xunhen delivery check\" -out build"
+            clone=/home/builder/xunhen
+            # The recipe in a git repository of the builder's own, as
+            # docs/install.md's "git clone https://aur.archlinux.org/xunhen.git" leaves it.
+            su builder -c "git init -q -b master $clone && packaging/aur/resolve.sh -version $VERSION -commit $COMMIT -sha256 $SHA \
+              -maintainer \"xunhen delivery check\" -out $clone"
+            su builder -c "cd $clone && git add PKGBUILD .SRCINFO && git -c user.name=check -c user.email=check@example.invalid commit -q -m recipe"
             # makepkg downloads the source archive from the release URL.
-            su builder -c "cd build && makepkg --noconfirm"
+            su builder -c "cd $clone && makepkg --noconfirm"
             sed "/^NoExtract.*usr\/share\/doc/d" /etc/pacman.conf >/tmp/pacman-docs.conf
-            pacman -U --noconfirm --config /tmp/pacman-docs.conf build/xunhen-[0-9]*.pkg.tar.zst
+            pacman -U --noconfirm --config /tmp/pacman-docs.conf $clone/xunhen-[0-9]*.pkg.tar.zst
             pacman -Qi xunhen
             /usr/bin/xunhen --version
             test -L /usr/share/doc/xunhen/LICENSE && test -s /usr/share/doc/xunhen/LICENSE
-            su builder -c "go run ./tools/verify -binary /usr/bin/xunhen -version v$VERSION -commit $COMMIT -go $GO"
+            # Arch builds with its own Go, whose version string the
+            # executable records, so the verifier expects that one.
+            cp -r /work /home/builder/source && chown -R builder /home/builder/source
+            su builder -c "cd /home/builder/source && go run ./tools/verify -binary /usr/bin/xunhen -version v$VERSION -commit $COMMIT -go \$(go env GOVERSION)"
             pacman -R --noconfirm xunhen
             test ! -e /usr/bin/xunhen && test ! -e /usr/share/doc/xunhen'
