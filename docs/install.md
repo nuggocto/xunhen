@@ -5,13 +5,6 @@ static executable with no runtime dependencies: no Go, Neovim, git, or
 shared libraries. Every channel
 below installs the same program, built from the same tagged source.
 
-> **No stable release yet.** The first release candidate, `v1.0.0-rc.1`, is
-> published for testing on the
-> [releases page](https://github.com/nuggocto/xunhen/releases). The commands
-> below use `1.0.0`; replace it with `1.0.0-rc.1` to try the candidate
-> through the archive, Nix, or Go. The AUR package arrives with the first
-> stable release.
-
 | Channel | Needs | Root? |
 | --- | --- | --- |
 | [Release archive](#release-archive) | `curl`, `sha256sum`, `tar` | No |

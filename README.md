@@ -25,19 +25,15 @@ explains what to do when something is missing.
 
 ## Install
 
-There is no stable release yet. The release candidate `v1.0.0-rc.1` is
-published for testing on the
-[releases page](https://github.com/nuggocto/xunhen/releases), and installs
-from:
+xunhen 1.0.0 installs from:
 
 - a [release archive](docs/install.md#release-archive), with checksums, into
   `~/.local/bin` without root;
 - the [Nix flake](docs/install.md#nix-and-nixos), for a user profile or a
   NixOS system configuration;
+- the [AUR](docs/install.md#arch-user-repository) package `xunhen`, with
+  `makepkg`;
 - [Go source](docs/install.md#go-source), with `go install`.
-
-The [AUR](docs/install.md#arch-user-repository) package `xunhen` arrives
-with the first stable release.
 
 ## Usage
 
