@@ -1017,33 +1017,33 @@ The public AUR submission needs the stable source archive and happens in
 
 #### 10.1 Produce a candidate
 
-- [ ] Freeze the v1 behavior/compatibility matrix and prepare a versioned prerelease such as `v1.0.0-rc.1` from `shrek`.
-- [ ] Run the full CI/release checks, build the candidate archive, and record its hashes and source commit.
-- [ ] Download and extract the archive as a user would; perform the following checks on its executable, not a separate development build.
+- [x] Freeze the v1 behavior/compatibility matrix and prepare a versioned prerelease such as `v1.0.0-rc.1` from `shrek`.
+- [x] Run the full CI/release checks, build the candidate archive, and record its hashes and source commit.
+- [x] Download and extract the archive as a user would; perform the following checks on its executable, not a separate development build.
 
 #### 10.2 Exercise installation and commands
 
-- [ ] Install without root in clean pinned Debian, Ubuntu, and Alpine userlands with no Go or Neovim requirement; record results and exact environments.
-- [ ] Verify the executable's CPU/kernel baseline on suitable native or VM hosts rather than inferring it from a successful container run.
-- [ ] Check archive integrity, permissions, version/build metadata, help, source installation, upgrade/downgrade, and uninstall.
-- [ ] Run the complete discovery/inspect/recover/diff walkthrough and compare exported fixture bytes against the independent expected results.
-- [ ] Exercise wrong bases, missing files, denied permissions, truncated files, unsupported formats, ambiguous discovery, and resource-limit failures.
-- [ ] Check redirects, raw-output TTY refusal, closed pipes, interruption, and non-interactive `browse` behavior with correct status and diagnostics.
-- [ ] In a clean NixOS VM, build the candidate flake with its committed lock file, run it, install it through both a user profile and `environment.systemPackages`, and exercise rollback/removal.
-- [ ] Build the candidate AUR recipe in a clean Arch chroot and install the resulting package in a disposable Arch system; verify package contents, dependencies, upgrades/downgrades, and removal.
-- [ ] Run the recovery/diff corpus and TUI smoke on the Nix- and Arch-built executables, recording their own hashes, versions, and build inputs.
-- [ ] Test prerelease packaging locally without replacing an existing stable AUR package with the candidate.
+- [x] Install without root in clean pinned Debian, Ubuntu, and Alpine userlands with no Go or Neovim requirement; record results and exact environments.
+- [x] Verify the executable's CPU/kernel baseline on suitable native or VM hosts rather than inferring it from a successful container run.
+- [x] Check archive integrity, permissions, version/build metadata, help, source installation, upgrade/downgrade, and uninstall.
+- [x] Run the complete discovery/inspect/recover/diff walkthrough and compare exported fixture bytes against the independent expected results.
+- [x] Exercise wrong bases, missing files, denied permissions, truncated files, unsupported formats, ambiguous discovery, and resource-limit failures.
+- [x] Check redirects, raw-output TTY refusal, closed pipes, interruption, and non-interactive `browse` behavior with correct status and diagnostics.
+- [x] In a clean NixOS VM, build the candidate flake with its committed lock file, run it, install it through both a user profile and `environment.systemPackages`, and exercise rollback/removal.
+- [x] Build the candidate AUR recipe in a clean Arch chroot and install the resulting package in a disposable Arch system; verify package contents, dependencies, upgrades/downgrades, and removal.
+- [x] Run the recovery/diff corpus and TUI smoke on the Nix- and Arch-built executables, recording their own hashes, versions, and build inputs.
+- [x] Test prerelease packaging locally without replacing an existing stable AUR package with the candidate.
 
 #### 10.3 Exercise the TUI and close defects
 
-- [ ] Test branch switching, comparison selection, scrolling, resizing, rapid requests, cancellation, reload, and empty/near-limit histories.
-- [ ] Verify terminal restoration after normal exit, Ctrl-C, load errors, and relevant signal paths in local, SSH, and tmux sessions.
-- [ ] Confirm no unintended input-content changes, network access by the application, private-content logs, or dependence on personal configuration.
-- [ ] Keep synthetic screenshots/transcripts and a concise QA report with reproducible failures, fixes, and any advertised limitations.
-- [ ] Fix release-blocking defects, add focused regressions, issue a new candidate when the artifact changes, and rerun affected checks plus the installation/recovery smoke.
-- [ ] Exercise the site's installation walkthrough against the candidate and stage the stable landing-page/changelog update in a frontend preview; keep production claims tied to currently published artifacts.
+- [x] Test branch switching, comparison selection, scrolling, resizing, rapid requests, cancellation, reload, and empty/near-limit histories.
+- [x] Verify terminal restoration after normal exit, Ctrl-C, load errors, and relevant signal paths in local, SSH, and tmux sessions.
+- [x] Confirm no unintended input-content changes, network access by the application, private-content logs, or dependence on personal configuration.
+- [x] Keep synthetic screenshots/transcripts and a concise QA report with reproducible failures, fixes, and any advertised limitations.
+- [x] Fix release-blocking defects, add focused regressions, issue a new candidate when the artifact changes, and rerun affected checks plus the installation/recovery smoke.
+- [x] Exercise the site's installation walkthrough against the candidate and stage the stable landing-page/changelog update in a frontend preview; keep production claims tied to currently published artifacts.
 
-- [ ] **Phase 10 complete:** the archive and both package-manager builds pass Linux recovery/TUI checks, the site's instructions match the tested workflow, and no release blocker remains.
+- [x] **Phase 10 complete:** the archive and both package-manager builds pass Linux recovery/TUI checks, the site's instructions match the tested workflow, and no release blocker remains.
 
 ### Phase 11 — Publish v1.0.0 and establish maintenance
 

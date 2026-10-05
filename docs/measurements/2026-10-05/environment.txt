@@ -1,6 +1,6 @@
 commit: 0be1f06ffd2e68300976c22476a848d8c2b0933c
 executable sha256: 2315888b811f6c1fa300207a47829544953741f2a87832ba4c9f36696a510c8d
-executable: supplied, /home/nuggocto/Documents/code/xunhen/.local/qa-input/v1.0.0-rc.1/archive/xunhen; the commit above built only the test binary and tools
+executable: supplied, from xunhen_1.0.0-rc.1_linux_amd64.tar.gz; the commit above built only the test binary and tools
 executable version: xunhen v1.0.0-rc.1 commit: 0be1f06ffd2e68300976c22476a848d8c2b0933c go: go1.27.1 
 toolchain: go version go1.27.1 linux/amd64
 build: GOOS=linux GOARCH=amd64 GOAMD64=v1 CGO_ENABLED=0 -trimpath
