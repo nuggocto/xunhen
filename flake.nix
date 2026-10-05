@@ -40,11 +40,21 @@
           default = app;
         };
 
-      checks.${system} = {
-        # Building the package runs the whole test suite.
-        inherit xunhen;
-        verify = pkgs.callPackage ./nix/verify.nix { inherit xunhen commit; };
-        nixos = pkgs.callPackage ./nix/nixos-test.nix { inherit xunhen; };
-      };
+      checks.${system} =
+        let
+          verifier = pkgs.callPackage ./nix/verifier.nix { inherit xunhen; };
+          goVersion = "go${pkgs.go_1_27.version}";
+        in
+        {
+          # Building the package runs the whole test suite.
+          inherit xunhen;
+          verify = pkgs.callPackage ./nix/verify.nix { inherit xunhen verifier commit; };
+          nixos = pkgs.callPackage ./nix/nixos-test.nix { inherit xunhen verifier commit goVersion; };
+          baseline = pkgs.callPackage ./nix/baseline-test.nix {
+            executable = xunhen;
+            inherit verifier commit goVersion;
+            inherit (xunhen) src version;
+          };
+        };
     };
 }

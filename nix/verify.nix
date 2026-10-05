@@ -1,25 +1,14 @@
 # Runs tools/verify against the packaged executable: the same artifact
-# checks the release archive and the Arch package pass. The verifier is
-# built from the same source and vendored modules as the package.
+# checks the release archive and the Arch package pass.
 {
   lib,
-  buildGo127Module,
   runCommand,
   go_1_27,
   xunhen,
+  verifier,
   commit,
 }:
 
-let
-  verifier = buildGo127Module {
-    pname = "xunhen-verify";
-    inherit (xunhen) version src vendorHash;
-    subPackages = [ "tools/verify" ];
-    env.CGO_ENABLED = "0";
-    env.GOTOOLCHAIN = "local";
-    doCheck = false;
-  };
-in
 runCommand "xunhen-verify-${xunhen.version}" { nativeBuildInputs = [ verifier ]; } ''
   # stdenv already sets pipefail; say so here, since tee must not hide a
   # failed verification.
