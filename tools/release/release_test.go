@@ -339,11 +339,11 @@ func TestCheckDocs(t *testing.T) {
 	tests := []struct {
 		name, file, text, want string
 	}{
-		{name: "links between shipped documents", file: "docs/usage.md", text: "[a](install.md#go-source) [b](../README.md) [c](#limits)"},
-		{name: "a link by URL", file: "README.md", text: "[a](https://github.com/nuggocto/xunhen/blob/shrek/docs/browse.md)"},
-		{name: "a guide the archive lacks", file: "docs/usage.md", text: "[a](browse.md)", want: "browse.md"},
-		{name: "a file outside docs", file: "docs/install.md", text: "[a](../CONTRIBUTING.md)", want: "../CONTRIBUTING.md"},
-		{name: "a missing document", file: "docs/usage.md", want: "has no docs/usage.md"},
+		{name: "links between shipped documents", file: "README.md", text: "[a](CHANGELOG.md) [b](LICENSE) [c](#usage)"},
+		{name: "a link by URL", file: "README.md", text: "[a](https://github.com/nuggocto/xunhen/blob/shrek/docs/undo-format.md)"},
+		{name: "a guide the archive lacks", file: "README.md", text: "[a](docs/undo-format.md)", want: "docs/undo-format.md"},
+		{name: "a file outside the archive", file: "README.md", text: "[a](../private.txt)", want: "../private.txt"},
+		{name: "a missing document", file: "README.md", want: "has no README.md"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

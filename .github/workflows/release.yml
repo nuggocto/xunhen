@@ -171,7 +171,7 @@ jobs:
           # Kept for the local terminal checks; it is static, so it runs
           # outside the store.
           install -m755 ./result/bin/xunhen "$logs/xunhen"
-      # docs/install.md's user-profile steps: install, remove, roll the
+      # User-profile installation: install, remove, roll the
       # removal back, and remove again.
       - name: Install, roll back, and remove in a user profile
         shell: bash
@@ -301,7 +301,7 @@ jobs:
               done < <(grep -o "\]([^)[:space:]]*)" "$doc" | sed "s/^](//; s/)\$//")
             done < <(find . -name "*.md")
             echo "$checked relative links resolve in $(pwd)"' | tee logs/installed-doc-links.txt
-      # docs/install.md's upgrade and downgrade: a second package release
+      # Upgrade and downgrade: a second package release
       # of the same source, then back to the first, then removal.
       - name: Upgrade, downgrade, and remove the package
         run: |

@@ -279,9 +279,8 @@ func (w *world) checkCorpus(ctx context.Context) (string, error) {
 	return fmt.Sprintf(" (%d exports match Neovim, %d refusals)", exported, refused), nil
 }
 
-// walkthroughDiff is the comparison docs/usage.md shows: the abandoned
-// experiment against the saved fix, checked by hand against the two states
-// Neovim recorded.
+// walkthroughDiff compares the abandoned experiment against the saved fix,
+// checked by hand against the two states Neovim recorded.
 const walkthroughDiff = "--- node 2\n" +
 	"+++ node 3\n" +
 	"@@ -1,3 +1,3 @@\n" +

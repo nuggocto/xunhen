@@ -28,7 +28,7 @@ Describe a persisted Neovim undo history without source text or Neovim.
   -h, --help       Show this help
 
 With FILE, the history must sit at the name Neovim gives it in one of the
-directories, as docs/discovery.md describes; subdirectories are not searched.
+directories; subdirectories are not searched.
 When the source text matches the history, the association is verified. When
 the source is missing, unsupported, or different, a single valid history is
 still shown with the association marked unverified. Two or more candidates

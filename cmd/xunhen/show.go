@@ -34,10 +34,10 @@ Reconstruct a retained buffer state using a matching base file.
   -h, --help              Show this help
 
 With FILE, exactly one history in the searched directories must match the
-source text; docs/discovery.md describes the names searched. Otherwise nothing
-is reconstructed, and the diagnostic lists every candidate and the explicit
---undo and --base form to use instead. Flags may come before or after FILE;
-put -- before a FILE whose name starts with a dash.
+source text. Otherwise nothing is reconstructed, and the diagnostic lists
+every candidate and the explicit --undo and --base form to use instead.
+Flags may come before or after FILE; put -- before a FILE whose name starts
+with a dash.
 
 Base files must be UTF-8/LF text without a BOM, NUL, or CRLF. Raw export also
 rejects a selected state with invalid UTF-8 or NUL, which retained edits can

@@ -131,11 +131,10 @@ cmd_artifacts() {
 		-version "v$version" -commit "$commit" -go "$go_version" 2>&1 | tee "$out/verify.log"
 }
 
-# The script a userland container runs as an ordinary user. It follows
-# docs/install.md's release-archive steps with the files already
-# downloaded, verifies the installed executable, replaces it with another
-# release and back when one is given, and uninstalls. Every step must leave
-# no file of xunhen's own in HOME.
+# The script a userland container runs as an ordinary user. It checks and
+# installs a downloaded release archive, verifies the executable, replaces
+# it with another release and back when one is given, and uninstalls.
+# Every step must leave no file of xunhen's own in HOME.
 read -r -d '' userland_script <<'EOF' || true
 set -eu
 log() { printf '\n== %s\n' "$*"; }
@@ -148,7 +147,7 @@ mkdir -p "$HOME/downloads"
 cd "$HOME/downloads"
 cp "/qa/release/xunhen_${XUNHEN_VERSION}_linux_amd64.tar.gz" /qa/release/SHA256SUMS.txt .
 
-log "docs/install.md: check, extract, and install for this user"
+log "release archive: check, extract, and install for this user"
 version=$XUNHEN_VERSION
 grep " xunhen_${version}_linux_amd64.tar.gz\$" SHA256SUMS.txt | sha256sum -c
 tar -xzf "xunhen_${version}_linux_amd64.tar.gz"
@@ -187,7 +186,7 @@ if [ -n "${XUNHEN_EARLIER:-}" ]; then
 	xunhen version | grep -Fx "xunhen v$XUNHEN_VERSION"
 fi
 
-log "docs/install.md: uninstall"
+log "release archive: uninstall"
 rm "$HOME/.local/bin/xunhen"
 # The shell remembers where it found xunhen; a new shell would not.
 hash -r

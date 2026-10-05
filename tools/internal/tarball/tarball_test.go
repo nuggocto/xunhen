@@ -15,7 +15,7 @@ var epoch = time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC)
 
 func sample() []File {
 	return []File{
-		{Name: "docs/usage.md", Data: []byte("usage\n")},
+		{Name: "docs/note.txt", Data: []byte("note\n")},
 		{Name: "xunhen", Executable: true, Data: []byte("\x7fELF")},
 		{Name: "README.md", Data: []byte("readme\n")},
 	}

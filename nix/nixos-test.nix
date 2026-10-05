@@ -1,8 +1,8 @@
 # Boots a NixOS machine without xunhen, installs it in a user profile and
 # removes it, rolls the removal back and removes it again, then switches to
 # a configuration that adds it through environment.systemPackages, as
-# docs/install.md shows, and back again. With xunhen installed, it recovers the abandoned experiment from the
-# checked-in fixture and runs tools/verify against the installed command as
+# README.md shows, and back again. With xunhen installed, it recovers the
+# abandoned experiment from the checked-in fixture and runs tools/verify as
 # an ordinary user, browser sessions included.
 {
   lib,

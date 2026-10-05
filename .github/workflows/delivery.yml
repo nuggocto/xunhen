@@ -68,7 +68,7 @@ jobs:
           path: public/
           if-no-files-found: error
 
-  # docs/install.md's release-archive steps, on the public download, in
+  # Check and install the public release archive in
   # each pinned userland as an ordinary user.
   archive:
     name: Release archive
@@ -106,7 +106,7 @@ jobs:
           path: ${{ runner.temp }}/qa/
           if-no-files-found: ignore
 
-  # docs/install.md's Go source steps: the public module proxy, fresh caches.
+  # Go source installation: the public module proxy, fresh caches.
   go:
     name: Go module install
     needs: identity
@@ -145,7 +145,7 @@ jobs:
           rm "$(go env GOPATH)/bin/xunhen"
           test ! -e "$bin"
 
-  # docs/install.md's Nix steps against the public tagged flake.
+  # README.md's Nix steps against the public tagged flake.
   nix:
     name: Nix flake
     needs: identity

@@ -3,7 +3,7 @@
 User-visible changes to xunhen, newest first. Each release lists only the
 categories it has entries for: Added, Changed, Fixed, Removed, Deprecated,
 and Security.
-[docs/compatibility.md](https://github.com/nuggocto/xunhen/blob/shrek/docs/compatibility.md#stability-within-v1)
+[Versioning](https://github.com/nuggocto/xunhen/blob/shrek/docs/releasing.md#stability-within-v1)
 says which behavior stays fixed within a major version.
 
 ## [Unreleased]
@@ -12,10 +12,9 @@ says which behavior stays fixed within a major version.
 
 The first stable release. It recovers states from the undo history Neovim
 saved to disk, including branches you undid and never saved. See the
-[install guide](https://github.com/nuggocto/xunhen/blob/shrek/docs/install.md),
-and report problems with the
-[bug report form](https://github.com/nuggocto/xunhen/issues/new?template=bug_report.yml),
-which explains how to do it without sharing your undo files.
+[installation instructions](README.md#install), and report problems in
+[issues](https://github.com/nuggocto/xunhen/issues/new) using synthetic files
+rather than real undo files, which may contain deleted secrets.
 
 ### Added
 

@@ -70,7 +70,7 @@ func checkArchive(c config) (string, string, error) {
 		return "", "", fmt.Errorf("archive holds %s, want exactly %s", strings.Join(got, ", "), strings.Join(want, ", "))
 	}
 	for _, dir := range a.Dirs {
-		if dir != prefix && dir != prefix+"/docs" {
+		if dir != prefix {
 			return "", "", fmt.Errorf("unexpected directory %s in the archive", dir)
 		}
 	}

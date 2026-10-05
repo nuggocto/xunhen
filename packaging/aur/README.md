@@ -12,6 +12,6 @@ packaging/aur/resolve.sh -version 1.0.0 -commit COMMIT -sha256 SUM \
 ```
 
 The resolved `PKGBUILD` and `.SRCINFO` go to the separate AUR repository,
-never to this one. [docs/releasing.md](../../docs/releasing.md#the-aur-package)
+never to this one. [docs/releasing.md](../../docs/releasing.md#public-channels)
 covers the clean-chroot build and publication, and the template's header
 explains its build flags.

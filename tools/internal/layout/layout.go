@@ -13,9 +13,6 @@ var BinaryDocs = []string{
 	"LICENSE",
 	"README.md",
 	"THIRD_PARTY_NOTICES.txt",
-	"docs/install.md",
-	"docs/troubleshooting.md",
-	"docs/usage.md",
 }
 
 // Executable is the executable's name inside the binary archive.

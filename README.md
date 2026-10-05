@@ -4,106 +4,66 @@
 
 > New branches grow beneath the brush; look back, and seek old traces.
 
-You write a passage of code, undo it, and follow another path.
-The first branch disappears from view. It may not be gone.
+You write some code, undo it, and take another path. xunhen lets you browse
+the abandoned branch in Neovim's saved undo history.
 
-**xunhen** is a read-only Linux tool that reads Neovim's saved undo history,
-including abandoned branches that never reached a file or git, and lets you
-browse it in the terminal.
-
-It runs on Linux 5.10 or later on x86-64 as one static executable. It never modifies your
-undo files or sources, never starts Neovim, and needs no configuration.
-
-## What can be recovered
-
-Only history Neovim wrote to disk: with `'undofile'` on, an undo file is
-written each time the buffer is saved. Edits made after the last write, and
-states older than `'undolevels'` keeps, are gone. Rebuilding text also needs
-the source as it was when the undo file was last written; the undo file
-stores changes, not complete copies. [docs/troubleshooting.md](docs/troubleshooting.md)
-explains what to do when something is missing.
+It's a read-only terminal tool for Linux x86-64. It never changes your
+source or undo files.
 
 ## Install
 
-xunhen 1.0.0 installs from:
+### Arch Linux (AUR)
 
-- a [release archive](docs/install.md#release-archive), with checksums, into
-  `~/.local/bin` without root;
-- the [Nix flake](docs/install.md#nix-and-nixos), for a user profile or a
-  NixOS system configuration;
-- the [AUR](docs/install.md#arch-user-repository) package `xunhen`, with
-  `makepkg`;
-- [Go source](docs/install.md#go-source), with `go install`.
+```sh
+yay -S xunhen
+# or: paru -S xunhen
+```
+
+### Nix / NixOS
+
+With flakes enabled:
+
+```sh
+nix profile add github:nuggocto/xunhen/v1.0.0
+```
+
+For NixOS, add `inputs.xunhen.url = "github:nuggocto/xunhen/v1.0.0"` to
+your flake. Pass `xunhen` into your configuration and add
+`xunhen.packages.x86_64-linux.default` to `environment.systemPackages`.
+
+Prebuilt binaries are on [GitHub Releases](https://github.com/nuggocto/xunhen/releases).
 
 ## Usage
 
-Tell xunhen once where Neovim keeps undo files. `:echo &undodir` in Neovim
-prints the directory; the usual one is:
+Run `:echo &undodir` in Neovim to find your undo directory, then:
 
 ```sh
-export XUNHEN_UNDO_DIR=$HOME/.local/state/nvim/undo   # in ~/.bashrc, ~/.zshrc, or fish's config
+export XUNHEN_UNDO_DIR="$HOME/.local/state/nvim/undo"
+xunhen browse path/to/file.go
 ```
 
-Then open the history of a file in the browser:
+Replace the directory with yours. You can also pass `--undo-dir DIR`.
+
+Use the arrows or `j` / `k` to move, `space` to pin a state, and `d` to
+compare it with the selection. Press `e` for the export command, `?` for
+help, and `q` to quit.
+
+For plain command output:
 
 ```sh
-xunhen browse retry.go
+xunhen inspect path/to/file.go
+xunhen show path/to/file.go --node 2
+xunhen diff path/to/file.go --from 2 --to 3
 ```
 
-The tree on the left holds every retained state; the selected one shows on the
-right. Move with the arrows or `j` and `k`, compare two states with `space` to
-pin one and `d` to diff it with the selection, and press `e` for the command
-that saves the selected state to a file. `?` lists every key, and `q` quits.
+`xunhen help COMMAND` lists the flags.
 
-The same work is available as plain commands, for scripts or terminals the
-browser cannot use:
+Recovery needs saved undo history and the source text it was written against.
+Edits Neovim never persisted cannot be recovered. Tested with Arch's Neovim
+0.12.5 on Linux x86-64; source text must be UTF-8 with LF line endings.
 
-```sh
-xunhen inspect retry.go
-xunhen show    retry.go --node 2
-xunhen diff    retry.go --from 2 --to 3
-xunhen show    retry.go --node 2 --raw --final-newline=include > recovered.go
-```
+[Changelog](CHANGELOG.md) · [Report a bug](https://github.com/nuggocto/xunhen/issues/new)
 
-`--undo-dir DIR` names the undo directory for one command instead of the
-variable. Or name the undo file and a matching copy of the source directly:
+Use synthetic files in bug reports. Real undo files can contain deleted secrets.
 
-```sh
-xunhen show --undo history.undo --base retry.go --node 2
-```
-
-- `inspect` lists the undo tree and its node numbers.
-- `show` rebuilds one state. `--raw --final-newline=include` writes the
-  exact text for redirecting to a file; the undo file does not record
-  whether the original ended with a newline, so you choose.
-- `diff` compares two states as a unified diff.
-- `browse` does all three interactively. It needs a terminal; without one it
-  exits with status 1 and points to the commands above.
-
-[docs/usage.md](docs/usage.md) walks through a complete recovery with a
-history from the test corpus and lists every flag and exit status.
-
-## Documentation
-
-- [Install](docs/install.md): every channel, checksums, upgrades, and removal
-- [Usage](docs/usage.md): a recovery walkthrough, flags, exit codes, and output
-- [Troubleshooting](docs/troubleshooting.md): what each error means and what to do
-- [Browse](https://github.com/nuggocto/xunhen/blob/shrek/docs/browse.md): the terminal browser, its keys, and its memory use
-- [Discovery](https://github.com/nuggocto/xunhen/blob/shrek/docs/discovery.md): how xunhen finds a source file's history
-- [Compatibility](https://github.com/nuggocto/xunhen/blob/shrek/docs/compatibility.md): the supported producer, text cases, and what stays stable
-- [Undo format](https://github.com/nuggocto/xunhen/blob/shrek/docs/undo-format.md): what is decoded and its limits
-- [Diff](https://github.com/nuggocto/xunhen/blob/shrek/docs/diff.md): the comparison algorithm
-- [Performance](https://github.com/nuggocto/xunhen/blob/shrek/docs/performance.md): workloads, measurements, and targets
-- [Verification](https://github.com/nuggocto/xunhen/blob/shrek/docs/verification.md): what each test guards and how to run the checks
-- [Releasing](https://github.com/nuggocto/xunhen/blob/shrek/docs/releasing.md): versions, reproducible archives, and packages
-- [Changelog](CHANGELOG.md)
-
-## Development
-
-[CONTRIBUTING.md](https://github.com/nuggocto/xunhen/blob/shrek/CONTRIBUTING.md)
-covers building, the checks, the fixture corpus, and adding a decoder.
-Please report bugs with the issue form, and never attach a real undo file:
-it keeps text you deleted, secrets included.
-
-Licensed under [Apache-2.0](LICENSE). The executable includes third-party
-modules whose licenses are in [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt).
+Licensed under [Apache-2.0](LICENSE). See [third-party notices](THIRD_PARTY_NOTICES.txt).
