@@ -8,6 +8,11 @@ says which behavior stays fixed within a major version.
 
 ## [Unreleased]
 
+## [1.0.0-rc.1] - 2026-10-05
+
+The first release candidate, published for testing. It is a prerelease:
+the AUR package follows the first stable release.
+
 ### Added
 
 - `xunhen inspect` describes a Neovim undo history without its source text:
@@ -33,3 +38,7 @@ says which behavior stays fixed within a major version.
   producer the test corpus comes from. Other producers are unverified.
 - Base text must be UTF-8 with LF line endings. CRLF, Latin-1, and other
   encodings are refused with a named reason.
+- Runs on Linux 5.10 or later on any x86-64 processor. The archive is
+  checked on Debian 13, Ubuntu 26.04 LTS, and Alpine 3.24, the Nix package
+  on NixOS, the Arch package in a clean chroot, and the executable on Linux
+  5.10 with a baseline x86-64 CPU.

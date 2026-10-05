@@ -1,13 +1,16 @@
 # Installing xunhen
 
-xunhen runs on Linux on x86-64 (amd64). It is one static executable with no
-runtime dependencies: no Go, Neovim, git, or shared libraries. Every channel
+xunhen runs on Linux 5.10 or later on any x86-64 (amd64) processor. It is one
+static executable with no runtime dependencies: no Go, Neovim, git, or
+shared libraries. Every channel
 below installs the same program, built from the same tagged source.
 
-> **No release has been published yet.** The commands below are the ones the
-> first release will use, with `1.0.0` standing for its version. Until then,
-> build from a clone as
-> [CONTRIBUTING.md](https://github.com/nuggocto/xunhen/blob/shrek/CONTRIBUTING.md) describes.
+> **No stable release yet.** The first release candidate, `v1.0.0-rc.1`, is
+> published for testing on the
+> [releases page](https://github.com/nuggocto/xunhen/releases). The commands
+> below use `1.0.0`; replace it with `1.0.0-rc.1` to try the candidate
+> through the archive, Nix, or Go. The AUR package arrives with the first
+> stable release.
 
 | Channel | Needs | Root? |
 | --- | --- | --- |
@@ -54,12 +57,14 @@ version=1.0.0
 base="https://github.com/nuggocto/xunhen/releases/download/v$version"
 curl -fLO "$base/xunhen_${version}_linux_amd64.tar.gz"
 curl -fLO "$base/SHA256SUMS.txt"
-sha256sum --check --ignore-missing SHA256SUMS.txt
+grep " xunhen_${version}_linux_amd64.tar.gz\$" SHA256SUMS.txt | sha256sum -c
 tar -xzf "xunhen_${version}_linux_amd64.tar.gz"
 install -Dm755 "xunhen_${version}_linux_amd64/xunhen" "$HOME/.local/bin/xunhen"
 ```
 
-`sha256sum` must print `OK` for the archive. If `xunhen` is then not found,
+`sha256sum` must print `OK` for the archive. The `grep` picks the archive's
+line, so the check works with GNU coreutils and with BusyBox, as on Alpine,
+whose `sha256sum` has no `--ignore-missing`. If `xunhen` is then not found,
 add `$HOME/.local/bin` to `PATH` in your shell's startup file, for example
 `export PATH="$HOME/.local/bin:$PATH"` in `~/.bashrc`.
 
@@ -147,8 +152,10 @@ the nixpkgs revision its own lock file pins.
 - **Remove:** delete the entry from `environment.systemPackages`, then remove
   the input and rebuild.
 
-The flake's checks boot a NixOS machine that installs xunhen this way and
-recovers a file with it.
+The flake's checks boot a NixOS machine that adds xunhen this way, recovers
+a file and runs the artifact checks with it, and removes it again. Another
+machine runs the same checks on Linux 5.10 with a baseline x86-64 CPU, the
+oldest the release supports.
 
 ## Arch User Repository
 

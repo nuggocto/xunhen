@@ -11,7 +11,7 @@ The first branch disappears from view. It may not be gone.
 including abandoned branches that never reached a file or git, and lets you
 browse it in the terminal.
 
-It runs on Linux on x86-64 as one static executable. It never modifies your
+It runs on Linux 5.10 or later on x86-64 as one static executable. It never modifies your
 undo files or sources, never starts Neovim, and needs no configuration.
 
 ## What can be recovered
@@ -25,18 +25,19 @@ explains what to do when something is missing.
 
 ## Install
 
-No release has been published yet. Once it is, xunhen installs from:
+There is no stable release yet. The release candidate `v1.0.0-rc.1` is
+published for testing on the
+[releases page](https://github.com/nuggocto/xunhen/releases), and installs
+from:
 
 - a [release archive](docs/install.md#release-archive), with checksums, into
   `~/.local/bin` without root;
 - the [Nix flake](docs/install.md#nix-and-nixos), for a user profile or a
   NixOS system configuration;
-- the [AUR](docs/install.md#arch-user-repository) package `xunhen`, with
-  `makepkg`;
 - [Go source](docs/install.md#go-source), with `go install`.
 
-Until then, build it from a clone with Go 1.27.1:
-`CGO_ENABLED=0 go build -trimpath -o bin/xunhen ./cmd/xunhen`.
+The [AUR](docs/install.md#arch-user-repository) package `xunhen` arrives
+with the first stable release.
 
 ## Usage
 
