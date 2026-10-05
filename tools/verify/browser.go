@@ -88,7 +88,9 @@ func (w *world) checkBrowser(ctx context.Context) (string, error) {
 			keys: []step{
 				{wait: "chosen()"},
 				{do: func() error { return os.WriteFile(reloaded, []byte("not an undo file\n"), 0o644) }},
-				{send: "r", wait: "Reload failed; still showing the earlier load."},
+				// The status row may already read "Reloading", and the
+				// renderer redraws only the cells that change.
+				{send: "r", wait: "failed; still showing the earlier load."},
 				{send: "j", wait: "experiment()"},
 				{send: "q"},
 			},
