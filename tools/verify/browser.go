@@ -7,8 +7,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/charmbracelet/x/ansi"
@@ -28,23 +31,30 @@ const waitTimeout = 20 * time.Second
 
 // checkBrowser runs the browser on a pseudo-terminal as a user's shell
 // would: it must draw the history, follow keys, compare two states, show
-// help, and quit with the terminal's settings restored and the alternate
-// screen left. Raw export to the same terminal must be refused.
+// help, and leave by every documented way out with the terminal's settings
+// restored and the alternate screen left. Raw export to the same terminal
+// must be refused.
 func (w *world) checkBrowser(ctx context.Context) (string, error) {
 	fixture := filepath.Join(w.corpus, "abandoned-branch")
 	undo := filepath.Join(fixture, "history.undo")
 	base := filepath.Join(fixture, "base.bin")
+	browse := []string{"browse", "--undo", undo, "--base", base}
 
-	sessions := []struct {
-		name   string
-		args   []string
-		keys   []step
-		status int
-		stderr string
-	}{
+	// The reload session changes its history, so it reads copies kept
+	// outside the inputs that must stay unchanged.
+	reloaded := filepath.Join(w.scratch, "reloaded.undo")
+	data, err := readAll(undo)
+	if err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(reloaded, data, 0o644); err != nil {
+		return "", err
+	}
+
+	sessions := []browserSession{
 		{
 			name: "navigate, compare, and quit",
-			args: []string{"browse", "--undo", undo, "--base", base},
+			args: browse,
 			keys: []step{
 				{wait: "chosen()"},
 				{send: "j", wait: "experiment()"},
@@ -55,10 +65,77 @@ func (w *world) checkBrowser(ctx context.Context) (string, error) {
 			},
 		},
 		{
+			name: "go to nodes, pin, compare, and export",
+			args: browse,
+			keys: []step{
+				{wait: "chosen()"},
+				{send: "g", wait: "Go to node:"},
+				{send: "2\r", wait: "experiment()"},
+				{send: " ", wait: "Comparisons now start from node 2."},
+				{send: "g3\r", wait: "chosen()"},
+				{send: "d", wait: "+func chosen"},
+				{send: "g99\r", wait: "No node 99 in this history."},
+				// Pinning while comparing compares again from the new pin.
+				{send: " ", wait: "identical states"},
+				{send: "e", wait: "Save node 3 to a file"},
+				{send: "\x1b", wait: "identical states"},
+				{send: "q"},
+			},
+		},
+		{
+			name: "a failed reload keeps the earlier load",
+			args: []string{"browse", "--undo", reloaded, "--base", base},
+			keys: []step{
+				{wait: "chosen()"},
+				{do: func() error { return os.WriteFile(reloaded, []byte("not an undo file\n"), 0o644) }},
+				{send: "r", wait: "Reload failed; still showing the earlier load."},
+				{send: "j", wait: "experiment()"},
+				{send: "q"},
+			},
+		},
+		{
+			name: "no color",
+			args: browse,
+			env:  []string{"NO_COLOR=1"},
+			keys: []step{{wait: "chosen()"}, {send: "j", wait: "experiment()"}, {send: "d", wait: "+func experiment"}, {send: "q"}},
+			output: func(raw string) error {
+				if sgr := colorSGR(raw); sgr != "" {
+					return fmt.Errorf("NO_COLOR output still sets color with %q", sgr)
+				}
+				return nil
+			},
+		},
+		{
 			name:   "interrupt",
-			args:   []string{"browse", "--undo", undo, "--base", base},
+			args:   browse,
 			keys:   []step{{wait: "chosen()"}, {send: "\x03"}},
 			status: 130,
+		},
+		{
+			name:   "SIGTERM",
+			args:   browse,
+			keys:   []step{{wait: "chosen()"}, {signal: syscall.SIGTERM}},
+			status: 143,
+		},
+		{
+			name:   "SIGHUP, as from a dropped connection",
+			args:   browse,
+			keys:   []step{{wait: "chosen()"}, {signal: syscall.SIGHUP}},
+			status: 129,
+		},
+		{
+			// The browser takes the screen before it loads, so a failed
+			// first load gives it back and then prints the diagnostic.
+			name:   "a first load that fails",
+			args:   []string{"browse", "--undo", filepath.Join(fixture, "absent.undo"), "--base", base},
+			status: 1,
+			output: func(raw string) error {
+				_, after, _ := strings.Cut(raw, leaveAltScreen)
+				if !strings.Contains(after, "xunhen: ") || !strings.Contains(after, "no such file") {
+					return fmt.Errorf("no diagnostic after the browser left the screen: %q", raw)
+				}
+				return nil
+			},
 		},
 		{
 			name:   "raw export refuses the terminal",
@@ -68,19 +145,55 @@ func (w *world) checkBrowser(ctx context.Context) (string, error) {
 		},
 	}
 	for _, s := range sessions {
-		if err := w.session(ctx, s.args, s.keys, s.status, s.stderr); err != nil {
+		if err := w.session(ctx, s); err != nil {
 			return "", fmt.Errorf("%s: %w", s.name, err)
 		}
 	}
-	return "", nil
+	return fmt.Sprintf(" (%d sessions)", len(sessions)), nil
 }
 
-// step sends keys, then waits until the screen shows text.
+// browserSession is one run on a terminal and what it must end with.
+type browserSession struct {
+	name   string
+	args   []string
+	env    []string // added to the private environment
+	keys   []step
+	status int
+	stderr string                 // the whole output must be this diagnostic
+	output func(raw string) error // a further check of everything drawn
+}
+
+// step does one thing, then waits until the screen shows text: it sends
+// keys, delivers a signal to the browser, or runs do, such as changing an
+// input.
 type step struct {
-	send, wait string
+	send   string
+	signal syscall.Signal
+	do     func() error
+	wait   string
 }
 
-func (w *world) session(ctx context.Context, args []string, steps []step, status int, stderr string) error {
+// colorSGR returns the first select-graphic-rendition sequence in raw that
+// sets a foreground or background color, or "" if none does. Bold, dim,
+// reverse video, and resets carry no color.
+func colorSGR(raw string) string {
+	for _, match := range sgrSequence.FindAllStringSubmatch(raw, -1) {
+		for _, parameter := range strings.Split(match[1], ";") {
+			n, err := strconv.Atoi(parameter)
+			if err != nil {
+				continue
+			}
+			if n >= 30 && n <= 38 || n >= 40 && n <= 48 || n >= 90 && n <= 97 || n >= 100 && n <= 107 {
+				return match[0]
+			}
+		}
+	}
+	return ""
+}
+
+var sgrSequence = regexp.MustCompile(`\x1b\[([0-9;:]*)m`)
+
+func (w *world) session(ctx context.Context, s browserSession) error {
 	// A missing pseudo-terminal fails: this is the only check of the
 	// browser on a terminal.
 	pair, err := pty.Open(100, 24)
@@ -96,9 +209,9 @@ func (w *world) session(ctx context.Context, args []string, steps []step, status
 	ctx, cancel := context.WithTimeout(ctx, commandTimeout)
 	defer cancel()
 	newCmd := func() *exec.Cmd {
-		cmd := exec.CommandContext(ctx, w.binary, args...)
+		cmd := exec.CommandContext(ctx, w.binary, s.args...)
 		cmd.Dir = w.root
-		cmd.Env = w.env("xterm-256color")
+		cmd.Env = append(w.env("xterm-256color"), s.env...)
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = pair.Slave, pair.Slave, pair.Slave
 		cmd.SysProcAttr = pty.Attach()
 		return cmd
@@ -125,21 +238,25 @@ func (w *world) session(ctx context.Context, args []string, steps []step, status
 	// what an earlier key drew. Before the first key that is everything
 	// since the start: the first screen may arrive before the loop runs.
 	mark := 0
-	for _, s := range steps {
-		if s.send != "" {
+	for _, k := range s.keys {
+		var err error
+		switch {
+		case k.send != "":
 			mark = t.mark()
-			if _, err := pair.Master.WriteString(s.send); err != nil {
-				_ = cmd.Process.Kill()
-				_ = cmd.Wait()
-				return err
-			}
+			_, err = pair.Master.WriteString(k.send)
+		case k.signal != 0:
+			mark = t.mark()
+			err = cmd.Process.Signal(k.signal)
+		case k.do != nil:
+			err = k.do()
 		}
-		if s.wait != "" {
-			if err := t.waitFor(ctx, mark, s.wait); err != nil {
-				_ = cmd.Process.Kill()
-				_ = cmd.Wait()
-				return err
-			}
+		if err == nil && k.wait != "" {
+			err = t.waitFor(ctx, mark, k.wait)
+		}
+		if err != nil {
+			_ = cmd.Process.Kill()
+			_ = cmd.Wait()
+			return err
 		}
 	}
 
@@ -151,8 +268,8 @@ func (w *world) session(ctx context.Context, args []string, steps []step, status
 	if ctx.Err() != nil {
 		return fmt.Errorf("did not exit within %v", commandTimeout)
 	}
-	if got := cmd.ProcessState.ExitCode(); got != status {
-		return fmt.Errorf("exit status %d, want %d; screen:\n%s", got, status, t.text())
+	if got := cmd.ProcessState.ExitCode(); got != s.status {
+		return fmt.Errorf("exit status %d, want %d; screen:\n%s", got, s.status, t.text())
 	}
 	after, err := pair.Settings()
 	if err != nil {
@@ -174,15 +291,18 @@ func (w *world) session(ctx context.Context, args []string, steps []step, status
 	if t.overflow {
 		return fmt.Errorf("the terminal received more than %d bytes", maxOutput)
 	}
-	if stderr != "" {
-		if strings.Contains(output, "\x1b") || !strings.Contains(output, stderr) {
-			return fmt.Errorf("terminal output %q, want only a diagnostic about %q", output, stderr)
+	if s.stderr != "" {
+		if strings.Contains(output, "\x1b") || !strings.Contains(output, s.stderr) {
+			return fmt.Errorf("terminal output %q, want only a diagnostic about %q", output, s.stderr)
 		}
 		return nil
 	}
 	enter, leave := strings.Count(output, enterAltScreen), strings.Count(output, leaveAltScreen)
 	if enter == 0 || enter != leave {
 		return fmt.Errorf("the alternate screen was entered %d times and left %d times", enter, leave)
+	}
+	if s.output != nil {
+		return s.output(output)
 	}
 	return nil
 }

@@ -40,6 +40,9 @@ type world struct {
 	home   string
 	bin    string // PATH: decoys named after programs xunhen must not run
 	marker string // a decoy creates this file when run
+	// scratch holds files a check changes on purpose. It sits outside
+	// root, so those changes do not count as changed inputs.
+	scratch string
 }
 
 // Programs the executable must never start. A decoy with each name records
@@ -80,6 +83,9 @@ func verify(ctx context.Context, c config) []result {
 		{name: "recovery corpus", run: w.checkCorpus},
 		{name: "discovery and diff walkthrough", run: w.checkWalkthrough},
 		{name: "failures and diagnostics", run: w.checkFailures},
+		{name: "permission denials", run: w.checkPermissions},
+		{name: "unusual paths", run: w.checkPaths},
+		{name: "interrupt while output is blocked", run: w.checkInterrupt},
 		{name: "browser on a terminal", run: w.checkBrowser},
 	}
 	for _, check := range checks {
@@ -136,14 +142,15 @@ func newWorld(binary, corpus string) (_ *world, err error) {
 		bin:    filepath.Join(root, "bin"),
 		// The marker sits outside root, so writing it does not also show
 		// up as a changed input.
-		marker: root + ".ran",
+		marker:  root + ".ran",
+		scratch: root + ".scratch",
 	}
 	defer func() {
 		if err != nil {
 			w.remove()
 		}
 	}()
-	for _, d := range []string{w.home, w.bin} {
+	for _, d := range []string{w.home, w.bin, w.scratch} {
 		if err := os.Mkdir(d, 0o755); err != nil {
 			return nil, err
 		}
@@ -160,9 +167,19 @@ func newWorld(binary, corpus string) (_ *world, err error) {
 	return w, nil
 }
 
-// remove deletes the world and the marker beside it.
+// remove deletes the world and the marker and scratch directory beside it.
+// Permission checks leave directories without permissions, so those are
+// opened up first.
 func (w *world) remove() {
-	_ = os.RemoveAll(w.root)
+	for _, dir := range []string{w.root, w.scratch} {
+		_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+			if d != nil && d.IsDir() {
+				_ = os.Chmod(path, 0o755)
+			}
+			return nil
+		})
+		_ = os.RemoveAll(dir)
+	}
 	_ = os.Remove(w.marker)
 }
 
@@ -250,6 +267,7 @@ type outcome struct {
 type runOptions struct {
 	dir    string   // working directory; root when empty
 	stdout *os.File // instead of a captured pipe, such as /dev/full
+	stderr *os.File // likewise
 	env    []string // added to the private environment
 }
 
@@ -273,6 +291,9 @@ func (w *world) run(parent context.Context, o runOptions, args ...string) (outco
 		cmd.Stdout, cmd.Stderr = &stdout, &stderr
 		if o.stdout != nil {
 			cmd.Stdout = o.stdout
+		}
+		if o.stderr != nil {
+			cmd.Stderr = o.stderr
 		}
 		return cmd
 	})

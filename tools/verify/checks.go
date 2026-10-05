@@ -15,7 +15,10 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"syscall"
 	"unicode/utf8"
+
+	"github.com/nuggocto/xunhen/internal/limits"
 )
 
 const mainPackage = "github.com/nuggocto/xunhen/cmd/xunhen"
@@ -309,13 +312,15 @@ func (w *world) checkWalkthrough(ctx context.Context) (string, error) {
 		env      []string
 		want     string
 		contains []string
+		private  bool // the output must hold no recovered text
 	}{
-		{name: "inspect", args: append([]string{"inspect"}, from...), contains: []string{
+		{name: "inspect", args: append([]string{"inspect"}, from...), private: true, contains: []string{
 			"(verified: its text matches the reference)", "Reference node: 3",
 			"node 3: parent=1 preferred-child=0 next-sibling=2", "node 2: parent=1 preferred-child=0 next-sibling=0 previous-sibling=3",
 		}},
 		{name: "preview", args: append(append([]string{"show"}, from...), "--node", "2"), want: text + "\n"},
 		{name: "compare", args: append(append([]string{"diff"}, from...), "--from", "2", "--to", "3"), want: walkthroughDiff},
+		{name: "compare a state with itself", args: append(append([]string{"diff"}, from...), "--from", "3", "--to", "3"), want: ""},
 		{name: "export", args: append(append([]string{"show"}, from...), "--node", "2", "--raw", "--final-newline=include"), want: text + "\n"},
 		// The everyday form: the source as a plain argument, and the undo
 		// directory from the environment instead of --undo-dir.
@@ -337,8 +342,29 @@ func (w *world) checkWalkthrough(ctx context.Context) (string, error) {
 				return "", fmt.Errorf("%s output lacks %q:\n%s", step.name, part, o.stdout)
 			}
 		}
+		if line := w.recoveredText(o.stdout); step.private && line != "" {
+			return "", fmt.Errorf("%s printed the recovered line %q", step.name, line)
+		}
 	}
 	return "", nil
+}
+
+// recoveredText returns a line of the abandoned-branch fixture's states
+// that text contains, or "" if it holds none. Inspection and diagnostics
+// describe a history; they must not repeat what it recovers.
+func (w *world) recoveredText(text string) string {
+	states, err := w.states("abandoned-branch")
+	if err != nil {
+		return ""
+	}
+	for _, s := range states {
+		for _, line := range s.lines {
+			if strings.TrimSpace(line) != "" && strings.Contains(text, line) {
+				return line
+			}
+		}
+	}
+	return ""
 }
 
 // checkFailures feeds the executable wrong, damaged, and missing inputs and
@@ -357,15 +383,26 @@ func (w *world) checkFailures(ctx context.Context) (string, error) {
 	}
 	defer func() { _ = full.Close() }()
 
+	// A pipe whose reader is gone, as when the reading command exits.
+	reader, closed, err := os.Pipe()
+	if err != nil {
+		return "", err
+	}
+	_ = reader.Close()
+	defer func() { _ = closed.Close() }()
+
+	project := filepath.Join(w.root, "project")
 	show := func(undo, base string, extra ...string) []string {
 		return append([]string{"show", "--undo", undo, "--base", base}, extra...)
 	}
 	tests := []struct {
 		name   string
+		dir    string
 		args   []string
 		status int
-		stderr string
+		stderr string // part of the diagnostic; empty when stderr itself fails
 		stdout *os.File
+		failed *os.File // stderr, when it is meant to fail
 	}{
 		{name: "base that does not match", args: show(undo, at("other.go"), "--node", "2"), status: 1, stderr: "base mismatch"},
 		{name: "truncated history", args: show(at("truncated"), base, "--node", "2"), status: 1, stderr: "truncated input"},
@@ -377,15 +414,28 @@ func (w *world) checkFailures(ctx context.Context) (string, error) {
 		{name: "raw export without a policy", args: show(undo, base, "--node", "2", "--raw"), status: 2, stderr: "--final-newline"},
 		{name: "unknown command", args: []string{"recover"}, status: 2, stderr: "unknown command"},
 		{name: "output to a full device", args: show(undo, base, "--node", "2", "--raw", "--final-newline=include"), status: 1, stderr: "cannot write output", stdout: full},
+		{name: "output to a closed pipe", args: show(undo, base, "--node", "2"), status: 1, stderr: "cannot write output", stdout: closed},
+		{name: "a diagnostic to a full device", args: []string{"recover"}, status: 1, failed: full},
+		{name: "missing base", args: show(undo, at("absent.go"), "--node", "2"), status: 1, stderr: "no such file"},
+		{name: "missing source", dir: project, args: []string{"show", "--undo-dir", "../undo", "--node", "2", "absent.go"}, status: 1, stderr: "open source file"},
+		{name: "histories in two undo directories", dir: project, args: []string{"show", "--undo-dir", "../undo", "--undo-dir", "../undo2", "--node", "2", "retry.go"}, status: 1, stderr: "more than one undo history matches"},
+		{name: "FIFO as history", args: []string{"inspect", "--undo", at("pipe.undo")}, status: 1, stderr: "not a regular file"},
+		{name: "base over its size limit", args: show(undo, filepath.Join(w.scratch, "large-base.go"), "--node", "2"), status: 1, stderr: "-byte limit"},
+		{name: "invalid node ID", args: show(undo, base, "--node", "two"), status: 2, stderr: "non-negative decimal ID"},
+		{name: "browse without a terminal", args: []string{"browse", "--undo", undo, "--base", base}, status: 1, stderr: "browse needs an interactive terminal"},
 	}
 	for _, tt := range tests {
-		o, err := w.run(ctx, runOptions{stdout: tt.stdout}, tt.args...)
+		o, err := w.run(ctx, runOptions{dir: tt.dir, stdout: tt.stdout, stderr: tt.failed}, tt.args...)
 		if err != nil {
 			return "", fmt.Errorf("%s: %w", tt.name, err)
 		}
-		if o.status != tt.status || o.stdout != "" || !strings.HasPrefix(o.stderr, "xunhen: ") || !strings.Contains(o.stderr, tt.stderr) {
+		diagnosed := tt.failed != nil || strings.HasPrefix(o.stderr, "xunhen: ") && strings.Contains(o.stderr, tt.stderr)
+		if o.status != tt.status || o.stdout != "" || !diagnosed {
 			return "", fmt.Errorf("%s: status %d, stdout %q, stderr %q; want status %d and a diagnostic about %q",
 				tt.name, o.status, o.stdout, o.stderr, tt.status, tt.stderr)
+		}
+		if line := w.recoveredText(o.stderr); line != "" {
+			return "", fmt.Errorf("%s: the diagnostic repeats the recovered line %q", tt.name, line)
 		}
 	}
 	return fmt.Sprintf(" (%d cases)", len(tests)), nil
@@ -407,8 +457,9 @@ func (w *world) prepareInputs() error {
 
 	project := filepath.Join(w.root, "project")
 	undoDir := filepath.Join(w.root, "undo")
+	secondDir := filepath.Join(w.root, "undo2")
 	bad := filepath.Join(w.root, "bad")
-	for _, d := range []string{project, undoDir, bad} {
+	for _, d := range []string{project, undoDir, secondDir, bad} {
 		if err := os.Mkdir(d, 0o755); err != nil {
 			return err
 		}
@@ -420,16 +471,30 @@ func (w *world) prepareInputs() error {
 		source: base,
 		// Neovim names an undo file after the source's full physical path
 		// with every slash replaced by a percent sign.
-		filepath.Join(undoDir, strings.ReplaceAll(source, "/", "%")): undo,
-		filepath.Join(bad, "other.go"):                               []byte("package other\n"),
-		filepath.Join(bad, "truncated"):                              undo[:len(undo)/2],
-		filepath.Join(bad, "future"):                                 future,
-		filepath.Join(bad, "text.txt"):                               []byte("not an undo file\n"),
+		filepath.Join(undoDir, strings.ReplaceAll(source, "/", "%")):   undo,
+		filepath.Join(secondDir, strings.ReplaceAll(source, "/", "%")): undo,
+		filepath.Join(bad, "other.go"):                                 []byte("package other\n"),
+		filepath.Join(bad, "truncated"):                                undo[:len(undo)/2],
+		filepath.Join(bad, "future"):                                   future,
+		filepath.Join(bad, "text.txt"):                                 []byte("not an undo file\n"),
 	}
 	for path, data := range files {
 		if err := os.WriteFile(path, data, 0o444); err != nil {
 			return err
 		}
 	}
-	return nil
+	if err := syscall.Mkfifo(filepath.Join(bad, "pipe.undo"), 0o444); err != nil {
+		return err
+	}
+
+	// A sparse base one byte over the limit costs no disk.
+	large, err := os.Create(filepath.Join(w.scratch, "large-base.go"))
+	if err != nil {
+		return err
+	}
+	if err := large.Truncate(limits.Default().BaseBytes + 1); err != nil {
+		_ = large.Close()
+		return err
+	}
+	return large.Close()
 }
