@@ -377,6 +377,33 @@ pane_command() {
 	printf 'before=$(stty -g); %s; code=$?; after=$(stty -g); [ "$before" = "$after" ] && r=restored || r=CHANGED; echo "exit=$code settings=$r"; sleep 600' "$1"
 }
 
+# wait_gone PANE TEXT waits up to 20 seconds until TEXT is off PANE's screen.
+wait_gone() {
+	local i
+	for ((i = 0; i < 200; i++)); do
+		qtmux capture-pane -p -t "$1" | grep -qF -- "$2" || return 0
+		sleep 0.1
+	done
+	echo "'$2' is still on:" >&2
+	qtmux capture-pane -p -t "$1" >&2
+	return 1
+}
+
+# settled PANE TEXT... checks that the screen shows every TEXT and still
+# does half a second later, after any frame still in flight.
+settled() {
+	local pane=$1 text
+	shift
+	for text; do wait_for "$pane" "$text" || return 1; done
+	sleep 0.5
+	for text; do
+		qtmux capture-pane -p -t "$pane" | grep -qF -- "$text" || {
+			echo "'$text' did not stay on the screen"
+			return 1
+		}
+	done
+}
+
 check_screen_mode() {
 	[[ $(qtmux display-message -p -t "$1" '#{alternate_on}') == 0 ]] || {
 		echo "the alternate screen is still on"
@@ -447,6 +474,33 @@ cmd_terminal() {
 		wait_for qa:quit "exit=0 settings=restored" || return 1
 		check_screen_mode qa:quit
 	}
+	# The fixture's tree: root 0, then 1, whose preferred child 3 is the
+	# reference and whose other child is 2.
+	case_tree() {
+		qtmux new-window -t qa -n tree "$(pane_command "$browse")" || return 1
+		settled qa:tree "chosen()" "Previewing node 3" || return 1
+		# Fold node 1: its children leave the tree.
+		qtmux send-keys -t qa:tree k || return 1
+		settled qa:tree "Previewing node 1" || return 1
+		qtmux send-keys -t qa:tree h || return 1
+		wait_gone qa:tree "\`- 2" || return 1
+		# Going to a hidden node unfolds its ancestors.
+		qtmux send-keys -t qa:tree g 2 Enter || return 1
+		settled qa:tree "Previewing node 2" "\`- 2" "experiment()" || return 1
+		# A burst of keys ends on the node the last key selects.
+		qtmux send-keys -t qa:tree k j k j k j k || return 1
+		settled qa:tree "Previewing node 3" "chosen()" || return 1
+		# A reload that succeeds keeps the selected node.
+		qtmux send-keys -t qa:tree j || return 1
+		settled qa:tree "Previewing node 2" "experiment()" || return 1
+		qtmux send-keys -t qa:tree r || return 1
+		wait_gone qa:tree "Reloading" || return 1
+		settled qa:tree "Previewing node 2" "experiment()" || return 1
+		qtmux capture-pane -p -t qa:tree | grep -qF "Reload failed" && { echo "the reload failed"; return 1; }
+		qtmux send-keys -t qa:tree q || return 1
+		wait_for qa:tree "exit=0 settings=restored" || return 1
+		check_screen_mode qa:tree
+	}
 	case_resize() {
 		qtmux new-window -t qa -n resize "$(pane_command "$browse")" || return 1
 		wait_for qa:resize "chosen()" || return 1
@@ -509,6 +563,7 @@ cmd_terminal() {
 	}
 
 	run_case "tmux: navigate, compare, and quit" case_quit
+	run_case "tmux: fold, go to a hidden node, rapid keys, and reload" case_tree
 	run_case "tmux: resize while browsing" case_resize
 	run_case "tmux: ctrl+c" case_interrupt
 	run_case "tmux: SIGTERM" case_signal TERM 143
