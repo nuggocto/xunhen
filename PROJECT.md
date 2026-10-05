@@ -1011,13 +1011,9 @@ Depends on phases 8 and 9. Outcome: evidence that the exact packaged application
 works on the advertised Linux environments and that the site accurately
 guides users to the available release channels.
 
-Candidate QA does not wait for the unchecked AUR item in 8.4. A candidate's
-recipe is resolved, built, and installed only in disposable Arch
-environments: the release workflow's clean chroot and the delivery
-workflow's container. The public AUR submission needs the stable source
-archive and happens in 11.2, so 8.4's last item and the phase 8 box stay
-open until then. `docs/qa.md` defines the candidate checks and their
-evidence.
+Candidates are built and installed only in disposable Arch environments.
+The public AUR submission needs the stable source archive and happens in
+11.2, so 8.4's last item and the phase 8 box stay open until then.
 
 #### 10.1 Produce a candidate
 

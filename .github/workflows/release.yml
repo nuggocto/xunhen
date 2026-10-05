@@ -168,8 +168,8 @@ jobs:
           ./result/bin/xunhen --version | tee "$logs/version.txt"
           nix path-info --closure-size --human-readable ./result | tee "$logs/path-info.txt"
           sha256sum ./result/bin/xunhen | tee "$logs/executable.sha256"
-          # The executable itself, for docs/qa.md's terminal checks of the
-          # Nix build; it is static, so it runs outside the store.
+          # Kept for the local terminal checks; it is static, so it runs
+          # outside the store.
           install -m755 ./result/bin/xunhen "$logs/xunhen"
       # docs/install.md's user-profile steps: install, remove, roll the
       # removal back, and remove again.
@@ -329,10 +329,7 @@ jobs:
             build/*.pkg.tar.zst
           if-no-files-found: ignore
 
-  # docs/qa.md: the archive's executable installed and checked as an
-  # ordinary user in each pinned userland, traced for file, process, and
-  # network use, and driven in tmux and over SSH. tools/qa.sh runs every
-  # check from the archive itself; nothing here builds xunhen.
+  # tools/qa.sh on the archive: userlands, isolation, and terminals.
   qa:
     name: Candidate QA
     needs: [validate, archive]
@@ -381,8 +378,7 @@ jobs:
           path: ${{ runner.temp }}/qa/
           if-no-files-found: ignore
 
-  # The archive's own executable on the oldest kernel and CPU the release
-  # claims, in a virtual machine: nix/baseline-test.nix.
+  # The archive's executable on the oldest kernel and CPU the release claims.
   baseline:
     name: Kernel and CPU baseline
     needs: [validate, archive]

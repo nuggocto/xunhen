@@ -13,16 +13,13 @@ flowchart TD
     C --> B
     V --> N[Nix sandbox build, tests, verifier, NixOS machines]
     B --> R[Arch package from the exact source archive]
-    B --> Q[Candidate QA in Debian, Ubuntu, Alpine, tmux, and SSH]
-    B --> K[Archive executable on Linux 5.10 and a qemu64 CPU]
+    B --> Q[Candidate QA and the kernel baseline]
     B --> S[Draft release with the verified bytes]
     N --> S
     R --> S
     Q --> S
-    K --> S
     S --> P[Publish by hand after a hash check]
-    P --> D[Public download, module proxy, flake, and recipe checked]
-    D --> F[Tagged flake verified in public]
+    P --> F[Tagged flake verified in public]
     F --> U[AUR recipe resolved, clean-chroot build, AUR push]
 ```
 
@@ -99,10 +96,9 @@ The tag starts `.github/workflows/release.yml`:
 | Required checks | the whole CI workflow, run on the tagged commit | read |
 | Release identity | `tools/release-identity.sh`: the tag is annotated, names the built commit, matches `VERSION`, is on `shrek`, and has a changelog section | read |
 | Release archives | `tools/reproduce.sh -tag`: two builds from fresh clones at different paths, compared byte for byte, then `tools/verify` on the archive | read |
-| Nix package | `nix flake check`: the sandboxed build and test suite, `tools/verify` on the packaged executable, a NixOS machine that adds xunhen through `environment.systemPackages`, verifies it as an ordinary user, and removes it, and the packaged executable on Linux 5.10 and a qemu64 CPU; then a user profile install, rollback, and removal | read |
-| Arch package | the recipe resolved against the exact source archive, linted with `namcap`, built with devtools in a clean chroot (its `check()` runs the tests and `tools/verify`), installed and verified again, its documents compared with the archive's and their links followed on an install that extracts documentation, upgraded, downgraded, and removed | read |
-| Candidate QA | `tools/qa.sh`: the archive installed, verified, replaced, and removed as an ordinary user in Debian, Ubuntu, and Alpine; traced for file, process, and network use; and driven in tmux and over SSH ([QA](qa.md)) | read |
-| Kernel and CPU baseline | the archive's executable verified in a NixOS machine on Linux 5.10 and QEMU's qemu64 CPU, `nix/archive-baseline.nix` | read |
+| Nix package | `nix flake check`: the sandboxed build and tests, `tools/verify` on the package, and NixOS machines that install and remove it; then a user profile install, rollback, and removal | read |
+| Arch package | the recipe resolved against the exact source archive, linted with `namcap`, built with devtools in a clean chroot (its `check()` runs the tests and `tools/verify`), installed and verified again, its documents checked, upgraded, downgraded, and removed | read |
+| Candidate QA, baseline | [Candidate checks](#candidate-checks) | read |
 | Stage | rechecks every hash, reads the release notes, creates a **draft** release with the four assets, downloads them again, and compares | write |
 
 Each job keeps its logs as a workflow artifact: the reproduction and
@@ -186,10 +182,8 @@ the source archive is known only after the tag exists, so the template is
 committed first and resolved afterwards. Do not move the application tag to
 record its own archive's checksum.
 
-Release candidates never go to the AUR. Its `xunhen` package follows
-stable releases, and a candidate published there would replace the stable
-recipe for everyone who builds it. The release workflow and the delivery
-workflow build a candidate's recipe in disposable Arch environments instead.
+Release candidates never go to the AUR: its `xunhen` package follows stable
+releases.
 
 On an Arch machine with `devtools` and `namcap`:
 
@@ -250,23 +244,22 @@ the package.
   `lib.fakeHash`, run `nix build .#xunhen`, and copy the hash from the
   mismatch error into `nix/package.nix`.
 
-## After publishing
+## Candidate checks
 
-Run **Check a published release** (`.github/workflows/delivery.yml`) by
-hand with the tag. It reads only public URLs:
+A candidate tag, such as `v1.0.0-rc.1`, goes through the same workflow and
+is published as a prerelease. The release workflow's Candidate QA job runs
+`tools/qa.sh` on the archive: install and removal as an ordinary user in
+the Debian, Ubuntu, and Alpine images pinned in `tools/qa-environments.json`,
+an strace check for started programs, sockets, and writes, and the browser
+in tmux and over SSH. The baseline job runs `tools/verify` on Linux 5.10 with
+a `qemu64` CPU, the oldest the release claims.
 
-- the release's four assets, downloaded and compared byte for byte with
-  the `archive` artifact of the Release run that built them, then
-  installed by `docs/install.md`'s steps in Debian, Ubuntu, and Alpine;
-- `CGO_ENABLED=0 go install github.com/nuggocto/xunhen/cmd/xunhen@vX.Y.Z`
-  from the module proxy with fresh caches, its version output, its
-  linkage, and a recovery;
-- `nix run`, `nix profile` install, rollback, and removal from the public
-  tagged flake, and the flake's own `verify` check;
-- the AUR recipe resolved against the published source archive and built
-  with `makepkg`, which downloads it from the release URL, then installed,
-  verified, and removed.
+After publishing, run **Check a published release** (`delivery.yml`) with
+the tag. It checks the public download, `go install` from the module proxy,
+the tagged flake, and the AUR recipe built from the public source archive.
 
-[QA](qa.md) describes the remaining candidate checks that run locally,
-such as the terminal checks on the Nix and Arch executables and the
-resource measurements.
+Locally, `tools/qa.sh terminal EXECUTABLE LABEL` runs the tmux and SSH
+checks on the Nix and Arch executables, which the release run keeps in its
+`nix-logs` and `arch-results` artifacts, and `tools/measure.sh -binary
+EXECUTABLE` measures the candidate on the reference machine. A fix that
+changes an executable is a new candidate; a published tag never moves.

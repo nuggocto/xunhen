@@ -1,23 +1,17 @@
 #!/usr/bin/env bash
-# Checks a release candidate as users receive it, and keeps the evidence. It
-# never builds xunhen: every check runs the executable from the release
-# archive, or the one it is given. docs/qa.md explains what each check
-# establishes and how its results are recorded.
+# Checks a release candidate as users receive it, and keeps the evidence in
+# .local/qa/VERSION. It never builds xunhen: every check runs the archive's
+# executable, or the one it is given.
 #
 #   tools/qa.sh artifacts DIR                 identity, checksums, provenance, tools/verify on the archive
 #   tools/qa.sh userland DIR [EARLIER_DIR]    install, verify, replace, and remove in each pinned userland
 #   tools/qa.sh isolation DIR                 trace the archive executable's files, processes, and network use
 #   tools/qa.sh terminal EXECUTABLE LABEL     drive the browser in tmux, through suspend and signals, and over SSH
 #
-# DIR holds a release's four assets, as staged or published. EARLIER_DIR
-# holds an earlier release's assets, to replace in both directions. The
-# version, commit, and toolchain come from DIR's provenance.json, after the
-# archive is checked against it. Evidence goes to .local/qa/VERSION, or
-# QA_OUT. Each subcommand exits nonzero when a check fails or cannot run.
-#
-# The userland, isolation, and SSH checks run unprivileged Docker containers,
-# as an ordinary user and without the network except to install strace or
-# sshd. The terminal check needs tmux and ssh on the host.
+# DIR holds a release's four assets; its provenance.json gives the version,
+# commit, and toolchain. QA_OUT overrides the evidence directory. Containers
+# run unprivileged, as uid 1000, with no network except to install strace
+# or sshd. Exits nonzero when a check fails or cannot run.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 repo=$PWD
@@ -29,7 +23,7 @@ fail() {
 }
 
 usage() {
-	sed -n '2,19s/^# \{0,1\}//p' "$0" >&2
+	sed -n '2,15s/^# \{0,1\}//p' "$0" >&2
 	exit 2
 }
 

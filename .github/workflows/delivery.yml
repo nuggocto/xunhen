@@ -1,10 +1,8 @@
 name: Check a published release
 
-# Checks a release that publish.yml made public, through the channels users
-# install from: the public download, the Go module proxy, the tagged flake,
-# and the AUR recipe resolved against the public source archive. It reads
-# only public URLs and builds nothing it publishes. docs/qa.md lists what
-# it shows and docs/releasing.md when to run it.
+# Checks a published release through the channels users install from: the
+# public download, the Go module proxy, the tagged flake, and the AUR recipe
+# built from the public source archive.
 on:
   workflow_dispatch:
     inputs:
