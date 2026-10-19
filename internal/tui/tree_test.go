@@ -145,16 +145,15 @@ func TestTreeStructure(t *testing.T) {
 	tests := []struct {
 		name      string
 		id        history.NodeID
-		level     int32
 		branches  bool
 		reference bool
 	}{
 		{name: "root", id: 0},
-		{name: "preferred child continues its parent's level", id: 20},
+		{name: "preferred child continues its parent's line", id: 20},
 		{name: "reference", id: 30, reference: true},
-		{name: "alternate child starts a branch", id: 40, level: 1, branches: true},
-		{name: "preferred child inside a branch", id: 50, level: 1},
-		{name: "alternate child of the root", id: 60, level: 1, branches: true},
+		{name: "alternate child starts a branch", id: 40, branches: true},
+		{name: "preferred child inside a branch", id: 50},
+		{name: "alternate child of the root", id: 60, branches: true},
 	}
 
 	for _, tt := range tests {
@@ -162,8 +161,8 @@ func TestTreeStructure(t *testing.T) {
 			t.Parallel()
 
 			p := at(t, tr, tt.id)
-			if tr.level[p] != tt.level || tr.branches(p) != tt.branches || (p == tr.reference) != tt.reference {
-				t.Fatalf("node %d: level %d, branches %t, reference %t", tt.id, tr.level[p], tr.branches(p), p == tr.reference)
+			if tr.branches(p) != tt.branches || (p == tr.reference) != tt.reference {
+				t.Fatalf("node %d: branches %t, reference %t", tt.id, tr.branches(p), p == tr.reference)
 			}
 		})
 	}
@@ -188,16 +187,15 @@ func TestTreeStructure(t *testing.T) {
 	})
 }
 
-// A long linear history, the common shape of an undo tree, must index and
-// walk without recursion and stay at level zero.
+// A long linear history, the common shape of an undo tree, and a long run of
+// nested branches must both index and walk without recursion.
 func TestDeepTrees(t *testing.T) {
 	t.Parallel()
 
 	const count = 200_000
 	tests := []struct {
-		name      string
-		nodes     func() []node
-		lastLevel int32
+		name  string
+		nodes func() []node
 	}{
 		{name: "linear history", nodes: func() []node {
 			nodes := make([]node, count)
@@ -219,7 +217,7 @@ func TestDeepTrees(t *testing.T) {
 				nodes[i] = node{id: history.NodeID(i), parent: history.NodeID(parent)}
 			}
 			return nodes
-		}, lastLevel: count/2 - 1},
+		}},
 	}
 
 	for _, tt := range tests {
@@ -229,8 +227,8 @@ func TestDeepTrees(t *testing.T) {
 			tr := treeOf(t, 0, tt.nodes())
 			f := make(folds, tr.len())
 			last := tr.last(f)
-			if last != count-1 || tr.level[last] != tt.lastLevel {
-				t.Fatalf("last row %d at level %d, want %d at level %d", last, tr.level[last], count-1, tt.lastLevel)
+			if last != count-1 {
+				t.Fatalf("last row %d, want %d", last, count-1)
 			}
 
 			// Folding the root hides everything in one step.

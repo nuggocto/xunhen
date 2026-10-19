@@ -141,10 +141,10 @@ func (e *engine) compare(ctx context.Context, r request) (*comparison, error) {
 		return nil, err
 	}
 
-	d, err := diff.Compare(ctx, from.snapshot, to.snapshot, e.limits)
+	hunks, err := diff.Compare(ctx, from.snapshot, to.snapshot, e.limits)
 	if err != nil {
 		return nil, err
 	}
 
-	return newComparison(from, to, d), nil
+	return newComparison(from, to, hunks), nil
 }

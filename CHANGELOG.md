@@ -8,6 +8,13 @@ says which behavior stays fixed within a major version.
 
 ## [Unreleased]
 
+### Changed
+
+- Simplify diff results, browser work scheduling, and command output handling
+  without changing command behavior or recovered text.
+- Consolidate argument and reload tests and remove redundant checks tied to
+  implementation details or presentation choices.
+
 ## [1.0.1] - 2026-10-05
 
 ### Changed

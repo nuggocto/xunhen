@@ -87,10 +87,6 @@ func preview(selection uint64) request {
 	return request{kind: previewRequest, load: 1, selection: selection}
 }
 
-func loading(generation uint64) request {
-	return request{kind: loadRequest, load: generation}
-}
-
 func TestWorkerKeepsOneRunningAndTheLatestPending(t *testing.T) {
 	t.Parallel()
 
@@ -124,67 +120,6 @@ func TestWorkerKeepsOneRunningAndTheLatestPending(t *testing.T) {
 		t.Fatalf("result is selection %d, error %v; want selection 3", r.selection, r.err)
 	}
 	idle(t, s)
-}
-
-func TestWorkerProtectsLoads(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name string
-		// running is submitted and started first, then queued is submitted.
-		running, queued request
-		// A selection request submitted after queued.
-		later          request
-		laterAccepted  bool
-		runningStopped bool
-		startsNext     request
-	}{
-		{
-			name:    "a pending load outlasts later selections",
-			running: preview(1), queued: loading(2), later: preview(2),
-			runningStopped: true, startsNext: loading(2),
-		},
-		{
-			name:    "a running load continues through selections",
-			running: loading(1), queued: preview(2), later: preview(3),
-			laterAccepted: true, startsNext: preview(3),
-		},
-		{
-			name:    "a newer load replaces a running load",
-			running: loading(1), queued: loading(2), later: loading(3),
-			laterAccepted: true, runningStopped: true, startsNext: loading(3),
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			s := newScript()
-			w := start(t, s)
-
-			w.submit(tt.running)
-			first := receive(t, s.started, "the first request to start")
-			w.submit(tt.queued)
-			if accepted := w.submit(tt.later); accepted != tt.laterAccepted {
-				t.Fatalf("later request accepted = %t, want %t", accepted, tt.laterAccepted)
-			}
-
-			if stopped := first.ctx.Err() != nil; stopped != tt.runningStopped {
-				t.Fatalf("running request cancelled = %t, want %t", stopped, tt.runningStopped)
-			}
-
-			first.release()
-			receive(t, w.results, "the first result")
-			next := receive(t, s.started, "the next request to start")
-			if next.request.kind != tt.startsNext.kind || next.request.load != tt.startsNext.load || next.request.selection != tt.startsNext.selection {
-				t.Fatalf("next request = %+v, want %+v", next.request, tt.startsNext)
-			}
-			next.release()
-			receive(t, w.results, "the second result")
-			idle(t, s)
-		})
-	}
 }
 
 func TestWorkerShutdown(t *testing.T) {

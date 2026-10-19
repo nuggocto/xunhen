@@ -53,9 +53,8 @@ type result struct {
 // worker runs background requests one at a time on a single goroutine. It
 // keeps at most one pending request: a newer submission replaces the pending
 // one and cancels the running one, which is obsolete by construction. The
-// exception is loading: a pending load is never replaced by a selection
-// request, and a running load is cancelled only by another load, so moving
-// through the tree cannot discard a reload.
+// model makes no content request while a load is outstanding, so nothing
+// here needs to rank a load above other work.
 //
 // Results go out on an unbuffered channel read by one waiting command at a
 // time. A result the model is slow to take holds up only the worker, and
@@ -65,8 +64,7 @@ type worker struct {
 
 	mu      sync.Mutex
 	pending *request
-	running *request
-	cancel  context.CancelFunc
+	cancel  context.CancelFunc // cancels the running request; nil when idle
 	closed  bool
 
 	base    context.Context
@@ -100,10 +98,7 @@ func (w *worker) submit(r request) bool {
 	if w.closed {
 		return false
 	}
-	if w.pending != nil && w.pending.kind == loadRequest && r.kind != loadRequest {
-		return false
-	}
-	if w.running != nil && (r.kind == loadRequest || w.running.kind != loadRequest) {
+	if w.cancel != nil {
 		w.cancel()
 	}
 
@@ -158,13 +153,13 @@ func (w *worker) loop() {
 			continue
 		}
 		ctx, cancel := context.WithCancel(w.base)
-		w.running, w.cancel = r, cancel
+		w.cancel = cancel
 		w.mu.Unlock()
 
 		out := w.run(ctx, *r)
 
 		w.mu.Lock()
-		w.running, w.cancel = nil, nil
+		w.cancel = nil
 		w.mu.Unlock()
 		cancel()
 

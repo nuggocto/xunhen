@@ -153,23 +153,6 @@ func TestComparisonRowIndex(t *testing.T) {
 	}
 }
 
-// A reload builds a new session. A node reference from the old one must not
-// resolve in it, even when the numeric ID exists in both.
-func TestReloadedSessionsShareNothing(t *testing.T) {
-	t.Parallel()
-
-	f := readFixture(t, "abandoned-branch")
-	before, after := load(t, f.loader()), load(t, f.loader())
-
-	old := ref(t, before, 2)
-	if _, err := after.history.Info(old); err == nil {
-		t.Fatal("the new history accepted a node reference from the old one")
-	}
-	if _, err := after.reconstructor.Reconstruct(t.Context(), old); err == nil {
-		t.Fatal("the new reconstructor replayed a node reference from the old history")
-	}
-}
-
 // Every operation the worker performs must stop at any of its cancellation
 // checks with the cancellation and no partial result. The load covers
 // decoding, graph validation, base verification, and the tree index; the

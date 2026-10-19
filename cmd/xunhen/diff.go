@@ -69,13 +69,13 @@ func compareStates(ctx context.Context, args []string, stdout, stderr io.Writer)
 		return operationError(stderr, err)
 	}
 
-	result, err := diff.Compare(ctx, states[0], states[1], lim)
+	hunks, err := diff.Compare(ctx, states[0], states[1], lim)
 	if err != nil {
 		return operationError(stderr, err)
 	}
 
 	out := newOutput(stdout)
-	writeDiff(out, result, options.from, options.to)
+	writeDiff(out, hunks, options.from, options.to)
 	return out.finish(stderr)
 }
 
@@ -100,8 +100,7 @@ func parseDiffArgs(args []string, lim limits.Limits) (diffOptions, error) {
 // writeDiff streams a completed diff in unified format. Escaping happens
 // here, after the comparison, and cannot produce a newline, so recovered text
 // cannot forge hunk structure.
-func writeDiff(out *output, d *diff.Diff, from, to history.NodeID) {
-	hunks := d.Hunks()
+func writeDiff(out *output, hunks []diff.Hunk, from, to history.NodeID) {
 	if len(hunks) == 0 {
 		return
 	}

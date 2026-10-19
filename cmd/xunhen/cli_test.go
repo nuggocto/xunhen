@@ -29,6 +29,7 @@ func TestCommandResponses(t *testing.T) {
 		{name: "version help", args: []string{"help", "version"}, out: "Usage: xunhen version"},
 		{name: "inspection help", args: []string{"help", "inspect"}, out: "Usage: xunhen inspect FILE"},
 		{name: "show help topic", args: []string{"help", "show"}, out: "Usage: xunhen show"},
+		{name: "diff help topic", args: []string{"help", "diff"}, out: "Usage: xunhen diff"},
 		{name: "browse help topic", args: []string{"help", "browse"}, out: "Usage: xunhen browse"},
 		{name: "browse without inputs", args: []string{"browse"}, status: 2, err: "expected browse FILE"},
 		// The paths do not exist. Reaching the terminal check first means no
@@ -165,27 +166,15 @@ func (failedWriter) Write([]byte) (int, error) {
 	return 0, errors.New("output unavailable")
 }
 
-// TestCommandArgumentContract applies one set of argument rules to every
-// command that reads inputs. Each invalid case fails before a file is opened,
-// so the paths are fake. Adding a command means adding one row to commands.
+// TestCommandArgumentContract checks the argument rules the input commands
+// share, then the flags each command registers and requires. Every case fails
+// before a file is opened, so the paths are fake. The shared rules run once,
+// against show, because it takes both input flags and a node selector.
 func TestCommandArgumentContract(t *testing.T) {
 	t.Parallel()
 
-	commands := []struct {
-		name  string
-		mode  string   // input form, for the case names
-		valid []string // flag/value pairs forming one valid invocation
-		nodes []string // node selector flags
-	}{
-		{name: "inspect", mode: "explicit", valid: []string{"--undo", "u"}},
-		{name: "show", mode: "explicit", valid: []string{"--undo", "u", "--base", "b", "--node", "1"}, nodes: []string{"--node"}},
-		{name: "diff", mode: "explicit", valid: []string{"--undo", "u", "--base", "b", "--from", "1", "--to", "2"}, nodes: []string{"--from", "--to"}},
-		{name: "inspect", mode: "source", valid: []string{"--source", "s", "--undo-dir", "d"}},
-		{name: "show", mode: "source", valid: []string{"--source", "s", "--undo-dir", "d", "--node", "1"}, nodes: []string{"--node"}},
-		{name: "diff", mode: "source", valid: []string{"--source", "s", "--undo-dir", "d", "--from", "1", "--to", "2"}, nodes: []string{"--from", "--to"}},
-		{name: "browse", mode: "explicit", valid: []string{"--undo", "u", "--base", "b"}},
-		{name: "browse", mode: "source", valid: []string{"--source", "s", "--undo-dir", "d"}},
-	}
+	show := []string{"show", "--undo", "u", "--base", "b", "--node", "1"}
+	withShow := func(extra ...string) []string { return slices.Concat(show, extra) }
 
 	type contractCase struct {
 		name, stdout, diagnostic string
@@ -193,65 +182,56 @@ func TestCommandArgumentContract(t *testing.T) {
 		status                   int
 	}
 
-	var tests []contractCase
-	helped := map[string]bool{}
+	tests := []contractCase{
+		{name: "short help", args: []string{"show", "-h"}, stdout: "Usage: xunhen show"},
+		{name: "help among flags", args: withShow("--help"), status: exitUsage, diagnostic: "must be used alone"},
+		{name: "repeated flag", args: withShow("--undo", "u"), status: exitUsage, diagnostic: "only once"},
+		{name: "trailing positional", args: withShow("extra"), status: exitUsage, diagnostic: "cannot be combined"},
+		{name: "two positionals", args: withShow("extra", "more"), status: exitUsage, diagnostic: "expected show"},
+		{name: "leading positional", args: slices.Concat([]string{"show", "extra"}, show[1:]), status: exitUsage},
+		{name: "unknown flag", args: withShow("--bogus"), status: exitUsage},
+		{name: "unsafe flag", args: withShow("--bad\n\x1b[2J"), status: exitUsage},
+		{name: "flag without value", args: withShow("--undo"), status: exitUsage},
+		{name: "empty path", args: slices.Concat([]string{"show", "--undo="}, show[3:]), status: exitUsage},
+	}
+
+	for _, value := range []string{"-1", "+1", "0x1", "1_0", ""} {
+		tests = append(tests, contractCase{
+			name: "--node " + value, args: slices.Concat(show[:6], []string{value}),
+			status: exitUsage, diagnostic: "--node requires a non-negative decimal ID",
+		})
+	}
+	tests = append(tests, contractCase{
+		name: "--node overflow", args: slices.Concat(show[:6], []string{"2147483648"}),
+		status: exitUsage, diagnostic: "--node exceeds the supported ID range",
+	})
+
+	commands := []struct {
+		name  string
+		valid []string // flag/value pairs forming one valid invocation
+		nodes []string // node selector flags
+	}{
+		{name: "inspect", valid: []string{"--undo", "u"}},
+		{name: "show", valid: show[1:], nodes: []string{"--node"}},
+		{name: "diff", valid: []string{"--undo", "u", "--base", "b", "--from", "1", "--to", "2"}, nodes: []string{"--from", "--to"}},
+		{name: "browse", valid: []string{"--undo", "u", "--base", "b"}},
+	}
+
 	for _, c := range commands {
-		with := func(extra ...string) []string {
-			return slices.Concat([]string{c.name}, c.valid, extra)
-		}
-		usage := "Usage: xunhen " + c.name
-		label := c.name + " " + c.mode
-
-		// Help takes no input flags, so it runs once per command, not per form.
-		if !helped[c.name] {
-			helped[c.name] = true
-			tests = append(tests,
-				contractCase{name: c.name + "/long help", args: []string{c.name, "--help"}, stdout: usage},
-				contractCase{name: c.name + "/short help", args: []string{c.name, "-h"}, stdout: usage},
-				contractCase{name: c.name + "/help topic", args: []string{"help", c.name}, stdout: usage},
-			)
-		}
-
-		// A positional argument is the source file, which clashes with
-		// --undo and with a --source already given.
-		extra := "cannot be combined"
-		if c.mode == "source" {
-			extra = "give the source file once"
-		}
-		tests = append(tests,
-			contractCase{name: label + "/help among flags", args: with("--help"), status: exitUsage, diagnostic: "must be used alone"},
-			contractCase{name: label + "/repeated flag", args: with(c.valid[0], c.valid[1]), status: exitUsage, diagnostic: "only once"},
-			contractCase{name: label + "/trailing positional", args: with("extra"), status: exitUsage, diagnostic: extra},
-			contractCase{name: label + "/two positionals", args: with("extra", "more"), status: exitUsage, diagnostic: "expected " + c.name},
-			contractCase{name: label + "/leading positional", args: slices.Concat([]string{c.name, "extra"}, c.valid), status: exitUsage},
-			contractCase{name: label + "/unknown flag", args: with("--bogus"), status: exitUsage},
-			contractCase{name: label + "/unsafe flag", args: with("--bad\n\x1b[2J"), status: exitUsage},
-			contractCase{name: label + "/flag without value", args: with("--undo"), status: exitUsage},
-			contractCase{name: label + "/empty path", args: slices.Concat([]string{c.name, "--undo="}, c.valid[2:]), status: exitUsage},
-		)
+		tests = append(tests, contractCase{name: c.name + "/help", args: []string{c.name, "--help"}, stdout: "Usage: xunhen " + c.name})
 
 		for i := 0; i < len(c.valid); i += 2 {
 			missing := slices.Concat([]string{c.name}, c.valid[:i], c.valid[i+2:])
-			tests = append(tests, contractCase{name: label + "/missing " + c.valid[i], args: missing, status: exitUsage})
+			tests = append(tests, contractCase{name: c.name + "/missing " + c.valid[i], args: missing, status: exitUsage})
 		}
 
+		// A selector registered without the node rules would accept this.
 		for _, flag := range c.nodes {
-			// Replace the valid selector so the flag still appears only once.
-			selector := func(value string) []string {
-				args := slices.Concat([]string{c.name}, c.valid)
-				args[slices.Index(args, flag)+1] = value
-				return args
-			}
-
-			for _, value := range []string{"-1", "+1", "0x1", "1_0", ""} {
-				tests = append(tests, contractCase{
-					name: label + "/" + flag + " " + value, args: selector(value),
-					status: exitUsage, diagnostic: flag + " requires a non-negative decimal ID",
-				})
-			}
+			args := slices.Concat([]string{c.name}, c.valid)
+			args[slices.Index(args, flag)+1] = "-1"
 			tests = append(tests, contractCase{
-				name: label + "/" + flag + " overflow", args: selector("2147483648"),
-				status: exitUsage, diagnostic: flag + " exceeds the supported ID range",
+				name: c.name + "/" + flag + " -1", args: args,
+				status: exitUsage, diagnostic: flag + " requires a non-negative decimal ID",
 			})
 		}
 	}

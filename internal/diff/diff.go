@@ -130,47 +130,14 @@ func (h Hunk) line(r run, i int) Line {
 	}
 }
 
-// Diff is a completed comparison. Only Compare creates one, and a failed or
-// cancelled comparison returns no Diff at all.
-type Diff struct {
-	from, to history.NodeRef
-	hunks    []Hunk
-}
-
-// From identifies the left-hand state.
-func (d *Diff) From() history.NodeRef {
-	if d == nil {
-		return history.NodeRef{}
-	}
-
-	return d.from
-}
-
-// To identifies the right-hand state.
-func (d *Diff) To() history.NodeRef {
-	if d == nil {
-		return history.NodeRef{}
-	}
-
-	return d.to
-}
-
-// Hunks returns the hunks in line order. An identical pair has none.
-func (d *Diff) Hunks() []Hunk {
-	if d == nil {
-		return nil
-	}
-
-	return slices.Clone(d.hunks)
-}
-
 // Compare finds a line diff between two states of one history. The diff is
 // minimal unless the states are so far apart that the exact search runs out
 // of effort; the rest is then aligned at lines unique to each side, and past
 // that shown as plain deletions and insertions. Every diff is complete:
-// applying its hunks to the left state gives the right one. Compare fails only
-// when cancelled or when a state exceeds the line limit.
-func Compare(ctx context.Context, from, to *history.Snapshot, lim limits.Limits) (*Diff, error) {
+// applying its hunks to the left state gives the right one, and an identical
+// pair has no hunks. Compare fails only when cancelled or when a state exceeds
+// the line limit.
+func Compare(ctx context.Context, from, to *history.Snapshot, lim limits.Limits) ([]Hunk, error) {
 	if from == nil || to == nil {
 		return nil, errors.New("diff requires two snapshots")
 	}
@@ -180,15 +147,7 @@ func Compare(ctx context.Context, from, to *history.Snapshot, lim limits.Limits)
 
 	// The hunks refer to the snapshots' own line arrays rather than copies,
 	// so a diff holds no line array of its own. Nothing here writes to them.
-	fromNode, toNode := from.Node(), to.Node()
-	left, right := from.ReadOnlyLines(), to.ReadOnlyLines()
-
-	hunks, err := compare(ctx, left, right, lim, defaultEffort)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Diff{from: fromNode, to: toNode, hunks: hunks}, nil
+	return compare(ctx, from.ReadOnlyLines(), to.ReadOnlyLines(), lim, defaultEffort)
 }
 
 // effort holds the thresholds that choose a search stage; see search.go.

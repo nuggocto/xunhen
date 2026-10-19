@@ -101,8 +101,8 @@ type comparison struct {
 	rows     int
 }
 
-func newComparison(from, to *document, d *diff.Diff) *comparison {
-	c := &comparison{from: from, to: to, hunks: d.Hunks()}
+func newComparison(from, to *document, hunks []diff.Hunk) *comparison {
+	c := &comparison{from: from, to: to, hunks: hunks}
 	c.starts = make([]int, len(c.hunks))
 	for i, h := range c.hunks {
 		c.starts[i] = c.rows

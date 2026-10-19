@@ -162,14 +162,14 @@ func parseFlags(flags *flag.FlagSet, args []string) error {
 	return err
 }
 
-// output streams a command's result through a buffer and keeps the first
-// write error, so rendering runs straight through and a failure is reported
-// once. Commands finish everything that can fail for another reason, such as
+// output streams a command's result through a buffer. After a write fails,
+// the buffer returns that error from every later write and from Flush, so
+// rendering runs straight through and finish reports the failure once.
+// Commands finish everything that can fail for another reason, such as
 // reading, replaying, validating, or comparing, before the first write, so
 // only an output failure can leave partial output behind.
 type output struct {
-	w   *bufio.Writer
-	err error
+	w *bufio.Writer
 }
 
 func newOutput(w io.Writer) *output {
@@ -177,24 +177,17 @@ func newOutput(w io.Writer) *output {
 }
 
 func (o *output) printf(format string, args ...any) {
-	if o.err == nil {
-		_, o.err = fmt.Fprintf(o.w, format, args...)
-	}
+	fmt.Fprintf(o.w, format, args...)
 }
 
 func (o *output) text(s string) {
-	if o.err == nil {
-		_, o.err = o.w.WriteString(s)
-	}
+	o.w.WriteString(s)
 }
 
 // finish flushes the buffer and reports any write failure as the command's
 // status.
 func (o *output) finish(stderr io.Writer) int {
-	if o.err == nil {
-		o.err = o.w.Flush()
-	}
-	if o.err != nil {
+	if o.w.Flush() != nil {
 		return diagnostic(stderr, exitFailure, "cannot write output")
 	}
 

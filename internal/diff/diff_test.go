@@ -660,10 +660,10 @@ func TestCompareStates(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			d, err := diff.Compare(t.Context(), tt.from, tt.to, limits.Default())
+			hunks, err := diff.Compare(t.Context(), tt.from, tt.to, limits.Default())
 			if tt.wantErr != "" {
-				if d != nil || err == nil || !strings.Contains(err.Error(), tt.wantErr) {
-					t.Fatalf("diff = %v, error = %v; want %q", d, err, tt.wantErr)
+				if hunks != nil || err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("hunks = %v, error = %v; want %q", hunks, err, tt.wantErr)
 				}
 				return
 			}
@@ -671,10 +671,7 @@ func TestCompareStates(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if d.From() != tt.from.Node() || d.To() != tt.to.Node() {
-				t.Fatal("diff lost the identity of its states")
-			}
-			if got := render(d.Hunks()); got != tt.want {
+			if got := render(hunks); got != tt.want {
 				t.Fatalf("hunks =\n%s\nwant\n%s", got, tt.want)
 			}
 		})

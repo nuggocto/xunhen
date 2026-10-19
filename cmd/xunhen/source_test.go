@@ -390,6 +390,13 @@ func TestReload(t *testing.T) {
 				if _, err := second.history.Info(oldRef); err == nil {
 					t.Fatal("a reference from the earlier load was accepted by the reload")
 				}
+				r, err := history.Bind(second.history, second.base, lim)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err := r.Reconstruct(t.Context(), oldRef); err == nil {
+					t.Fatal("the reload replayed a reference from the earlier load")
+				}
 			}
 
 			// The earlier load and its snapshot are untouched either way.

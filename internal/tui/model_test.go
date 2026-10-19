@@ -840,10 +840,13 @@ func TestNoColor(t *testing.T) {
 	b.press("j", "d")
 	b.answer(b.work.last(t))
 
+	// Foreground, background, and underline colors, in the basic, bright,
+	// and extended forms. Other attributes are fine.
+	color := regexp.MustCompile(`^(3[0-8]|4[0-8]|58|9[0-7]|10[0-7])$`)
 	content := b.m.View().Content
-	for _, match := range regexp.MustCompile(`\x1b\[([0-9;]*)m`).FindAllStringSubmatch(content, -1) {
-		for _, parameter := range strings.Split(match[1], ";") {
-			if parameter != "" && parameter != sgrReverse && parameter != sgrBold && parameter != sgrDim {
+	for _, match := range regexp.MustCompile(`\x1b\[([0-9;:]*)m`).FindAllStringSubmatch(content, -1) {
+		for parameter := range strings.SplitSeq(match[1], ";") {
+			if code, _, _ := strings.Cut(parameter, ":"); color.MatchString(code) {
 				t.Fatalf("NO_COLOR view uses SGR %q", match[0])
 			}
 		}
