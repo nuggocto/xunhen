@@ -16,13 +16,15 @@
 let
   flake = builtins.getFlake (toString ../.);
   pkgs = flake.inputs.nixpkgs.legacyPackages.x86_64-linux;
+  # The virtual machine comes from the revision that still ships Linux 5.10.
+  baselinePkgs = flake.inputs.nixpkgs-linux-5-10.legacyPackages.x86_64-linux;
   xunhen = flake.packages.x86_64-linux.xunhen;
   supplied = builtins.path {
     path = executable;
     name = "xunhen";
   };
 in
-pkgs.callPackage ./baseline-test.nix {
+baselinePkgs.callPackage ./baseline-test.nix {
   executable = pkgs.runCommand "xunhen-${version}" { meta.mainProgram = "xunhen"; } ''
     install -Dm755 ${supplied} $out/bin/xunhen
   '';

@@ -5,8 +5,18 @@
   # go directive in go.mod; nix/package.nix names that builder.
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
+  # Linux 5.10, the oldest kernel a release claims, left nixos-unstable
+  # ahead of its end of life. The baseline test boots it from this older
+  # revision; the package, its Go toolchain, and every other check use
+  # nixpkgs above.
+  inputs.nixpkgs-linux-5-10.url = "github:NixOS/nixpkgs/e158d9ed9b51c98974c5e66e1ba1c9e0255fecaa";
+
   outputs =
-    { self, nixpkgs }:
+    {
+      self,
+      nixpkgs,
+      nixpkgs-linux-5-10,
+    }:
     let
       # xunhen supports Linux on x86-64 only.
       system = "x86_64-linux";
@@ -50,7 +60,7 @@
           inherit xunhen;
           verify = pkgs.callPackage ./nix/verify.nix { inherit xunhen verifier commit; };
           nixos = pkgs.callPackage ./nix/nixos-test.nix { inherit xunhen verifier commit goVersion; };
-          baseline = pkgs.callPackage ./nix/baseline-test.nix {
+          baseline = nixpkgs-linux-5-10.legacyPackages.${system}.callPackage ./nix/baseline-test.nix {
             executable = xunhen;
             inherit verifier commit goVersion;
             inherit (xunhen) src version;

@@ -115,7 +115,9 @@ copy, deployment, and rollback.
 
 ## Updating Nix
 
-- Run `nix flake update nixpkgs`, then `nix flake check -L`. A Go-line change
+- Run `nix flake update nixpkgs`, then `nix flake check -L`. Leave
+  `nixpkgs-linux-5-10` alone: it is the last revision with Linux 5.10, which
+  the baseline test boots, and moving it would drop that kernel. A Go-line change
   also needs the corresponding builder in `nix/package.nix`. Check it with
   `nix eval --raw .#packages.x86_64-linux.xunhen.go.version`.
 - After changing `go.sum`, set `vendorHash` to `lib.fakeHash`, run

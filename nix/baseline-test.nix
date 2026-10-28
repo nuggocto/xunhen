@@ -1,5 +1,5 @@
 # Runs tools/verify on the oldest kernel and CPU the release claims: a NixOS
-# machine booted with the oldest kernel line the pinned nixpkgs ships, on
+# machine booted with Linux 5.10 from the flake's nixpkgs-linux-5-10 input, on
 # QEMU's qemu64 CPU model, which has SSE2 but no SSE4.1, SSE4.2, or POPCNT,
 # so it stays below x86-64-v2. A container shares its host's kernel and CPU,
 # so only a virtual machine can show this.
