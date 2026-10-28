@@ -1,5 +1,5 @@
 [tools]
-go = "1.27.1"
+go = "1.27.3"
 
 [env]
 GOENV = "off"
@@ -62,6 +62,10 @@ run = "tools/release.sh notices -check"
 [tasks.reproduce]
 description = "Build the release archives twice from clean clones of HEAD and compare them"
 run = "tools/reproduce.sh"
+
+[tasks.installer-check]
+description = "Pipe a release directory's install.sh, whole and truncated, against its own archive"
+run = "tools/installer-check.sh"
 
 [tasks.release]
 description = "Build the release artifacts for HEAD into dist/ (pass -tag vX.Y.Z for a release)"

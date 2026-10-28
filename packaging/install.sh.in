@@ -1,0 +1,82 @@
+#!/bin/sh
+# Installs one exact xunhen release for the current user. Use --bin-dir to
+# choose a directory. Safe to pipe into sh: main runs only after the shell
+# has read the last line, so a download that stops partway runs nothing.
+#
+# Generated from packaging/install.sh.in by tools/release, which fills in the
+# version and the binary archive's SHA-256.
+set -eu
+umask 022
+version='@VERSION@'
+expected='@SHA256@'
+base_url="https://github.com/nuggocto/xunhen/releases/download/v$version"
+work=''
+staging=''
+fail() { printf 'xunhen install: %s\n' "$1" >&2; exit 1; }
+cleanup() {
+    if [ -n "$work" ]; then rm -rf "$work"; fi
+    if [ -n "$staging" ]; then rm -rf "$staging"; fi
+}
+
+main() {
+    if [ "$#" = 1 ] && [ "$1" = --help ]; then
+        printf '%s\n' 'Usage: sh install.sh [--bin-dir /directory]' \
+            '   or: curl -fsS https://xunhen.org/install.sh | sh -s -- --bin-dir /directory' \
+            'Default: .local/bin under your home directory, created if needed.' \
+            'Installs this exact release without root or profile changes.'
+        exit 0
+    fi
+    case "$#" in
+        0) [ -n "${HOME:-}" ] || fail 'HOME is not set'; bin_dir="$HOME/.local/bin" ;;
+        2) [ "$1" = --bin-dir ] || fail 'expected --bin-dir DIRECTORY'; bin_dir=$2 ;;
+        *) fail 'expected no arguments or --bin-dir DIRECTORY' ;;
+    esac
+    case "$bin_dir" in /*) ;; *) fail 'the installation directory must be absolute' ;; esac
+    [ "${#bin_dir}" -le 4096 ] || fail 'the installation path is too long'
+    if [ -e "$bin_dir" ]; then
+        [ -d "$bin_dir" ] && [ -w "$bin_dir" ] || fail 'the installation directory must be a writable directory'
+    fi
+    destination="$bin_dir/xunhen"
+    [ ! -L "$destination" ] || fail "$destination is a symbolic link; remove it first"
+    if [ -e "$destination" ]; then
+        [ -f "$destination" ] || fail "$destination is not a regular file"
+    fi
+    [ "$(uname -s):$(uname -m)" = Linux:x86_64 ] || fail 'xunhen releases support x86-64 Linux only'
+    for tool in curl tar gzip sha256sum mktemp chmod cp mv sed; do
+        command -v "$tool" >/dev/null || fail "missing tool: $tool"
+    done
+    work=$(mktemp -d "${TMPDIR:-/tmp}/xunhen-install.XXXXXXXX")
+    trap cleanup EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM HUP
+    folder="xunhen_${version}_linux_amd64"
+    curl --fail --silent --show-error --location --max-redirs 5 \
+        --proto '=https' --proto-redir '=https' --tlsv1.2 \
+        --connect-timeout 15 --max-time 300 --max-filesize 67108864 \
+        --output "$work/archive.tar.gz" "$base_url/$folder.tar.gz" || fail 'the archive download failed'
+    actual=$(sha256sum "$work/archive.tar.gz")
+    [ "${actual%% *}" = "$expected" ] || fail 'the archive does not match its recorded SHA-256'
+    listing=$(LC_ALL=C tar -tzf "$work/archive.tar.gz" | LC_ALL=C sort) || fail 'cannot read the archive'
+    expected_listing=$(printf '%s\n' "$folder/" "$folder/CHANGELOG.md" "$folder/LICENSE" \
+        "$folder/README.md" "$folder/THIRD_PARTY_NOTICES.txt" "$folder/xunhen")
+    [ "$listing" = "$expected_listing" ] || fail 'the archive holds unexpected files'
+    tar -xzf "$work/archive.tar.gz" -C "$work" || fail 'the archive did not extract'
+    [ -f "$work/$folder/xunhen" ] && [ ! -L "$work/$folder/xunhen" ] || fail 'the archive has no regular xunhen executable'
+    chmod 755 "$work/$folder/xunhen"
+    reported=$("$work/$folder/xunhen" version </dev/null | sed -n 1p) || fail 'the downloaded xunhen does not run'
+    [ "$reported" = "xunhen v$version" ] || fail "the downloaded executable reports '$reported', not xunhen v$version"
+    mkdir -p "$bin_dir" || fail 'cannot create the installation directory'
+    bin_dir=$(CDPATH='' cd -P "$bin_dir" && pwd)
+    staging=$(mktemp -d "$bin_dir/.xunhen-install.XXXXXXXX")
+    cp "$work/$folder/xunhen" "$staging/xunhen"
+    chmod 755 "$staging/xunhen"
+    # Rename within the destination filesystem only after every check passes.
+    mv -f "$staging/xunhen" "$bin_dir/"
+    printf 'Installed xunhen %s in %s.\n' "$version" "$bin_dir"
+    case ":${PATH:-}:" in
+        *":$bin_dir:"*) printf '%s\n' 'Run xunhen help to get started.' ;;
+        *) printf 'Add %s to PATH in your shell settings, then run xunhen help.\n' "$bin_dir" ;;
+    esac
+}
+
+main "$@"

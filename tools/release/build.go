@@ -29,6 +29,9 @@ const (
 	mainPackage = modulePath + "/cmd/xunhen"
 	repository  = "https://github.com/nuggocto/xunhen"
 	noticesFile = "THIRD_PARTY_NOTICES.txt"
+
+	installerTemplate = "packaging/install.sh.in"
+	installerName     = "install.sh"
 )
 
 // target is the one supported release configuration.
@@ -192,6 +195,19 @@ func build(ctx context.Context, o options) (b *built, err error) {
 		fmt.Fprintf(&sums, "%x  %s\n", digest, a.name)
 		artifacts = append(artifacts, artifact{Name: a.name, SHA256: hex.EncodeToString(digest[:]), Size: int64(data.Len())})
 	}
+	// The installer names the binary archive's version and SHA-256, so it
+	// installs those exact bytes and nothing else.
+	script, err := renderInstaller(s, artifacts[0].SHA256)
+	if err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(filepath.Join(out, installerName), script, 0o644); err != nil {
+		return nil, err
+	}
+	scriptDigest := sha256.Sum256(script)
+	fmt.Fprintf(&sums, "%x  %s\n", scriptDigest, installerName)
+	artifacts = append(artifacts, artifact{Name: installerName, SHA256: hex.EncodeToString(scriptDigest[:]), Size: int64(len(script))})
+
 	if err := os.WriteFile(filepath.Join(out, "SHA256SUMS.txt"), sums.Bytes(), 0o644); err != nil {
 		return nil, err
 	}
@@ -211,6 +227,23 @@ func build(ctx context.Context, o options) (b *built, err error) {
 	}
 
 	return &built{version: s.version(), out: out, sums: sums.Bytes()}, nil
+}
+
+// unfilled matches a template placeholder that rendering left in place.
+var unfilled = regexp.MustCompile(`@[A-Z0-9_]+@`)
+
+// renderInstaller fills the commit's installer template with the release
+// version and the binary archive's SHA-256.
+func renderInstaller(s *source, archiveSHA256 string) ([]byte, error) {
+	template, ok := s.file(installerTemplate)
+	if !ok {
+		return nil, fmt.Errorf("the commit has no %s", installerTemplate)
+	}
+	script := strings.NewReplacer("@VERSION@", s.archiveVersion(), "@SHA256@", archiveSHA256).Replace(string(template))
+	if placeholder := unfilled.FindString(script); placeholder != "" {
+		return nil, fmt.Errorf("%s leaves %s unfilled", installerTemplate, placeholder)
+	}
+	return []byte(script), nil
 }
 
 // writeTree writes the commit's files for the build, so the go command

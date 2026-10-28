@@ -27,7 +27,7 @@
     "comment": "pacman.conf here has NoExtract = usr/share/doc/*"
   },
   "nixos": {
-    "nixpkgs": "e158d9ed9b51c98974c5e66e1ba1c9e0255fecaa"
+    "nixpkgs": "3ec636362e1816bc2f0888fa0fa2c69f1bc9e504"
   },
   "baseline": {
     "kernel": "5.10",

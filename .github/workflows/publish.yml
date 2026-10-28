@@ -54,9 +54,9 @@ jobs:
           gh release download "$RELEASE" --dir staged
           cd staged
           version=$(jq -r .version provenance.json)
-          expected=("provenance.json" "SHA256SUMS.txt" "xunhen_${version}_linux_amd64.tar.gz" "xunhen_${version}_source.tar.gz")
+          expected=("provenance.json" "SHA256SUMS.txt" "install.sh" "xunhen_${version}_linux_amd64.tar.gz" "xunhen_${version}_source.tar.gz")
           [[ $(find . -type f -printf '%f\n' | sort) == $(printf '%s\n' "${expected[@]}" | sort) ]] ||
-            fail "the draft holds other assets than the release's four"
+            fail "the draft holds other assets than the release's five"
           sha256sum --check --strict SHA256SUMS.txt
 
           # The provenance must describe the draft's commit and these bytes.
@@ -71,7 +71,7 @@ jobs:
               '.tag == $tag and .snapshot == false and .source.commit == $commit' provenance.json >/dev/null ||
               fail "provenance.json does not describe $RELEASE at $commit"
           fi
-          for archive in xunhen_*.tar.gz; do
+          for archive in xunhen_*.tar.gz install.sh; do
             want=$(jq -r --arg name "$archive" '.artifacts[] | select(.name == $name) | .sha256' provenance.json)
             [[ $want == "$(sha256sum "$archive" | cut -d' ' -f1)" ]] || fail "provenance.json disagrees about $archive"
           done
@@ -94,7 +94,7 @@ jobs:
           [[ -n $run ]] || fail "no successful Release run built $RELEASE at $commit"
           gh run download "$run" --name archive --dir ../verified
           [[ $(find ../verified -type f -printf '%f\n' | sort) == $(printf '%s\n' "${expected[@]}" | sort) ]] ||
-            fail "the archive artifact of run $run holds other files than the release's four"
+            fail "the archive artifact of run $run holds other files than the release's five"
           for file in "${expected[@]}"; do
             cmp -s "$file" "../verified/$file" || fail "$file differs from the one Release run $run built and verified"
           done

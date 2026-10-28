@@ -8,7 +8,7 @@
 #   tools/qa.sh isolation DIR                 trace the archive executable's files, processes, and network use
 #   tools/qa.sh terminal EXECUTABLE LABEL     drive the browser in tmux, through suspend and signals, and over SSH
 #
-# DIR holds a release's four assets; its provenance.json gives the version,
+# DIR holds a release's five assets; its provenance.json gives the version,
 # commit, and toolchain. QA_OUT overrides the evidence directory. Containers
 # run unprivileged, as uid 1000, with no network except to install strace
 # or sshd. Exits nonzero when a check fails or cannot run.

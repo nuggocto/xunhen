@@ -368,6 +368,46 @@ func TestCheckDocs(t *testing.T) {
 	}
 }
 
+// The installer must name the exact archive it installs: a version or hash
+// left as a placeholder would install nothing, or anything.
+func TestRenderInstaller(t *testing.T) {
+	t.Parallel()
+
+	sum := strings.Repeat("ab", 32)
+	tests := []struct {
+		name, template, want, wantErr string
+		missing                       bool
+	}{
+		{
+			name:     "fills the version and hash",
+			template: "version='@VERSION@'\nexpected='@SHA256@'\n",
+			want:     "version='1.0.2'\nexpected='" + sum + "'\n",
+		},
+		{name: "an unknown placeholder", template: "x='@COMMIT@'\n", wantErr: "@COMMIT@ unfilled"},
+		{name: "no template in the commit", missing: true, wantErr: "has no packaging/install.sh.in"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			s := &source{tag: "v1.0.2"}
+			if !tt.missing {
+				s.files = []treeFile{{path: installerTemplate, data: []byte(tt.template)}}
+			}
+			got, err := renderInstaller(s, sum)
+			switch {
+			case tt.wantErr != "":
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("renderInstaller returned %v, want an error about %q", err, tt.wantErr)
+				}
+			case err != nil:
+				t.Fatal(err)
+			case string(got) != tt.want:
+				t.Fatalf("renderInstaller wrote %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 // Each of these variables could change the compiled program or skip
 // checksum verification without any change to the source.
 func TestEnvironmentRules(t *testing.T) {

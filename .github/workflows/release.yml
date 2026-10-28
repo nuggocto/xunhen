@@ -353,6 +353,8 @@ jobs:
         with:
           name: archive
           path: dist
+      - name: Pipe install.sh, whole and truncated, against the local archive
+        run: tools/installer-check.sh dist
       - name: Install tmux
         run: sudo apt-get install -y -q tmux >/dev/null
       - name: Install, verify, and remove in Debian, Ubuntu, and Alpine
@@ -458,7 +460,7 @@ jobs:
           set -euo pipefail
           [[ $(sha256sum dist/SHA256SUMS.txt | cut -d' ' -f1) == "$SUMS" ]]
           (cd dist && sha256sum --check --strict SHA256SUMS.txt)
-          expected=("provenance.json" "SHA256SUMS.txt" "xunhen_${VERSION}_linux_amd64.tar.gz" "xunhen_${VERSION}_source.tar.gz")
+          expected=("provenance.json" "SHA256SUMS.txt" "install.sh" "xunhen_${VERSION}_linux_amd64.tar.gz" "xunhen_${VERSION}_source.tar.gz")
           [[ $(find dist -type f -printf '%f\n' | sort) == $(printf '%s\n' "${expected[@]}" | sort) ]]
       - name: Write the release notes
         run: |
@@ -487,7 +489,7 @@ jobs:
             options+=(--target "$COMMIT")
           fi
           [[ $VERSION == *-* ]] && options+=(--prerelease)
-          gh release create "$RELEASE" "${options[@]}" dist/xunhen_*.tar.gz dist/SHA256SUMS.txt dist/provenance.json
+          gh release create "$RELEASE" "${options[@]}" dist/xunhen_*.tar.gz dist/install.sh dist/SHA256SUMS.txt dist/provenance.json
       - name: Check the uploaded bytes
         run: |
           set -euo pipefail

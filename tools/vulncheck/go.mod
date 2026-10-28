@@ -1,6 +1,6 @@
 module github.com/nuggocto/xunhen/tools/vulncheck
 
-go 1.27.1
+go 1.27.3
 
 tool golang.org/x/vuln/cmd/govulncheck
 

@@ -45,7 +45,7 @@ jobs:
           version=${RELEASE#v}
           base="https://github.com/$GH_REPO/releases/download/$RELEASE"
           mkdir public
-          for name in "xunhen_${version}_linux_amd64.tar.gz" "xunhen_${version}_source.tar.gz" SHA256SUMS.txt provenance.json; do
+          for name in "xunhen_${version}_linux_amd64.tar.gz" "xunhen_${version}_source.tar.gz" install.sh SHA256SUMS.txt provenance.json; do
             curl -fsSL -o "public/$name" "$base/$name"
           done
           (cd public && sha256sum --check --strict SHA256SUMS.txt)
@@ -105,6 +105,52 @@ jobs:
           name: archive-evidence
           path: ${{ runner.temp }}/qa/
           if-no-files-found: ignore
+
+  # The README's one-line install: the public install.sh piped into sh as an
+  # ordinary user, in Debian and Ubuntu (dash) and Alpine (BusyBox).
+  script:
+    name: Install script
+    needs: identity
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      VERSION: ${{ needs.identity.outputs.version }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ inputs.release }}
+          persist-credentials: false
+      - name: Pipe the public install.sh into sh, install, run, and remove
+        run: |
+          set -euo pipefail
+          url="https://github.com/$GH_REPO/releases/download/$RELEASE/install.sh"
+          while IFS=$'\t' read -r name image; do
+            echo "::group::$name"
+            docker run --rm "$image" sh -c "
+              set -eu
+              if command -v apk >/dev/null; then
+                apk add -q --no-cache curl >/dev/null
+                adduser -D qa
+              else
+                apt-get update -qq >/dev/null
+                apt-get install -qq -y curl ca-certificates >/dev/null
+                useradd -m qa
+              fi
+              su qa -s /bin/sh -c '
+                set -eu
+                cd
+                curl -fsSL --proto =https --tlsv1.2 $url | sh
+                ./.local/bin/xunhen version | sed -n 1p | grep -Fx \"xunhen v$VERSION\"
+                rm .local/bin/xunhen
+              '
+            "
+            echo "::endgroup::"
+            echo "$name: piped install.sh installed xunhen v$VERSION"
+          done < <(jq -r '.userlands[] | [.name, .image] | @tsv' tools/qa-environments.json)
 
   # Go source installation: the public module proxy, fresh caches.
   go:

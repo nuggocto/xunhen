@@ -8,6 +8,22 @@ says which behavior stays fixed within a major version.
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-10-28
+
+### Added
+
+- Install with `curl -fsS https://xunhen.org/install.sh | sh`. Each release
+  now publishes an `install.sh` that puts xunhen in `~/.local/bin` without
+  root, checks the archive against its recorded SHA-256, and runs nothing if
+  the download stops partway. The README lists every way to install,
+  including `go install`.
+
+### Security
+
+- Build with Go 1.27.3. Go 1.27.1 has fourteen standard-library advisories
+  that 1.27.2 and 1.27.3 fix; govulncheck finds none of them reachable from
+  xunhen's code.
+
 ### Changed
 
 - Simplify diff results, browser work scheduling, and command output handling

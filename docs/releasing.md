@@ -2,7 +2,9 @@
 
 Release from an annotated tag on `shrek`. Builds use the tagged source, not
 the working tree, and produce reproducible binary and source archives,
-`SHA256SUMS.txt`, and `provenance.json`.
+`install.sh`, `SHA256SUMS.txt`, and `provenance.json`. `install.sh` comes
+from `packaging/install.sh.in`, filled with the version and the binary
+archive's SHA-256.
 
 ## Prepare
 
@@ -39,8 +41,13 @@ the working tree, and produce reproducible binary and source archives,
    version=$(jq -r .version "$dir/provenance.json")
    go run ./tools/verify -archive "$dir/xunhen_${version}_linux_amd64.tar.gz" \
      -sums "$dir/SHA256SUMS.txt" -version "v$version" \
-     -commit "$(git rev-parse HEAD)" -go go1.27.1
+     -commit "$(git rev-parse HEAD)" -go go1.27.3
+   tools/installer-check.sh "$dir"
    ```
+
+   The installer check pipes `install.sh`, whole and cut short, against the
+   local archive: truncated copies must install nothing, and a wrong hash or
+   a symbolic link at the destination must leave existing files alone.
 
 ## Tag and publish
 
@@ -52,8 +59,8 @@ git push origin vX.Y.Z
 ```
 
 The **Release** workflow validates the tag and version, builds the archives
-twice, and checks the binary, Nix and Arch packages, terminal behavior, and
-Linux 5.10 baseline. It stages the verified bytes as a draft release.
+twice, and checks the binary, the installer, Nix and Arch packages, terminal
+behavior, and Linux 5.10 baseline. It stages the verified bytes as a draft release.
 Candidate tags such as `vX.Y.Z-rc.1` use the same checks and publish as prereleases.
 
 Run **Publish release** with the tag as `release`. It compares the draft's
@@ -99,9 +106,12 @@ A packaging-only fix raises `-pkgrel` in `resolve.sh` and regenerates both
 files without moving the application tag. Candidates do not go to AUR.
 
 Run **Check a published release** (`delivery.yml`) with the tag once the
-public channels are ready. It checks the download, Go module proxy, tagged
-flake, NixOS installation, and AUR recipe. Update `xunhen-front` after those
-checks pass; its README covers deployment and rollback.
+public channels are ready. It checks the download, the published
+`install.sh` piped into `sh` in each QA userland, the Go module proxy, the
+tagged flake, the NixOS installation, and the AUR recipe. Update
+`xunhen-front` after those checks pass: it serves a copy of the release's
+`install.sh` at `https://xunhen.org/install.sh`, and its README covers that
+copy, deployment, and rollback.
 
 ## Updating Nix
 

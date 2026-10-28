@@ -41,7 +41,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	flags.StringVar(&c.gosum, "gosum", "go.sum", "go.sum the executable's modules must appear in")
 	flags.StringVar(&c.version, "version", "", "version the executable must report, such as v1.0.0")
 	flags.StringVar(&c.commit, "commit", "", "commit the executable must report")
-	flags.StringVar(&c.goVersion, "go", "", "Go toolchain the executable must be built with, such as go1.27.1")
+	flags.StringVar(&c.goVersion, "go", "", "Go toolchain the executable must be built with, such as go1.27.3")
 	flags.StringVar(&c.buildmode, "buildmode", "exe", "build mode the executable must record: exe or pie")
 	if err := flags.Parse(args); err != nil {
 		return 2
