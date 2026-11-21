@@ -8,6 +8,8 @@ says which behavior stays fixed within a major version.
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-11-22
+
 ### Changed
 
 - The xunhen.org site and domain are gone. Install with
