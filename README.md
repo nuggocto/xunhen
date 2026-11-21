@@ -13,13 +13,14 @@ source or undo files.
 ## Install
 
 ```sh
-curl -fsS https://xunhen.org/install.sh | sh
+curl -fsSL https://github.com/nuggocto/xunhen/releases/latest/download/install.sh | sh
 ```
 
-The script installs xunhen in `~/.local/bin` without root. It checks the
-release archive against the SHA-256 recorded in the script before replacing
-anything, and a download that stops partway runs nothing. To choose another
-directory, pipe it to `sh -s -- --bin-dir /absolute/directory`.
+The script comes from the latest GitHub release and installs xunhen in
+`~/.local/bin` without root. It checks the release archive against the
+SHA-256 recorded in the script before replacing anything, and a download
+that stops partway runs nothing. To choose another directory, pipe it to
+`sh -s -- --bin-dir /absolute/directory`.
 
 ### Arch Linux (AUR)
 
@@ -48,7 +49,7 @@ With Go 1.27.3 or later:
 CGO_ENABLED=0 go install github.com/nuggocto/xunhen/cmd/xunhen@latest
 ```
 
-`CGO_ENABLED=0` builds the same static executable as the release archive.
+`CGO_ENABLED=0` builds a static executable, as in the release archive.
 
 The archives, checksums, and `install.sh` are on
 [GitHub Releases](https://github.com/nuggocto/xunhen/releases).

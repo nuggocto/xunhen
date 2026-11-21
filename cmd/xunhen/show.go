@@ -85,7 +85,9 @@ func show(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return operationError(stderr, err)
 	}
-	lines := states[0].Lines()
+	// Writing only reads the lines, so a copy of a 4,000,000-line state's
+	// 64 MiB of string headers would buy nothing.
+	lines := states[0].ReadOnlyLines()
 
 	// Check the whole state before the first write, so an unsupported raw
 	// export never leaves partial output.

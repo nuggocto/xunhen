@@ -108,10 +108,9 @@ files without moving the application tag. Candidates do not go to AUR.
 Run **Check a published release** (`delivery.yml`) with the tag once the
 public channels are ready. It checks the download, the published
 `install.sh` piped into `sh` in each QA userland, the Go module proxy, the
-tagged flake, the NixOS installation, and the AUR recipe. Update
-`xunhen-front` after those checks pass: it serves a copy of the release's
-`install.sh` at `https://xunhen.org/install.sh`, and its README covers that
-copy, deployment, and rollback.
+tagged flake, the NixOS installation, and the AUR recipe. The README's
+install command fetches `install.sh` from the latest release, so publishing
+a stable release is enough to move it; there is no other copy to update.
 
 ## Updating Nix
 

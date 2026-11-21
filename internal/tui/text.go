@@ -98,7 +98,7 @@ func exportLines(labels Labels, node history.NodeID) []string {
 		"",
 		"set -C makes the shell refuse to replace a file that already exists, so",
 		"the redirection cannot empty an input or an earlier export; pick another",
-		"name if recovered.go is taken. The command is for bash, zsh, or sh.",
+		"name if recovered.go is taken. The command is for bash or zsh.",
 		"",
 		"--final-newline sets how the file ends: include puts a newline after",
 		"the last line, as most source files have; omit leaves it off. The undo",
@@ -116,13 +116,15 @@ func exportLines(labels Labels, node history.NodeID) []string {
 	)
 }
 
-// shellQuote quotes one argument for a POSIX shell. Arguments made of common
-// path characters stay bare. Printable text goes in single quotes when the
-// browser draws it exactly as it is; anything else uses $'...' with \xHH
-// escapes, which bash and zsh read and which displays as printable ASCII.
-// The result is still drawn through termtext like any other text.
+// shellQuote quotes one argument for bash or zsh. Arguments made of common
+// path characters stay bare, except one that starts with "=", which zsh
+// would replace with the path of a command by that name. Printable text goes
+// in single quotes when the browser draws it exactly as it is; anything else
+// uses $'...' with \xHH escapes, which bash and zsh read and which displays
+// as printable ASCII. The result is still drawn through termtext like any
+// other text.
 func shellQuote(arg string) string {
-	if arg != "" && strings.Trim(arg, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_@%+=:,./-") == "" {
+	if arg != "" && arg[0] != '=' && strings.Trim(arg, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_@%+=:,./-") == "" {
 		return arg
 	}
 

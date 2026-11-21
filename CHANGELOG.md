@@ -8,6 +8,22 @@ says which behavior stays fixed within a major version.
 
 ## [Unreleased]
 
+### Changed
+
+- The xunhen.org site and domain are gone. Install with
+  `curl -fsSL https://github.com/nuggocto/xunhen/releases/latest/download/install.sh | sh`,
+  which fetches the same `install.sh` from the latest GitHub release.
+- The release executable leaves out its symbol table and debug information,
+  which makes it about a third smaller. Panic traces and `xunhen version` are
+  unchanged.
+- `xunhen show` no longer copies the recovered state before printing it,
+  which saves up to 64 MiB on the largest states.
+
+### Fixed
+
+- The export command the browser shows now quotes a path that starts with
+  `=`. zsh replaced such a word with the path of a command by that name.
+
 ## [1.0.2] - 2026-10-28
 
 ### Added

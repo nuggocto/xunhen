@@ -21,7 +21,7 @@ cleanup() {
 main() {
     if [ "$#" = 1 ] && [ "$1" = --help ]; then
         printf '%s\n' 'Usage: sh install.sh [--bin-dir /directory]' \
-            '   or: curl -fsS https://xunhen.org/install.sh | sh -s -- --bin-dir /directory' \
+            '   or: curl -fsSL https://github.com/nuggocto/xunhen/releases/latest/download/install.sh | sh -s -- --bin-dir /directory' \
             'Default: .local/bin under your home directory, created if needed.' \
             'Installs this exact release without root or profile changes.'
         exit 0

@@ -143,7 +143,10 @@ func build(ctx context.Context, o options) (b *built, err error) {
 	}
 
 	executable := filepath.Join(stage, "xunhen")
-	ldflags := "-X main.version=" + s.version() + " -X main.commit=" + s.commit
+	// -s -w drop the symbol table and DWARF, a third of the executable.
+	// Panic traces and the build information that version and provenance
+	// read live in other sections and stay.
+	ldflags := "-s -w -X main.version=" + s.version() + " -X main.commit=" + s.commit
 	logf(o.log, "building %s for %s", mainPackage, strings.Join(target, " "))
 	if _, err := goCommand(ctx, src, env, "build", "-trimpath", "-buildvcs=false", "-ldflags="+ldflags, "-o", executable, "./cmd/xunhen"); err != nil {
 		return nil, err

@@ -39,6 +39,7 @@ func TestShellQuoting(t *testing.T) {
 		{name: "unicode", arg: "\u5c0b\u75d5.go"},
 		{name: "empty", arg: ""},
 		{name: "leading dash", arg: "-x.undo"},
+		{name: "leading equals sign", arg: "=ls"},
 		{name: "terminal escape", arg: "a\x1b[2Jb"},
 		{name: "newline and quote", arg: "a\n'b\\"},
 		{name: "invalid UTF-8", arg: "a\xffb"},
@@ -50,6 +51,11 @@ func TestShellQuoting(t *testing.T) {
 			t.Parallel()
 
 			quoted := shellQuote(tt.arg)
+			// zsh expands a word that starts with "=" to a command's path,
+			// and bash below cannot notice that.
+			if strings.HasPrefix(quoted, "=") {
+				t.Fatalf("quoted form %q starts with =, which zsh expands", quoted)
+			}
 			for _, r := range quoted {
 				if !unicode.IsPrint(r) {
 					t.Fatalf("quoted form %q holds %U", quoted, r)
