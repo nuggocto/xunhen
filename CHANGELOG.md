@@ -12,9 +12,9 @@ says which behavior stays fixed within a major version.
 
 ### Changed
 
-- The xunhen.org site and domain are gone. Install with
-  `curl -fsSL https://github.com/nuggocto/xunhen/releases/latest/download/install.sh | sh`,
-  which fetches the same `install.sh` from the latest GitHub release.
+- The one-line install now fetches `install.sh` from the latest GitHub
+  release:
+  `curl -fsSL https://github.com/nuggocto/xunhen/releases/latest/download/install.sh | sh`.
 - The release executable leaves out its symbol table and debug information,
   which makes it about a third smaller. Panic traces and `xunhen version` are
   unchanged.
@@ -30,11 +30,10 @@ says which behavior stays fixed within a major version.
 
 ### Added
 
-- Install with `curl -fsS https://xunhen.org/install.sh | sh`. Each release
-  now publishes an `install.sh` that puts xunhen in `~/.local/bin` without
-  root, checks the archive against its recorded SHA-256, and runs nothing if
-  the download stops partway. The README lists every way to install,
-  including `go install`.
+- Install with one command. Each release now publishes an `install.sh`
+  that puts xunhen in `~/.local/bin` without root, checks the archive
+  against its recorded SHA-256, and runs nothing if the download stops
+  partway. The README lists every way to install, including `go install`.
 
 ### Security
 

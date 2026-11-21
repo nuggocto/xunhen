@@ -25,8 +25,7 @@
 - Only add a test if its failure would tell you something is actually broken.
   Assertions on styling values, colors, or internal structure fail on harmless
   changes and pass on real bugs, so leave them out.
-- `xunhen-front` is retired: the site and the xunhen.org domain are gone, and
-  its README only points here. Installation instructions live in this README.
-  Do not edit `../xunhen-front` unless the current work or user request
-  includes it.
+- `xunhen-front` is retired, and its README only points here. Installation
+  instructions live in this README. Do not edit `../xunhen-front` unless the
+  current work or user request includes it.
 - Do not spawn sub-agents unless the current work or user request requires it.
