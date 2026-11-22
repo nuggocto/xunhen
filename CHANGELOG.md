@@ -8,6 +8,8 @@ says which behavior stays fixed within a major version.
 
 ## [Unreleased]
 
+## [1.0.4] - 2026-11-22
+
 ### Security
 
 - Build with Go 1.27.4, which fixes security issues in the compiler, the
