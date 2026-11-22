@@ -8,8 +8,13 @@ archive's SHA-256.
 
 ## Prepare
 
-1. Check for a newer patch release of the Go line in `go.mod`. Update
-   `go.mod`, `mise.toml`, CI, and the Nix builder together when needed.
+1. Check for a newer patch release of the Go line in `go.mod`. Its
+   `toolchain` line names the Go that CI, the release archive, and the AUR
+   package build with; set it and `mise.toml` to the newest patch. The `go`
+   line is the oldest Go that can build xunhen, and the Nix package builds
+   with nixpkgs' Go 1.27, so raise the `go` line only once nixpkgs has
+   that version. The AUR template's `makedepends` follows the `toolchain`
+   line.
 2. Set `VERSION` without the `v` prefix. Move the changelog's unreleased
    entries into a dated section for that version, leaving a new empty
    `Unreleased` section above it.
@@ -41,7 +46,7 @@ archive's SHA-256.
    version=$(jq -r .version "$dir/provenance.json")
    go run ./tools/verify -archive "$dir/xunhen_${version}_linux_amd64.tar.gz" \
      -sums "$dir/SHA256SUMS.txt" -version "v$version" \
-     -commit "$(git rev-parse HEAD)" -go go1.27.3
+     -commit "$(git rev-parse HEAD)" -go go1.27.4
    tools/installer-check.sh "$dir"
    ```
 

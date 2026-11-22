@@ -8,6 +8,18 @@ says which behavior stays fixed within a major version.
 
 ## [Unreleased]
 
+### Security
+
+- Build with Go 1.27.4, which fixes security issues in the compiler, the
+  linker, the go command, and `net/http`. govulncheck finds none of them
+  reachable from xunhen's code. The Nix package builds with the Go that
+  nixpkgs ships, still 1.27.3, until nixpkgs moves to 1.27.4.
+
+### Changed
+
+- Update Bubble Tea to 2.1.2 and the terminal libraries under it. Commands
+  and the browser behave as before.
+
 ## [1.0.3] - 2026-11-22
 
 ### Changed

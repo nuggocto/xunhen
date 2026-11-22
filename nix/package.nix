@@ -35,7 +35,7 @@ buildGo127Module {
 
   # The hash of the vendored module sources that go.sum pins. Change it
   # whenever go.sum changes; docs/releasing.md shows how to compute it.
-  vendorHash = "sha256-pw0ffzw9tQmz5AFf7CXzxEggmQxICxtseH3YpMihShs=";
+  vendorHash = "sha256-ZX2+UNrpyuVZW9SxCUypGlh01YD6uinGmqs5aq86glQ=";
 
   subPackages = [ "cmd/xunhen" ];
 

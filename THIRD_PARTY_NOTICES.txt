@@ -68,7 +68,7 @@ rights granted to you under this License for this implementation of Go
 shall terminate as of the date such litigation is filed.
 
 ========================================================================
-charm.land/bubbletea/v2@v2.0.10
+charm.land/bubbletea/v2@v2.1.2
 ========================================================================
 
 --- LICENSE
@@ -124,7 +124,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ========================================================================
-github.com/charmbracelet/ultraviolet@v0.0.0-20260703014108-f5a850f9c2b7
+github.com/charmbracelet/ultraviolet@v0.0.0-20261119151026-8ecbcf0e188c
 ========================================================================
 
 --- LICENSE
@@ -152,7 +152,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ========================================================================
-github.com/charmbracelet/x/ansi@v0.11.7
+github.com/charmbracelet/x/ansi@v0.11.10
 ========================================================================
 
 --- LICENSE
@@ -320,7 +320,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ========================================================================
-github.com/lucasb-eyer/go-colorful@v1.4.0
+github.com/lucasb-eyer/go-colorful@v1.4.1
 ========================================================================
 
 --- LICENSE
@@ -334,7 +334,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ========================================================================
-github.com/mattn/go-runewidth@v0.0.23
+github.com/mattn/go-runewidth@v0.0.31
 ========================================================================
 
 --- LICENSE
@@ -418,7 +418,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ========================================================================
-github.com/xo/terminfo@v0.0.0-20220910002029-abceb7e1c41e
+github.com/xo/terminfo@v1.3.1
 ========================================================================
 
 --- LICENSE
@@ -446,7 +446,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ========================================================================
-golang.org/x/sync@v0.21.0
+golang.org/x/sync@v0.25.0
 ========================================================================
 
 --- LICENSE
@@ -505,7 +505,7 @@ rights granted to you under this License for this implementation of Go
 shall terminate as of the date such litigation is filed.
 
 ========================================================================
-golang.org/x/sys@v0.46.0
+golang.org/x/sys@v0.50.0
 ========================================================================
 
 --- LICENSE
