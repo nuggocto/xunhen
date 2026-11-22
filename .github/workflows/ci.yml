@@ -46,6 +46,10 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+        # setup-go reads go.mod's toolchain line only when GOTOOLCHAIN is
+        # not local. Every later step keeps it local.
+        env:
+          GOTOOLCHAIN: ""
       - name: Check formatting
         run: |
           unformatted=$(git ls-files -z --cached --others --exclude-standard -- '*.go' ':(glob,exclude)**/testdata/**' |
@@ -111,6 +115,10 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+        # setup-go reads go.mod's toolchain line only when GOTOOLCHAIN is
+        # not local. Every later step keeps it local.
+        env:
+          GOTOOLCHAIN: ""
       - name: Check the C compiler
         run: cc --version
       - name: Test with the race detector
@@ -133,6 +141,10 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+        # setup-go reads go.mod's toolchain line only when GOTOOLCHAIN is
+        # not local. Every later step keeps it local.
+        env:
+          GOTOOLCHAIN: ""
       - name: Fuzz every target for about 10 seconds
         run: tools/fuzz.sh smoke
       # A failing input is small and synthetic: keep it for reproduction.
@@ -162,6 +174,10 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+        # setup-go reads go.mod's toolchain line only when GOTOOLCHAIN is
+        # not local. Every later step keeps it local.
+        env:
+          GOTOOLCHAIN: ""
       # tools/vulncheck pins govulncheck and its dependencies by checksum.
       # It analyzes the source for the release configuration above and
       # reports only vulnerable code the command can reach.
@@ -189,6 +205,10 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+        # setup-go reads go.mod's toolchain line only when GOTOOLCHAIN is
+        # not local. Every later step keeps it local.
+        env:
+          GOTOOLCHAIN: ""
       - name: Build the snapshot artifacts twice and compare them
         run: tools/reproduce.sh .local/reproduce
       - name: Verify the binary archive

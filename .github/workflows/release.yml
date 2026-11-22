@@ -90,6 +90,10 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+        # setup-go reads go.mod's toolchain line only when GOTOOLCHAIN is
+        # not local. Every later step keeps it local.
+        env:
+          GOTOOLCHAIN: ""
       # Logs stay outside the checkout: reproduce.sh refuses a working tree
       # with untracked files, since a release must be exactly its commit.
       - name: Build the archives twice and compare them
@@ -348,6 +352,10 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+        # setup-go reads go.mod's toolchain line only when GOTOOLCHAIN is
+        # not local. Every later step keeps it local.
+        env:
+          GOTOOLCHAIN: ""
       - name: Fetch the release archives
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
         with:
